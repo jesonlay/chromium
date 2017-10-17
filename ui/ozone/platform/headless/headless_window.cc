@@ -93,4 +93,10 @@ PlatformImeController* HeadlessWindow::GetPlatformImeController() {
 void HeadlessWindow::StartWindowMoveOrResize(int hittest,
                                              gfx::Point pointer_location) {}
 
+bool HeadlessWindow::RunMoveLoop(const gfx::Vector2d& drag_offset) {
+  return false;
+}
+
+void HeadlessWindow::StopMoveLoop() {}
+
 }  // namespace ui

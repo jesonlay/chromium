@@ -47,6 +47,12 @@ PlatformImeController* PlatformWindowCast::GetPlatformImeController() {
   return nullptr;
 }
 
+bool PlatformWindowCast::RunMoveLoop(const gfx::Vector2d& drag_offset) {
+  return false;
+}
+
+void PlatformWindowCast::StopMoveLoop() {}
+
 bool PlatformWindowCast::CanDispatchEvent(const PlatformEvent& ne) {
   return true;
 }
