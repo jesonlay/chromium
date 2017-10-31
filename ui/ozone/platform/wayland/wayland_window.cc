@@ -118,6 +118,10 @@ bool WaylandWindow::Initialize(PlatformWindowInitProperties properties) {
       // parents and pop up when the browser receives a notification.
       CreateXdgPopup();
       break;
+    case ui::PlatformWindowType::kTooltip:
+      // Tooltips subsurfaces are created on demand, uppon ::Show calls.
+      is_tooltip_ = true;
+      break;
     case ui::PlatformWindowType::kWindow:
       CreateXdgSurface();
       break;
@@ -158,6 +162,36 @@ void WaylandWindow::CreateXdgSurface() {
   }
 }
 
+void WaylandWindow::CreateTooltipSubSurface() {
+  // Tooltips do not have real parents in the aura, but rather have bounds where
+  // compositor must place them. In Wayland, it's not possible to place surfaces
+  // to desired place on a screen, but rather place a surface on top of another
+  // surface using local coordinates. Thus, get the current focused window to
+  // show the tooltip.
+  parent_window_ = connection_->GetCurrentFocusedWindow();
+
+  // Tooltip creation is an async operation. By the time Mus actually start to
+  // create the tooltip, it is possible that user has already moved the
+  // mouse/pointer out of the window who triggered the tooptip. In this case,
+  // parent_window_ is NULL.
+  // TODO(tonikitoo): update comment.
+  if (!parent_window_) {
+    Hide();
+    return;
+  }
+
+  wl_subcompositor* subcompositor = connection_->subcompositor();
+  DCHECK(subcompositor);
+  tooltip_subsurface_.reset(wl_subcompositor_get_subsurface(
+      subcompositor, surface_.get(), parent_window_->surface()));
+
+  wl_subsurface_set_position(tooltip_subsurface_.get(), bounds_.x(),
+                             bounds_.y());
+  wl_subsurface_set_desync(tooltip_subsurface_.get());
+  wl_surface_commit(parent_window_->surface());
+  connection_->ScheduleFlush();
+}
+
 void WaylandWindow::ApplyPendingBounds() {
   if (pending_bounds_.IsEmpty())
     return;
@@ -173,6 +207,11 @@ void WaylandWindow::ApplyPendingBounds() {
 void WaylandWindow::Show() {
   if (xdg_surface_)
     return;
+  if (is_tooltip_) {
+    if (!tooltip_subsurface_)
+      CreateTooltipSubSurface();
+    return;
+  }
   if (!xdg_popup_) {
     CreateXdgPopup();
     connection_->ScheduleFlush();
@@ -180,6 +219,16 @@ void WaylandWindow::Show() {
 }
 
 void WaylandWindow::Hide() {
+  if (is_tooltip_) {
+    parent_window_ = nullptr;
+    wl_surface_attach(surface_.get(), NULL, 0, 0);
+    wl_surface_commit(surface_.get());
+    // Tooltip subsurface must be reset only after the buffer is detached.
+    // Otherwise, gnome shell, for example, can end up with broken event
+    // pipe.
+    tooltip_subsurface_.reset();
+    return;
+  }
   if (child_window_)
     child_window_->Hide();
   if (xdg_popup_) {
