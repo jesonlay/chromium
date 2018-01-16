@@ -31,6 +31,7 @@ constexpr uint32_t kMaxShmVersion = 1;
 constexpr uint32_t kMaxXdgShellVersion = 1;
 constexpr uint32_t kMaxDeviceManagerVersion = 3;
 constexpr uint32_t kMaxWpPresentationVersion = 1;
+constexpr uint32_t kMaxTextInputManagerVersion = 1;
 
 std::unique_ptr<WaylandDataSource> CreateWaylandDataSource(
     WaylandDataDeviceManager* data_device_manager,
@@ -123,6 +124,15 @@ WaylandWindow* WaylandConnection::GetCurrentFocusedWindow() {
   for (auto entry : window_map_) {
     WaylandWindow* window = entry.second;
     if (window->has_pointer_focus())
+      return window;
+  }
+  return nullptr;
+}
+
+WaylandWindow* WaylandConnection::GetCurrentKeyboardFocusedWindow() {
+  for (auto entry : window_map_) {
+    WaylandWindow* window = entry.second;
+    if (window->has_keyboard_focus())
       return window;
   }
   return nullptr;
@@ -450,6 +460,14 @@ void WaylandConnection::Global(void* data,
              (strcmp(interface, "wp_presentation") == 0)) {
     connection->presentation_ =
         wl::Bind<wp_presentation>(registry, name, kMaxWpPresentationVersion);
+  } else if (!connection->text_input_manager_v1_ &&
+             strcmp(interface, "zwp_text_input_manager_v1") == 0) {
+    connection->text_input_manager_v1_ = wl::Bind<zwp_text_input_manager_v1>(
+        registry, name, std::min(version, kMaxTextInputManagerVersion));
+    if (!connection->text_input_manager_v1_) {
+      LOG(ERROR) << "Failed to bind to zwp_text_input_manager_v1 global";
+      return;
+    }
   }
 
   connection->ScheduleFlush();
