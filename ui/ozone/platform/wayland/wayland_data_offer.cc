@@ -4,6 +4,7 @@
 
 #include "ui/ozone/platform/wayland/wayland_data_offer.h"
 
+#include <algorithm>
 #include <fcntl.h>
 
 #include "base/logging.h"
