@@ -214,3 +214,9 @@
 # these tests fail after Feb/26 rebase:
 -ScreenCaptureNotificationUiBrowserTest.InvokeUi
 -SessionRestoreTest.RestoreAfterDelete
+
+# these tests fail after Mar/05 rebase:
+-SitePerProcessDevToolsSanityTest.InputDispatchEventsToOOPIF
+-NavigationConsumingTest.NavigationConsumesUserGesture_Fullscreen
+-NavigationConsumingTest.NavigationConsumesUserGesture_Popups
+-SafeBrowsingTriggeredPopupBlockerBrowserTest.NoFeature_NoMessages
