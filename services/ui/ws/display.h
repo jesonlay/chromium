@@ -70,15 +70,15 @@ class Display : public PlatformDisplayDelegate,
   // Initialize the display's root window to host window manager content.
   void InitWindowManagerDisplayRoots();
 
-  // Returns the ID for this display. In internal mode this is the
-  // display::Display ID. In external mode this hasn't been defined yet.
-  int64_t GetId() const;
-
   // Sets the display::Display corresponding to this ws::Display.
   void SetDisplay(const display::Display& display);
 
   // PlatformDisplayDelegate:
   const display::Display& GetDisplay() override;
+
+  // Returns the ID for this display. In internal mode this is the
+  // display::Display ID. In external mode this hasn't been defined yet.
+  int64_t GetId() const override;
 
   const display::ViewportMetrics& GetViewportMetrics() const;
 
