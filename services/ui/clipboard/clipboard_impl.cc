@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "base/macros.h"
-#include "ui/ozone/public/clipboard_data_bridge.h"
+#include "ui/ozone/public/clipboard_delegate.h"
 #include "ui/ozone/public/ozone_platform.h"
 
 namespace ui {
@@ -29,7 +29,7 @@ class ClipboardImpl::ClipboardData {
 
   void GetMimeTypes(GetAvailableMimeTypesCallback callback) const {
     // If we do not "own" the selection, it means we need to query the system
-    // for the available clipboard data.
+    // for the available mime_types on system clipboard.
     if (delegate_ && !delegate_->IsSelectionOwner()) {
       auto closure = base::BindOnce(std::move(callback), sequence_number_);
       delegate_->GetAvailableMimeTypes(std::move(closure));
@@ -50,13 +50,8 @@ class ClipboardImpl::ClipboardData {
     data_types_ = data.value_or(DataMap());
 
     if (delegate_) {
-      std::vector<std::string> types(data_types_.size());
-      int i = 0;
-      for (auto it : data_types_)
-        types[i++] = it.first;
-
       auto closure = base::BindOnce(std::move(callback), sequence_number_);
-      delegate_->WriteToWMClipboard(types, std::move(closure));
+      delegate_->WriteToWMClipboard(data_types_, std::move(closure));
       return;
     }
 
@@ -64,13 +59,14 @@ class ClipboardImpl::ClipboardData {
   }
 
   void GetData(const std::string& mime_type,
-               ReadClipboardDataCallback callback) const {
+               ReadClipboardDataCallback callback) {
     uint64_t sequence = sequence_number();
 
     // Read from system clipboard first.
     if (delegate_ && !delegate_->IsSelectionOwner()) {
       auto closure = base::BindOnce(std::move(callback), sequence);
-      delegate_->ReadFromWMClipboard(mime_type, std::move(closure));
+      delegate_->ReadFromWMClipboard(mime_type, &data_types_,
+                                     std::move(closure));
       return;
     }
 
@@ -81,17 +77,14 @@ class ClipboardImpl::ClipboardData {
     std::move(callback).Run(sequence, std::move(data));
   }
 
-  void SetupClipboardDataBridge() {
-    clipboard_data_bridge_.reset(new ClipboardDataBridge(data_types_));
-    OzonePlatform::GetInstance()->SetupClipboardDataBridge(
-        clipboard_data_bridge_.get(), &delegate_);
+  void InstallClipboardDelegate() {
+    delegate_ = OzonePlatform::GetInstance()->GetClipboardDelegate();
   }
 
  private:
   uint64_t sequence_number_;
   DataMap data_types_;
 
-  std::unique_ptr<ClipboardDataBridge> clipboard_data_bridge_;
   ClipboardDelegate* delegate_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(ClipboardData);
@@ -101,10 +94,10 @@ ClipboardImpl::ClipboardImpl() {
   for (int i = 0; i < kNumClipboards; ++i)
     clipboard_state_[i].reset(new ClipboardData);
 
-#if defined(OS_LINUX) && defined(USE_OZONE) && !defined(OS_CHROMEOS)
-  clipboard_state_[static_cast<int>(Clipboard::Type::COPY_PASTE)]->
-      SetupClipboardDataBridge();
-#endif
+  // TODO: ClipboardDelegate only supports COPY_PASTE clipboard for now.
+  // Extend it to support SELECTION type (mouse middle click paste).
+  clipboard_state_[static_cast<int>(Clipboard::Type::COPY_PASTE)]
+      ->InstallClipboardDelegate();
 }
 
 ClipboardImpl::~ClipboardImpl() {

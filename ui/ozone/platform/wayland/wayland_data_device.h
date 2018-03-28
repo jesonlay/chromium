@@ -10,10 +10,8 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/optional.h"
 #include "ui/ozone/platform/wayland/wayland_data_offer.h"
 #include "ui/ozone/platform/wayland/wayland_object.h"
-#include "ui/ozone/public/clipboard_data_bridge.h"
 
 namespace ui {
 
@@ -66,10 +64,6 @@ class WaylandDataDevice {
   static const wl_callback_listener callback_listener_;
   base::OnceClosure read_from_fd_closure_;
   wl::Object<wl_callback> sync_callback_;
-
-  // Local clipboard backing store, that can override client's after reading
-  // from system clipboard.
-  base::Optional<ClipboardDataBridge::DataMap> current_clipboard_;
 
   DISALLOW_COPY_AND_ASSIGN(WaylandDataDevice);
 };

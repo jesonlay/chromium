@@ -7,20 +7,27 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/ozone/platform/wayland/fake_server.h"
 #include "ui/ozone/platform/wayland/wayland_test.h"
-#include "ui/ozone/public/clipboard_data_bridge.h"
+#include "ui/ozone/public/clipboard_delegate.h"
 
 namespace ui {
 
 class MockClipboardClient {
  public:
-  MockClipboardClient()
-      : clipboard_data_bridge_(new ClipboardDataBridge(data_types_)) {}
+  MockClipboardClient(WaylandConnection* connection) {
+    // Real clients have no access to the WaylandConnection instance like
+    // this MockClipboardClient impl does. Instead clients and ozone gets
+    // plumbbed up by calling the appropriated Ozone API.
+    DCHECK(connection);
+    delegate_ = connection->GetClipboardDelegate();
+
+    DCHECK(delegate_);
+  }
   ~MockClipboardClient() = default;
 
   // Fill the clipboard backing store with sample data.
   void SetData(const std::string& utf8_text,
                const std::string& mime_type,
-               SetDataCallback callback) {
+               ClipboardDelegate::SetDataCallback callback) {
     std::vector<char> object_map(utf8_text.begin(), utf8_text.end());
     char* object_data = &object_map.front();
     data_types_[mime_type] =
@@ -29,18 +36,20 @@ class MockClipboardClient {
     std::vector<std::string> mime_types;
     mime_types.push_back(mime_type);
 
-    delegate_->WriteToWMClipboard(mime_types, std::move(callback));
+    delegate_->WriteToWMClipboard(data_types_, std::move(callback));
   }
 
-  void ReadData(const std::string& mime_type, GetDataCallback callback) {
-    delegate_->ReadFromWMClipboard(mime_type, std::move(callback));
+  void ReadData(const std::string& mime_type,
+                ClipboardDelegate::GetDataCallback callback) {
+    delegate_->ReadFromWMClipboard(mime_type, &data_types_,
+                                   std::move(callback));
   }
+
+  bool IsSelectionOwner() { return delegate_->IsSelectionOwner(); }
 
  private:
-  friend class WaylandDataDeviceManagerTest;
-  std::unique_ptr<ClipboardDataBridge> clipboard_data_bridge_;
   ClipboardDelegate* delegate_ = nullptr;
-  ClipboardDataBridge::DataMap data_types_;
+  ClipboardDelegate::DataMap data_types_;
 
   DISALLOW_COPY_AND_ASSIGN(MockClipboardClient);
 };
@@ -57,16 +66,12 @@ class WaylandDataDeviceManagerTest : public WaylandTest {
     data_device_manager_ = server_.data_device_manager();
     DCHECK(data_device_manager_);
 
-    DCHECK(connection_);
-    connection_->SetupClipboardDataBridge(
-        clipboard_client_.clipboard_data_bridge_.get(),
-        &clipboard_client_.delegate_);
-    DCHECK(clipboard_client_.delegate_);
+    clipboard_client_.reset(new MockClipboardClient(connection_.get()));
   }
 
  protected:
   wl::MockDataDeviceManager* data_device_manager_;
-  MockClipboardClient clipboard_client_;
+  std::unique_ptr<MockClipboardClient> clipboard_client_;
 
   DISALLOW_COPY_AND_ASSIGN(WaylandDataDeviceManagerTest);
 };
@@ -74,8 +79,8 @@ class WaylandDataDeviceManagerTest : public WaylandTest {
 TEST_P(WaylandDataDeviceManagerTest, WriteToClipboard) {
   // The client writes data to the clipboard ...
   auto callback = base::BindOnce([]() {});
-  clipboard_client_.SetData(wl::kSampleClipboardText, wl::kTextMimeTypeUtf8,
-                            std::move(callback));
+  clipboard_client_->SetData(wl::kSampleClipboardText, wl::kTextMimeTypeUtf8,
+                             std::move(callback));
   Sync();
 
   // ... and the server reads it.
@@ -103,11 +108,32 @@ TEST_P(WaylandDataDeviceManagerTest, ReadFromClibpard) {
         std::string string_data = std::string(data->begin(), data->end());
         EXPECT_EQ(wl::kSampleClipboardText, string_data);
       });
-  clipboard_client_.ReadData(wl::kTextMimeTypeUtf8, std::move(callback));
+  clipboard_client_->ReadData(wl::kTextMimeTypeUtf8, std::move(callback));
   Sync();
 }
+
+TEST_P(WaylandDataDeviceManagerTest, IsSelectionOwner) {
+  auto callback = base::BindOnce([]() {});
+  clipboard_client_->SetData(wl::kSampleClipboardText, wl::kTextMimeTypeUtf8,
+                             std::move(callback));
+  Sync();
+  ASSERT_TRUE(clipboard_client_->IsSelectionOwner());
+
+  // The compositor sends OnCancelled whenever another application
+  // on the system sets a new selection. It means we are not the application
+  // that owns the current selection data.
+  data_device_manager_->data_source()->OnCancel();
+  Sync();
+
+  ASSERT_FALSE(clipboard_client_->IsSelectionOwner());
+}
+
+INSTANTIATE_TEST_CASE_P(XdgVersionV5Test,
+                        WaylandDataDeviceManagerTest,
+                        ::testing::Values(kXdgShellV5));
 
 INSTANTIATE_TEST_CASE_P(XdgVersionV6Test,
                         WaylandDataDeviceManagerTest,
                         ::testing::Values(kXdgShellV6));
+
 }  // namespace ui

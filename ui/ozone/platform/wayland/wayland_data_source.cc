@@ -19,15 +19,21 @@ WaylandDataSource::WaylandDataSource(wl_data_source* data_source)
 WaylandDataSource::~WaylandDataSource() = default;
 
 void WaylandDataSource::WriteToClipboard(
-    const std::vector<std::string>& mime_types) {
-  for (const auto& mime_type : mime_types) {
-    wl_data_source_offer(data_source_.get(), mime_type.c_str());
-    if (strcmp(mime_type.c_str(), "text/plain") == 0)
+    const ClipboardDelegate::DataMap& data_map) {
+  for (const auto& data : data_map) {
+    wl_data_source_offer(data_source_.get(), data.first.c_str());
+    if (strcmp(data.first.c_str(), "text/plain") == 0)
       wl_data_source_offer(data_source_.get(), "text/plain;charset=utf-8");
   }
   wl_data_device_set_selection(connection_->data_device(), data_source_.get(),
                                connection_->serial());
+
   wl_display_flush(connection_->display());
+}
+
+void WaylandDataSource::UpdataDataMap(
+    const ClipboardDelegate::DataMap& data_map) {
+  data_map_ = data_map;
 }
 
 // static
@@ -44,10 +50,10 @@ void WaylandDataSource::OnSend(void* data,
                                int32_t fd) {
   WaylandDataSource* self = static_cast<WaylandDataSource*>(data);
   base::Optional<std::vector<uint8_t>> mime_data;
-  self->connection_->GetClipboardData(mime_type, &mime_data);
+  self->GetClipboardData(mime_type, &mime_data);
   if (!mime_data.has_value() &&
       strcmp(mime_type, "text/plain;charset=utf-8") == 0)
-    self->connection_->GetClipboardData("text/plain", &mime_data);
+    self->GetClipboardData("text/plain", &mime_data);
 
   std::string str(mime_data->begin(), mime_data->end());
   if (write(fd, str.data(), str.length()) < 0)
@@ -60,6 +66,17 @@ void WaylandDataSource::OnSend(void* data,
 void WaylandDataSource::OnCancel(void* data, wl_data_source* source) {
   WaylandDataSource* self = static_cast<WaylandDataSource*>(data);
   self->connection_->DataSourceCancelled();
+}
+
+void WaylandDataSource::GetClipboardData(
+    const std::string& mime_type,
+    base::Optional<std::vector<uint8_t>>* data) {
+  auto it = data_map_.find(mime_type);
+  if (it != data_map_.end()) {
+    data->emplace(it->second);
+    // TODO: return here?
+    return;
+  }
 }
 
 }  // namespace ui

@@ -188,16 +188,18 @@ const struct wl_data_device_interface data_device_impl = {
 // wl_data_device_manager
 
 void CreateDataSource(wl_client* client, wl_resource* resource, uint32_t id) {
-  wl_resource* data_device_resource = wl_resource_create(
+  wl_resource* data_source_resource = wl_resource_create(
       client, &wl_data_source_interface, wl_resource_get_version(resource), id);
-  if (!data_device_resource) {
+  if (!data_source_resource) {
     wl_client_post_no_memory(client);
     return;
   }
 
+  std::unique_ptr<MockDataSource> data_source(
+      new MockDataSource(data_source_resource));
+
   auto* data_device_manager = GetUserDataAs<MockDataDeviceManager>(resource);
-  data_device_manager->data_source_.reset(
-      new MockDataSource(data_device_resource));
+  data_device_manager->set_data_source(std::move(data_source));
 }
 
 void GetDataDevice(wl_client* client,
@@ -211,9 +213,11 @@ void GetDataDevice(wl_client* client,
     return;
   }
 
-  auto* data_device_manager = GetUserDataAs<MockDataDeviceManager>(resource);
-  data_device_manager->data_device_.reset(
+  std::unique_ptr<MockDataDevice> data_device(
       new MockDataDevice(client, data_device_resource));
+
+  auto* data_device_manager = GetUserDataAs<MockDataDeviceManager>(resource);
+  data_device_manager->set_data_device(std::move(data_device));
 }
 
 const struct wl_data_device_manager_interface data_device_manager_impl = {
@@ -701,14 +705,18 @@ void MockDataSource::ReadData(ReadDataCallback callback) {
   base::PostTaskAndReplyWithResult(
       io_thread_.task_runner().get(), FROM_HERE,
       base::BindOnce(&ReadDataOnWorkerThread, std::move(read_fd)),
-      base::BindOnce(&MockDataSource::OnDataRead,
+      base::BindOnce(&MockDataSource::DataReadCb,
                      read_data_weak_ptr_factory_.GetWeakPtr(),
                      std::move(callback)));
 }
 
-void MockDataSource::OnDataRead(ReadDataCallback callback,
+void MockDataSource::DataReadCb(ReadDataCallback callback,
                                 const std::vector<uint8_t>& data) {
   std::move(callback).Run(data);
+}
+
+void MockDataSource::OnCancel() {
+  wl_data_source_send_cancelled(resource());
 }
 
 void GlobalDeleter::operator()(wl_global* global) {
