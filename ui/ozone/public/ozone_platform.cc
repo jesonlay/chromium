@@ -126,8 +126,9 @@ void OzonePlatform::QueryHostDisplaysData(
   NOTREACHED();
 }
 
-void OzonePlatform::SetupClipboardDataBridge(
-    ClipboardDataBridge* data, ClipboardDelegate** delegate) {}
+ClipboardDelegate* OzonePlatform::GetClipboardDelegate() {
+  return nullptr;
+}
 
 void OzonePlatform::AddInterfaces(
     service_manager::BinderRegistryWithArgs<

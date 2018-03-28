@@ -17,7 +17,7 @@
 #include "ui/ozone/platform/wayland/wayland_output.h"
 #include "ui/ozone/platform/wayland/wayland_pointer.h"
 #include "ui/ozone/platform/wayland/wayland_touch.h"
-#include "ui/ozone/public/clipboard_data_bridge.h"
+#include "ui/ozone/public/clipboard_delegate.h"
 
 namespace ui {
 
@@ -75,21 +75,20 @@ class WaylandConnection : public PlatformEventSource,
   void ResetPointerFlags();
 
   // Clipboard implementation.
-  void SetupClipboardDataBridge(ClipboardDataBridge* data,
-                                ClipboardDelegate** delegate);
+  ClipboardDelegate* GetClipboardDelegate();
   void DataSourceCancelled();
-  void SetClipboardData(
-      const base::Optional<ClipboardDataBridge::DataMap>& data,
-      const std::string& mime_type);
-  void GetClipboardData(const std::string& mime_type,
-                        base::Optional<std::vector<uint8_t>>* data);
+  void SetClipboardData(const std::string& contents,
+                        const std::string& mime_type);
 
   // ClipboardDelegate.
-  void WriteToWMClipboard(const std::vector<std::string>& mime_types,
-                          SetDataCallback callback) override;
-  void ReadFromWMClipboard(const std::string& mime_type,
-                           GetDataCallback callback) override;
-  void GetAvailableMimeTypes(GetMimeTypesCallback callback) override;
+  void WriteToWMClipboard(const ClipboardDelegate::DataMap& data_map,
+                          ClipboardDelegate::SetDataCallback callback) override;
+  void ReadFromWMClipboard(
+      const std::string& mime_type,
+      ClipboardDelegate::DataMap* data_map,
+      ClipboardDelegate::GetDataCallback callback) override;
+  void GetAvailableMimeTypes(
+      ClipboardDelegate::GetMimeTypesCallback callback) override;
   bool IsSelectionOwner() override;
 
  private:
@@ -147,9 +146,9 @@ class WaylandConnection : public PlatformEventSource,
 
   std::vector<std::unique_ptr<WaylandOutput>> output_list_;
 
-  // This is the clipboard data backing store, serving both
-  // client (eg Chrome), and the system wide clipboard.
-  ClipboardDataBridge* clipboard_backing_store_ = nullptr;
+  // Holds a temporary instance of the client's clipboard content
+  // so that we can asynchronously write to it.
+  ClipboardDelegate::DataMap* data_map_ = nullptr;
 
   // Stores the callback to be invoked upon data reading from clipboard.
   GetDataCallback read_clipboard_closure_;

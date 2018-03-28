@@ -34,7 +34,6 @@ class Connector;
 
 namespace ui {
 
-class ClipboardDataBridge;
 class ClipboardDelegate;
 class CursorFactoryOzone;
 class InputController;
@@ -133,13 +132,11 @@ class OZONE_EXPORT OzonePlatform {
       const gfx::Rect& bounds) = 0;
   virtual std::unique_ptr<display::NativeDisplayDelegate>
   CreateNativeDisplayDelegate() = 0;
+  virtual ClipboardDelegate* GetClipboardDelegate();
 
   using QueryHostDisplaysDataCallback =
       base::Callback<void(const std::vector<gfx::Size>&)>;
   virtual void QueryHostDisplaysData(QueryHostDisplaysDataCallback callback);
-
-  virtual void SetupClipboardDataBridge(
-      ClipboardDataBridge* data, ClipboardDelegate** delegate);
 
   // Returns the message loop type required for OzonePlatform instance that
   // will be initialized for the GPU process.

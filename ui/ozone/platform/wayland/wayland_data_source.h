@@ -8,11 +8,14 @@
 #include <wayland-client.h>
 
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/optional.h"
 #include "ui/ozone/platform/wayland/wayland_object.h"
+#include "ui/ozone/public/clipboard_delegate.h"
 
 namespace ui {
 
@@ -30,7 +33,8 @@ class WaylandDataSource {
     connection_ = connection;
   }
 
-  void WriteToClipboard(const std::vector<std::string>& mime_types);
+  void WriteToClipboard(const ClipboardDelegate::DataMap& data_map);
+  void UpdataDataMap(const ClipboardDelegate::DataMap& data_map);
 
  private:
   static void OnTarget(void* data,
@@ -42,8 +46,13 @@ class WaylandDataSource {
                      int32_t fd);
   static void OnCancel(void* data, wl_data_source* source);
 
+  void GetClipboardData(const std::string& mime_type,
+                        base::Optional<std::vector<uint8_t>>* data);
+
   wl::Object<wl_data_source> data_source_;
   WaylandConnection* connection_ = nullptr;
+
+  ClipboardDelegate::DataMap data_map_;
 
   DISALLOW_COPY_AND_ASSIGN(WaylandDataSource);
 };

@@ -173,9 +173,12 @@ class MockDataSource : public ServerObject {
   using ReadDataCallback =
       base::OnceCallback<void(const std::vector<uint8_t>&)>;
   void ReadData(ReadDataCallback);
-  void OnDataRead(ReadDataCallback callback, const std::vector<uint8_t>& data);
+
+  void OnCancel();
 
  private:
+  void DataReadCb(ReadDataCallback callback, const std::vector<uint8_t>& data);
+
   base::Thread io_thread_;
   base::WeakPtrFactory<MockDataSource> read_data_weak_ptr_factory_;
 
@@ -192,10 +195,10 @@ class MockDataDevice : public ServerObject {
   MockDataOffer* OnDataOffer();
   void OnSelection(MockDataOffer& data_offer);
 
+ private:
   std::unique_ptr<MockDataOffer> data_offer_;
   wl_client* client_ = nullptr;
 
- private:
   DISALLOW_COPY_AND_ASSIGN(MockDataDevice);
 };
 
@@ -260,12 +263,19 @@ class MockDataDeviceManager : public Global {
   ~MockDataDeviceManager() override;
 
   MockDataDevice* data_device() { return data_device_.get(); }
-  MockDataSource* data_source() { return data_source_.get(); }
+  void set_data_device(std::unique_ptr<MockDataDevice> data_device) {
+    data_device_ = std::move(data_device);
+  }
 
+  MockDataSource* data_source() { return data_source_.get(); }
+  void set_data_source(std::unique_ptr<MockDataSource> data_source) {
+    data_source_ = std::move(data_source);
+  }
+
+ private:
   std::unique_ptr<MockDataDevice> data_device_;
   std::unique_ptr<MockDataSource> data_source_;
 
- private:
   DISALLOW_COPY_AND_ASSIGN(MockDataDeviceManager);
 };
 

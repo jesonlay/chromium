@@ -30,8 +30,6 @@ WaylandDataDevice::WaylandDataDevice(WaylandConnection* connection,
 WaylandDataDevice::~WaylandDataDevice() {}
 
 void WaylandDataDevice::RequestSelectionData(const std::string& mime_type) {
-  current_clipboard_.emplace();
-
   int fd = selection_offer_->Receive(mime_type);
   if (fd == -1) {
     LOG(ERROR) << "Failed to open file descriptor";
@@ -40,14 +38,16 @@ void WaylandDataDevice::RequestSelectionData(const std::string& mime_type) {
 
   // Ensure there is not pending operation to be performed by the compositor,
   // other read(..) can block awaiting data to be sent to pipe.
-  read_from_fd_closure_ = base::BindOnce(
-      &WaylandDataDevice::ReadClipboardDataFromFD, base::Unretained(this), fd, mime_type);
+  read_from_fd_closure_ =
+      base::BindOnce(&WaylandDataDevice::ReadClipboardDataFromFD,
+                     base::Unretained(this), fd, mime_type);
   sync_callback_.reset(wl_display_sync(connection_->display()));
   wl_callback_add_listener(sync_callback_.get(), &callback_listener_, this);
   wl_display_flush(connection_->display());
 }
 
-void WaylandDataDevice::ReadClipboardDataFromFD(int fd, const std::string& mime_type) {
+void WaylandDataDevice::ReadClipboardDataFromFD(int fd,
+                                                const std::string& mime_type) {
   std::string contents;
   char buffer[1 << 10];  // 1 kB in bytes.
   ssize_t length;
@@ -55,10 +55,7 @@ void WaylandDataDevice::ReadClipboardDataFromFD(int fd, const std::string& mime_
     contents.append(buffer, length);
   close(fd);
 
-  current_clipboard_.value()[mime_type] =
-      std::vector<uint8_t>(contents.begin(), contents.end());
-
-  connection_->SetClipboardData(current_clipboard_, mime_type);
+  connection_->SetClipboardData(contents, mime_type);
 }
 
 std::vector<std::string> WaylandDataDevice::GetAvailableMimeTypes() {
@@ -91,7 +88,7 @@ void WaylandDataDevice::OnSelection(void* data,
     self->selection_offer_.reset();
 
     // Clear Clipboard cache.
-    self->connection_->SetClipboardData(base::nullopt, std::string());
+    self->connection_->SetClipboardData(std::string(), std::string());
     return;
   }
 
