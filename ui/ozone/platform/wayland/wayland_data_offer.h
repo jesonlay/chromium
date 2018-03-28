@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "base/files/scoped_file.h"
 #include "base/macros.h"
 #include "ui/ozone/platform/wayland/wayland_object.h"
 
@@ -35,7 +36,7 @@ class WaylandDataOffer {
 
   // Receive data of type mime_type from another Wayland client. Returns
   // an open file descriptor to read the data from, or -1 on failure.
-  int Receive(const std::string& mime_type);
+  base::ScopedFD Receive(const std::string& mime_type);
 
  private:
   // wl_data_offer_listener callbacks.
