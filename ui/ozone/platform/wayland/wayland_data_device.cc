@@ -30,9 +30,9 @@ WaylandDataDevice::WaylandDataDevice(WaylandConnection* connection,
 WaylandDataDevice::~WaylandDataDevice() {}
 
 void WaylandDataDevice::RequestSelectionData(const std::string& mime_type) {
-  int fd = selection_offer_->Receive(mime_type);
-  if (fd == -1) {
-    LOG(ERROR) << "Failed to open file descriptor";
+  base::ScopedFD fd = selection_offer_->Receive(mime_type);
+  if (!fd.is_valid()) {
+    LOG(ERROR) << "Failed to open file descriptor.";
     return;
   }
 
@@ -40,20 +40,19 @@ void WaylandDataDevice::RequestSelectionData(const std::string& mime_type) {
   // other read(..) can block awaiting data to be sent to pipe.
   read_from_fd_closure_ =
       base::BindOnce(&WaylandDataDevice::ReadClipboardDataFromFD,
-                     base::Unretained(this), fd, mime_type);
+                     base::Unretained(this), std::move(fd), mime_type);
   sync_callback_.reset(wl_display_sync(connection_->display()));
   wl_callback_add_listener(sync_callback_.get(), &callback_listener_, this);
   wl_display_flush(connection_->display());
 }
 
-void WaylandDataDevice::ReadClipboardDataFromFD(int fd,
+void WaylandDataDevice::ReadClipboardDataFromFD(base::ScopedFD fd,
                                                 const std::string& mime_type) {
   std::string contents;
   char buffer[1 << 10];  // 1 kB in bytes.
   ssize_t length;
-  while ((length = read(fd, buffer, sizeof(buffer))) > 0)
+  while ((length = read(fd.get(), buffer, sizeof(buffer))) > 0)
     contents.append(buffer, length);
-  close(fd);
 
   connection_->SetClipboardData(contents, mime_type);
 }

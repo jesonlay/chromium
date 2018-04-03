@@ -4,6 +4,7 @@
 
 #include "ui/ozone/platform/wayland/wayland_data_source.h"
 
+#include "base/files/file_util.h"
 #include "ui/ozone/platform/wayland/wayland_connection.h"
 
 namespace ui {
@@ -55,10 +56,8 @@ void WaylandDataSource::OnSend(void* data,
       strcmp(mime_type, "text/plain;charset=utf-8") == 0)
     self->GetClipboardData("text/plain", &mime_data);
 
-  std::string str(mime_data->begin(), mime_data->end());
-  if (write(fd, str.data(), str.length()) < 0)
-    LOG(ERROR) << "write failed: " << fd;
-
+  std::string contents(mime_data->begin(), mime_data->end());
+  DCHECK(base::WriteFileDescriptor(fd, contents.data(), contents.length()));
   close(fd);
 }
 

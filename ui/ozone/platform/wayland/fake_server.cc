@@ -715,7 +715,7 @@ void MockDataSource::DataReadCb(ReadDataCallback callback,
   std::move(callback).Run(data);
 }
 
-void MockDataSource::OnCancel() {
+void MockDataSource::OnCancelled() {
   wl_data_source_send_cancelled(resource());
 }
 

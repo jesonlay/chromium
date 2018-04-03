@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/files/scoped_file.h"
 #include "base/macros.h"
 #include "ui/ozone/platform/wayland/wayland_data_offer.h"
 #include "ui/ozone/platform/wayland/wayland_object.h"
@@ -31,7 +32,7 @@ class WaylandDataDevice {
   std::vector<std::string> GetAvailableMimeTypes();
 
  private:
-  void ReadClipboardDataFromFD(int fd, const std::string& mime_type);
+  void ReadClipboardDataFromFD(base::ScopedFD fd, const std::string& mime_type);
 
   // wl_data_device_listener callbacks
   static void OnDataOffer(void* data,

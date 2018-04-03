@@ -11,12 +11,15 @@
 
 namespace ui {
 
+// This class mocks how a real clipboard/ozone client would
+// hook to ClipboardDelegate, with one difference: real clients
+// have no access to the WaylandConnection instance like this
+// MockClipboardClient impl does. Instead, clients and ozone gets
+// plumbbed up by calling the appropriated Ozone API,
+// OzonePlatform::GetClipboardDelegate.
 class MockClipboardClient {
  public:
   MockClipboardClient(WaylandConnection* connection) {
-    // Real clients have no access to the WaylandConnection instance like
-    // this MockClipboardClient impl does. Instead clients and ozone gets
-    // plumbbed up by calling the appropriated Ozone API.
     DCHECK(connection);
     delegate_ = connection->GetClipboardDelegate();
 
@@ -100,7 +103,7 @@ TEST_P(WaylandDataDeviceManagerTest, ReadFromClibpard) {
   data_device_manager_->data_device()->OnSelection(*data_offer);
   Sync();
 
-  // The client requests to read clipboard data from the server.
+  // The client requests to reading clipboard data from the server.
   // The Server writes in some sample data, and we check it matches
   // expectation.
   auto callback =
@@ -122,7 +125,7 @@ TEST_P(WaylandDataDeviceManagerTest, IsSelectionOwner) {
   // The compositor sends OnCancelled whenever another application
   // on the system sets a new selection. It means we are not the application
   // that owns the current selection data.
-  data_device_manager_->data_source()->OnCancel();
+  data_device_manager_->data_source()->OnCancelled();
   Sync();
 
   ASSERT_FALSE(clipboard_client_->IsSelectionOwner());

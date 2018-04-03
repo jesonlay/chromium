@@ -19,6 +19,13 @@ const char kTextPlain[] = "text/plain";
 const char kTextPlainUtf8[] = "text/plain;charset=utf-8";
 const char kUtf8String[] = "UTF8_STRING";
 
+void CreatePipe(base::ScopedFD* read_pipe, base::ScopedFD* write_pipe) {
+  int raw_pipe[2];
+  PCHECK(0 == pipe(raw_pipe));
+  read_pipe->reset(raw_pipe[0]);
+  write_pipe->reset(raw_pipe[1]);
+}
+
 }  // namespace
 
 WaylandDataOffer::WaylandDataOffer(wl_data_offer* data_offer)
@@ -48,16 +55,14 @@ void WaylandDataOffer::EnsureTextMimeTypeIfNeeded() {
   }
 }
 
-int WaylandDataOffer::Receive(const std::string& mime_type) {
+base::ScopedFD WaylandDataOffer::Receive(const std::string& mime_type) {
   if (std::find(mime_types_.begin(), mime_types_.end(), mime_type) ==
       mime_types_.end())
-    return -1;
+    return base::ScopedFD();
 
-  int pipefd[2];
-  if (pipe2(pipefd, O_CLOEXEC) == -1) {
-    LOG(ERROR) << "Failed to create pipe: " << strerror(errno);
-    return -1;
-  }
+  base::ScopedFD read_fd;
+  base::ScopedFD write_fd;
+  CreatePipe(&read_fd, &write_fd);
 
   // If we needed to forcibly write "text/plain" as an available
   // mimetype, then it is safer to "read" the clipboard data with
@@ -68,10 +73,8 @@ int WaylandDataOffer::Receive(const std::string& mime_type) {
   }
 
   wl_data_offer_receive(data_offer_.get(), effective_mime_type.data(),
-                        pipefd[1]);
-  close(pipefd[1]);
-
-  return pipefd[0];
+                        write_fd.get());
+  return read_fd;
 }
 
 // static

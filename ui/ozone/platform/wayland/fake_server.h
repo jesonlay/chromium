@@ -174,7 +174,7 @@ class MockDataSource : public ServerObject {
       base::OnceCallback<void(const std::vector<uint8_t>&)>;
   void ReadData(ReadDataCallback);
 
-  void OnCancel();
+  void OnCancelled();
 
  private:
   void DataReadCb(ReadDataCallback callback, const std::vector<uint8_t>& data);
