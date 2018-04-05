@@ -781,7 +781,7 @@ void BrowserMainLoop::PostMainMessageLoopStart() {
         BrowserThread::GetTaskRunnerForThread(BrowserThread::UI));
   }
 
-#if defined(OS_CHROMES)
+#if defined(OS_CHROMEOS)
   if (!base::FeatureList::IsEnabled(::features::kMash))
 #endif
   {
