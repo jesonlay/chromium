@@ -122,6 +122,28 @@ void X11WindowBase::Create() {
   swa.background_pixmap = x11::None;
   swa.bit_gravity = NorthWestGravity;
   swa.override_redirect = UseTestConfigForPlatformWindows();
+
+  ::Atom window_type;
+  // There is now default initialization for this type. Initialize it
+  // to ::WINDOW here. It will be changed by delelgate if it know the
+  // type of the window.
+  ui::PlatformWindowType ui_window_type =
+      ui::PlatformWindowType::PLATFORM_WINDOW_TYPE_WINDOW;
+  delegate_->GetWindowType(&ui_window_type);
+  switch (ui_window_type) {
+    case ui::PlatformWindowType::PLATFORM_WINDOW_TYPE_MENU:
+      window_type = gfx::GetAtom("_NET_WM_WINDOW_TYPE_MENU");
+      swa.override_redirect = x11::True;
+      break;
+    case ui::PlatformWindowType::PLATFORM_WINDOW_TYPE_POPUP:
+      swa.override_redirect = x11::True;
+      window_type = gfx::GetAtom("_NET_WM_WINDOW_TYPE_NOTIFICATION");
+      break;
+    default:
+      window_type = gfx::GetAtom("_NET_WM_WINDOW_TYPE_NORMAL");
+      break;
+  }
+
   xwindow_ =
       XCreateWindow(xdisplay_, xroot_window_, bounds_.x(), bounds_.y(),
                     bounds_.width(), bounds_.height(),
@@ -130,6 +152,10 @@ void X11WindowBase::Create() {
                     InputOutput,
                     CopyFromParent,  // visual
                     CWBackPixmap | CWBitGravity | CWOverrideRedirect, &swa);
+
+  XChangeProperty(xdisplay_, xwindow_, gfx::GetAtom("_NET_WM_WINDOW_TYPE"),
+                  XA_ATOM, 32, PropModeReplace,
+                  reinterpret_cast<unsigned char*>(&window_type), 1);
 
   // Setup XInput event mask.
   long event_mask = ButtonPressMask | ButtonReleaseMask | FocusChangeMask |
@@ -188,6 +214,13 @@ void X11WindowBase::Create() {
   // frame width when running with window manager.
   size_hints.win_gravity = StaticGravity;
   XSetWMNormalHints(xdisplay_, xwindow_, &size_hints);
+
+// Disable native frame by default in non-ChromeOS builds for now.
+// TODO(msisov, tonikitoo): check if native frame should be used by checking
+// Widget::InitParams::remove_standard_frame.
+#if !defined(OS_CHROMEOS)
+  ui::SetUseOSWindowFrame(xwindow_, false);
+#endif
 
   // TODO(sky): provide real scale factor.
   delegate_->OnAcceleratedWidgetAvailable(xwindow_, 1.f);

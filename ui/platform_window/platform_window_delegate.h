@@ -14,6 +14,7 @@ class Rect;
 namespace ui {
 
 class Event;
+class PlatformWindow;
 
 enum PlatformWindowState {
   PLATFORM_WINDOW_STATE_UNKNOWN,
@@ -21,6 +22,14 @@ enum PlatformWindowState {
   PLATFORM_WINDOW_STATE_MINIMIZED,
   PLATFORM_WINDOW_STATE_NORMAL,
   PLATFORM_WINDOW_STATE_FULLSCREEN,
+};
+
+enum PlatformWindowType {
+  PLATFORM_WINDOW_TYPE_WINDOW,
+  PLATFORM_WINDOW_TYPE_MENU,
+  PLATFORM_WINDOW_TYPE_TOOLTIP,
+  PLATFORM_WINDOW_TYPE_POPUP,
+  PLATFORM_WINDOW_TYPE_DRAG,
 };
 
 class PlatformWindowDelegate {
@@ -51,6 +60,14 @@ class PlatformWindowDelegate {
   virtual void OnAcceleratedWidgetDestroyed() = 0;
 
   virtual void OnActivationChanged(bool active) = 0;
+
+  // TODO(tonikitoo,msisov): Adding this method with an out parameter so that
+  // we can have a default implementation here and not need to add stubs to
+  // all subclasses. To be discussed when upstraming.
+  virtual void GetWindowType(PlatformWindowType* window_type) {}
+
+  virtual void GetParentWindowAcceleratedWidget(
+      gfx::AcceleratedWidget* widget) {}
 };
 
 }  // namespace ui
