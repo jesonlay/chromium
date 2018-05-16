@@ -40,6 +40,8 @@ class PlatformWindowCast : public PlatformWindow,
   void MoveCursorTo(const gfx::Point& location) override {}
   void ConfineCursorToBounds(const gfx::Rect& bounds) override {}
   PlatformImeController* GetPlatformImeController() override;
+  bool RunMoveLoop(const gfx::Vector2d& drag_offset) override;
+  void StopMoveLoop() override;
 
   // PlatformEventDispatcher implementation:
   bool CanDispatchEvent(const PlatformEvent& event) override;
