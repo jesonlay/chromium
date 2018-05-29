@@ -15,7 +15,7 @@ namespace ui {
 class X11NativeDisplayDelegate : public display::NativeDisplayDelegate {
  public:
   X11NativeDisplayDelegate();
-  ~X11NativeDisplayDelegate();
+  ~X11NativeDisplayDelegate() override;
 
   // display::NativeDisplayDelegate overrides:
   void Initialize() override;
