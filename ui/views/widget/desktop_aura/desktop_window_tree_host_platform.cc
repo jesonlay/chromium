@@ -14,6 +14,7 @@
 #include "ui/platform_window/platform_window_init_properties.h"
 #include "ui/views/corewm/tooltip_aura.h"
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
+#include "ui/views/widget/desktop_aura/window_event_filter.h"
 #include "ui/views/widget/widget_aura_utils.h"
 #include "ui/views/window/native_frame_view.h"
 #include "ui/wm/core/window_util.h"
