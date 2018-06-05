@@ -16,26 +16,8 @@ X11NativeDisplayDelegate::X11NativeDisplayDelegate() = default;
 X11NativeDisplayDelegate::~X11NativeDisplayDelegate() = default;
 
 void X11NativeDisplayDelegate::Initialize() {
-  // This shouldn't be called twice.
-  DCHECK(!current_snapshot_);
-
-  XDisplay* display = gfx::GetXDisplay();
-  Screen* screen = DefaultScreenOfDisplay(display);
-  current_snapshot_.reset(new display::DisplaySnapshot(
-      XScreenNumberOfScreen(screen), gfx::Point(0, 0),
-      gfx::Size(WidthOfScreen(screen), HeightOfScreen(screen)),
-      display::DisplayConnectionType::DISPLAY_CONNECTION_TYPE_NONE, false,
-      false, false, gfx::ColorSpace(), "", base::FilePath(),
-      display::DisplaySnapshot::DisplayModeList(), std::vector<uint8_t>(),
-      nullptr, nullptr, 0, 0, gfx::Size()));
-  const int default_refresh = 60;
-  current_mode_.reset(new display::DisplayMode(
-      gfx::Size(WidthOfScreen(screen), HeightOfScreen(screen)), false,
-      default_refresh));
-  current_snapshot_->set_current_mode(current_mode_.get());
-
-  for (display::NativeDisplayObserver& observer : observers_)
-    observer.OnConfigurationChanged();
+  display_manager_ = std::make_unique<X11DisplayManagerOzone>();
+  display_manager_->SetObserver(this);
 }
 
 void X11NativeDisplayDelegate::TakeDisplayControl(
@@ -52,9 +34,8 @@ void X11NativeDisplayDelegate::GetDisplays(
     display::GetDisplaysCallback callback) {
   // TODO(msisov): Add support for multiple displays and dynamic display data
   // change.
-  std::vector<display::DisplaySnapshot*> snapshot;
-  snapshot.push_back(current_snapshot_.get());
-  std::move(callback).Run(snapshot);
+  if (displays_ready_)
+    display_manager_->GetDisplaysSnapshot(std::move(callback));
 }
 
 void X11NativeDisplayDelegate::Configure(const display::DisplaySnapshot& output,
@@ -106,4 +87,11 @@ X11NativeDisplayDelegate::GetFakeDisplayController() {
   return nullptr;
 }
 
+void X11NativeDisplayDelegate::OnOutputReadyForUse() {
+  if (!displays_ready_)
+    displays_ready_ = true;
+
+  for (display::NativeDisplayObserver& observer : observers_)
+    observer.OnConfigurationChanged();
+}
 }  // namespace ui
