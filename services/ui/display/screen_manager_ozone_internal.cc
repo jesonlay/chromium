@@ -316,7 +316,8 @@ void ScreenManagerOzoneInternal::PostDisplayConfigurationChange() {
     }
   }
 
-  touch_transform_controller_->UpdateTouchTransforms();
+  if (touch_transform_controller_)
+    touch_transform_controller_->UpdateTouchTransforms();
 
   DVLOG(1) << "PostDisplayConfigurationChange";
 }
