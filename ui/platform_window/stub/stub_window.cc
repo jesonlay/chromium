@@ -95,4 +95,10 @@ bool StubWindow::RunMoveLoop(const gfx::Vector2d& drag_offset) {
 
 void StubWindow::StopMoveLoop() {}
 
+void StubWindow::SetRestoredBoundsInPixels(const gfx::Rect& bounds) {}
+
+gfx::Rect StubWindow::GetRestoredBoundsInPixels() const {
+  return gfx::Rect();
+}
+
 }  // namespace ui
