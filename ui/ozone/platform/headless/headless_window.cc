@@ -26,11 +26,13 @@ HeadlessWindow::HeadlessWindow(PlatformWindowDelegate* delegate,
 }
 
 HeadlessWindow::~HeadlessWindow() {
+  delegate()->OnAcceleratedWidgetDestroying();
 #if defined(OS_WIN)
   manager_->RemoveWindow(reinterpret_cast<uint64_t>(widget_), this);
 #else
   manager_->RemoveWindow(widget_, this);
 #endif
+  delegate()->OnAcceleratedWidgetDestroyed();
 }
 
 }  // namespace ui
