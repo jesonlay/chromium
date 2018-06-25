@@ -97,8 +97,10 @@ X11WindowBase::X11WindowBase(PlatformWindowDelegate* delegate,
 }
 
 X11WindowBase::~X11WindowBase() {
+  delegate_->OnAcceleratedWidgetDestroying();
   UnConfineCursor();
   Destroy();
+  delegate_->OnAcceleratedWidgetDestroyed();
 }
 
 void X11WindowBase::Destroy() {
@@ -109,7 +111,6 @@ void X11WindowBase::Destroy() {
   XID xwindow = xwindow_;
   XDisplay* xdisplay = xdisplay_;
   xwindow_ = x11::None;
-  delegate_->OnClosed();
   // |this| might be deleted because of the above call.
 
   XDestroyWindow(xdisplay, xwindow);

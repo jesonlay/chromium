@@ -111,8 +111,8 @@ TEST_F(X11WindowOzoneTest, SendPlatformEventToRightTarget) {
   DispatchXEvent(xi_event, widget_2);
   EXPECT_EQ(ET_MOUSE_PRESSED, event->type());
 
-  EXPECT_CALL(delegate, OnClosed()).Times(1);
-  EXPECT_CALL(delegate_2, OnClosed()).Times(1);
+  EXPECT_CALL(delegate, OnAcceleratedWidgetDestroyed()).Times(1);
+  EXPECT_CALL(delegate_2, OnAcceleratedWidgetDestroyed()).Times(1);
 }
 
 // This test case ensures that events are consumed by a window with explicit
@@ -121,13 +121,13 @@ TEST_F(X11WindowOzoneTest, SendPlatformEventToCapturedWindow) {
   MockPlatformWindowDelegate delegate;
   gfx::AcceleratedWidget widget;
   constexpr gfx::Rect bounds(30, 80, 800, 600);
-  EXPECT_CALL(delegate, OnClosed()).Times(1);
+  EXPECT_CALL(delegate, OnAcceleratedWidgetDestroyed()).Times(1);
   auto window = CreatePlatformWindow(&delegate, bounds, &widget);
 
   MockPlatformWindowDelegate delegate_2;
   gfx::AcceleratedWidget widget_2;
   gfx::Rect bounds_2(525, 155, 296, 407);
-  EXPECT_CALL(delegate_2, OnClosed()).Times(1);
+  EXPECT_CALL(delegate_2, OnAcceleratedWidgetDestroyed()).Times(1);
   auto window_2 = CreatePlatformWindow(&delegate_2, bounds_2, &widget_2);
 
   ScopedXI2Event xi_event;
