@@ -8,6 +8,7 @@
 #include "base/memory/protected_memory_cfi.h"
 #include "ui/base/x/x11_util.h"
 #include "ui/display/display.h"
+#include "ui/display/types/display_snapshot.h"
 #include "ui/display/util/display_util.h"
 #include "ui/display/util/x11/edid_parser_x11.h"
 #include "ui/events/platform/platform_event_source.h"
@@ -23,34 +24,38 @@ namespace {
 
 constexpr int default_refresh = 60;
 
-X11DisplayManagerOzone::Snapshot CreateSnapshot(int64_t display_id,
-                                                gfx::Rect bounds,
-                                                gfx::ColorSpace color_space) {
-  std::unique_ptr<display::DisplaySnapshot> snapshot =
-      std::make_unique<display::DisplaySnapshot>(
-          display_id, gfx::Point(bounds.x(), bounds.y()),
-          gfx::Size(bounds.width(), bounds.height()),
-          display::DisplayConnectionType::DISPLAY_CONNECTION_TYPE_NONE, false,
-          false, false, color_space, "", base::FilePath(),
-          display::DisplaySnapshot::DisplayModeList(), std::vector<uint8_t>(),
-          nullptr, nullptr, 0, 0, gfx::Size());
-  std::unique_ptr<display::DisplayMode> current_mode =
+std::unique_ptr<display::DisplaySnapshot> CreateSnapshot(
+    int64_t display_id,
+    gfx::Rect bounds,
+    gfx::ColorSpace color_space) {
+  display::DisplaySnapshot::DisplayModeList modes;
+  std::unique_ptr<display::DisplayMode> display_mode =
       std::make_unique<display::DisplayMode>(
           gfx::Size(bounds.width(), bounds.height()), false, default_refresh);
-  snapshot->set_current_mode(current_mode.get());
-  return std::make_pair(std::move(snapshot), std::move(current_mode));
+  modes.push_back(std::move(display_mode));
+  const display::DisplayMode* mode = modes.back().get();
+
+  return std::make_unique<display::DisplaySnapshot>(
+      display_id, gfx::Point(bounds.x(), bounds.y()),
+      gfx::Size(bounds.width(), bounds.height()),
+      display::DisplayConnectionType::DISPLAY_CONNECTION_TYPE_NONE, false,
+      false, false, color_space, "", base::FilePath(), std::move(modes),
+      std::vector<uint8_t>(), mode, mode, 0, 0, gfx::Size());
 }
 
-void BuildFallbackDisplayList(
-    X11DisplayManagerOzone::OwnedDisplaySnapshot& output) {
+std::vector<std::unique_ptr<display::DisplaySnapshot>>
+BuildFallbackDisplayList() {
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   ::XDisplay* display = gfx::GetXDisplay();
   ::Screen* screen = DefaultScreenOfDisplay(display);
   int width = WidthOfScreen(screen);
   int height = HeightOfScreen(screen);
   int64_t display_id = 0;
   gfx::Rect bounds(0, 0, width, height);
-  output.emplace(display_id,
-                 CreateSnapshot(display_id, bounds, gfx::ColorSpace()));
+  std::unique_ptr<display::DisplaySnapshot> snapshot =
+      CreateSnapshot(display_id, bounds, gfx::ColorSpace());
+  snapshots.push_back(std::move(snapshot));
+  return snapshots;
 }
 
 }  // namespace
@@ -62,8 +67,7 @@ X11DisplayManagerOzone::X11DisplayManagerOzone()
     : xdisplay_(gfx::GetXDisplay()),
       x_root_window_(DefaultRootWindow(xdisplay_)),
       xrandr_version_(0),
-      xrandr_event_base_(0),
-      weak_factory_(this) {
+      xrandr_event_base_(0) {
   // We only support 1.3+. There were library changes before this and we should
   // use the new interface instead of the 1.2 one.
   int randr_version_major = 0;
@@ -73,7 +77,7 @@ X11DisplayManagerOzone::X11DisplayManagerOzone()
   }
   // Need at least xrandr version 1.3.
   if (xrandr_version_ < 103) {
-    BuildFallbackDisplayList(displays_);
+    snapshots_ = BuildFallbackDisplayList();
     return;
   }
 
@@ -96,18 +100,15 @@ X11DisplayManagerOzone::~X11DisplayManagerOzone() {
 
 void X11DisplayManagerOzone::SetObserver(Observer* observer) {
   observer_ = observer;
-  if (displays_.size() > 0)
+  if (snapshots_.size() > 0)
     observer_->OnOutputReadyForUse();
 }
 
 void X11DisplayManagerOzone::GetDisplaysSnapshot(
     display::GetDisplaysCallback callback) {
   std::vector<display::DisplaySnapshot*> snapshots;
-  for (const auto& iter : displays_) {
-    auto& snapshot_pair = iter.second;
-    display::DisplaySnapshot* snapshot = snapshot_pair.first.get();
-    snapshots.push_back(snapshot);
-  }
+  for (const auto& snapshot : snapshots_)
+    snapshots.push_back(snapshot.get());
   std::move(callback).Run(snapshots);
 }
 
@@ -139,7 +140,7 @@ void X11DisplayManagerOzone::BuildDisplaysFromXRandRInfo() {
       resources(XRRGetScreenResourcesCurrent(xdisplay_, x_root_window_));
   if (!resources) {
     LOG(ERROR) << "XRandR returned no displays. Falling back to Root Window.";
-    BuildFallbackDisplayList(displays_);
+    snapshots_ = BuildFallbackDisplayList();
     return;
   }
 
@@ -216,8 +217,9 @@ void X11DisplayManagerOzone::BuildDisplaysFromXRandRInfo() {
         color_space = display::Display::GetForcedColorProfile();
       }
 
-      displays_.emplace(
-          display_id, CreateSnapshot(display_id, crtc_bounds, color_space));
+      std::unique_ptr<display::DisplaySnapshot> snapshot =
+          CreateSnapshot(display_id, crtc_bounds, color_space);
+      snapshots_.push_back(std::move(snapshot));
     }
   }
 

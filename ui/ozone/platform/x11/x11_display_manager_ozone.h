@@ -7,19 +7,17 @@
 
 #include <stdint.h>
 
-#include <map>
-#include <memory>
-
-#include "base/cancelable_callback.h"
-#include "base/macros.h"
-#include "ui/display/screen.h"
-#include "ui/display/types/display_snapshot.h"
 #include "ui/display/types/native_display_delegate.h"
 #include "ui/events/platform/platform_event_dispatcher.h"
 
 typedef unsigned long XID;
 typedef XID Window;
 typedef struct _XDisplay Display;
+
+namespace display {
+class DisplayMode;
+class DisplaySnapshot;
+}  // namespace display
 
 namespace ui {
 
@@ -31,9 +29,6 @@ class X11DisplayManagerOzone : public ui::PlatformEventDispatcher {
     // Will be called when X11DisplayManagerOzone is available.
     virtual void OnOutputReadyForUse() = 0;
   };
-  using Snapshot = std::pair<std::unique_ptr<display::DisplaySnapshot>,
-                             std::unique_ptr<display::DisplayMode>>;
-  using OwnedDisplaySnapshot = std::map<int64_t, Snapshot>;
 
   X11DisplayManagerOzone();
   ~X11DisplayManagerOzone() override;
@@ -63,14 +58,12 @@ class X11DisplayManagerOzone : public ui::PlatformEventDispatcher {
   int xrandr_event_base_;
 
   // The display objects we present to chrome.
-  OwnedDisplaySnapshot displays_;
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots_;
 
   // The index into displays_ that represents the primary display.
   size_t primary_display_index_;
 
   Observer* observer_;
-
-  base::WeakPtrFactory<X11DisplayManagerOzone> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(X11DisplayManagerOzone);
 };

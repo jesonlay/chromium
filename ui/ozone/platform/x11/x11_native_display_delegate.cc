@@ -42,7 +42,12 @@ void X11NativeDisplayDelegate::Configure(const display::DisplaySnapshot& output,
                                          const display::DisplayMode* mode,
                                          const gfx::Point& origin,
                                          display::ConfigureCallback callback) {
-  NOTREACHED();
+  NOTIMPLEMENTED();
+
+  // It should call |callback| after configuration.
+  // Even if we don't have implementation, it calls |callback| to finish the
+  // logic. otherwise, several tests from views_mus_unittests don't work.
+  std::move(callback).Run(true);
 }
 
 void X11NativeDisplayDelegate::GetHDCPState(
