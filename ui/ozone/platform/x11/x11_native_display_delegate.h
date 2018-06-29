@@ -5,11 +5,14 @@
 #ifndef UI_OZONE_PLATFORM_X11_X11_NATIVE_DISPLAY_DELEGATE_H_
 #define UI_OZONE_PLATFORM_X11_X11_NATIVE_DISPLAY_DELEGATE_H_
 
-#include "base/macros.h"
 #include "base/observer_list.h"
-#include "ui/display/types/display_snapshot.h"
 #include "ui/display/types/native_display_delegate.h"
 #include "ui/ozone/platform/x11/x11_display_manager_ozone.h"
+
+namespace display {
+class DisplayMode;
+class DisplaySnapshot;
+}  // namespace display
 
 namespace ui {
 
