@@ -23,7 +23,7 @@
 #include "ui/ozone/platform/wayland/wayland_pointer.h"
 #include "ui/ozone/platform/wayland/wayland_touch.h"
 #include "ui/ozone/public/clipboard_delegate.h"
-#include "ui/ozone/public/interfaces/wayland_connection.mojom.h"
+#include "ui/ozone/public/interfaces/wayland/wayland_connection.mojom.h"
 
 struct zwp_linux_dmabuf_v1;
 struct zwp_linux_buffer_params_v1;
