@@ -12,7 +12,7 @@
 #include "ui/ozone/common/linux/gbm_device_linux.h"
 
 #include "base/threading/sequenced_task_runner_handle.h"
-#include "ui/ozone/public/interfaces/wayland_connection.mojom.h"
+#include "ui/ozone/public/interfaces/wayland/wayland_connection.mojom.h"
 
 #include "ui/ozone/platform/wayland/wayland_connection.h"
 

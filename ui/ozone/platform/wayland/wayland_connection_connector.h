@@ -7,7 +7,7 @@
 
 #include "ui/ozone/public/gpu_platform_support_host.h"
 
-#include "ui/ozone/public/interfaces/wayland_connection.mojom.h"
+#include "ui/ozone/public/interfaces/wayland/wayland_connection.mojom.h"
 
 namespace ui {
 

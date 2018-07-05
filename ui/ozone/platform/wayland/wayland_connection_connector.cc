@@ -6,7 +6,7 @@
 
 #include "base/task_runner_util.h"
 #include "ui/ozone/platform/wayland/wayland_connection.h"
-#include "ui/ozone/public/interfaces/wayland_connection.mojom.h"
+#include "ui/ozone/public/interfaces/wayland/wayland_connection.mojom.h"
 
 namespace ui {
 
