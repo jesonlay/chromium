@@ -269,10 +269,6 @@ TEST_P(WaylandWindowTest, RestoreBoundsAfterMaximize) {
   EXPECT_EQ(restored_bounds, gfx::Rect());
   gfx::Rect bounds = window_->GetBounds();
 
-  gfx::Rect restored_bounds = window_->GetRestoredBoundsInPixels();
-  EXPECT_EQ(restored_bounds, gfx::Rect());
-  gfx::Rect bounds = window_->GetBounds();
-
   const gfx::Rect maximized_bounds = gfx::Rect(0, 0, 1024, 768);
   EXPECT_CALL(delegate_, OnBoundsChanged(Eq(maximized_bounds)));
   window_->Maximize();
@@ -309,10 +305,6 @@ TEST_P(WaylandWindowTest, RestoreBoundsAfterFullscreen) {
   EXPECT_EQ(restored_bounds, gfx::Rect());
   gfx::Rect bounds = window_->GetBounds();
 
-  gfx::Rect restored_bounds = window_->GetRestoredBoundsInPixels();
-  EXPECT_EQ(restored_bounds, gfx::Rect());
-  gfx::Rect bounds = window_->GetBounds();
-
   const gfx::Rect fullscreen_bounds = gfx::Rect(0, 0, 1280, 720);
   EXPECT_CALL(delegate_, OnBoundsChanged(Eq(fullscreen_bounds)));
   window_->ToggleFullscreen();
@@ -344,10 +336,6 @@ TEST_P(WaylandWindowTest, RestoreBoundsAfterMaximizeAndFullscreen) {
   const gfx::Rect current_bounds = window_->GetBounds();
 
   ScopedWlArray states = InitializeWlArrayWithActivatedState();
-
-  gfx::Rect restored_bounds = window_->GetRestoredBoundsInPixels();
-  EXPECT_EQ(restored_bounds, gfx::Rect());
-  gfx::Rect bounds = window_->GetBounds();
 
   gfx::Rect restored_bounds = window_->GetRestoredBoundsInPixels();
   EXPECT_EQ(restored_bounds, gfx::Rect());
