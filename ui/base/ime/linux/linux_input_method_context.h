@@ -11,6 +11,7 @@
 
 namespace gfx {
 class Rect;
+class Range;
 }
 
 namespace ui {
