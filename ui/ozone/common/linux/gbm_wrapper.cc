@@ -72,7 +72,7 @@ class Buffer final : public ui::GbmBuffer {
   }
   uint32_t GetPlaneHandle(size_t plane) const override {
     DCHECK_LT(plane, planes_.size());
-    return gbm_bo_get_plane_handle(bo_, plane).u32;
+    return gbm_bo_get_handle_for_plane(bo_, plane).u32;
   }
   uint32_t GetHandle() const override { return gbm_bo_get_handle(bo_).u32; }
   gfx::NativePixmapHandle ExportHandle() const override {
@@ -121,11 +121,11 @@ std::unique_ptr<Buffer> CreateBufferForBO(struct gbm_bo* bo,
   std::vector<base::ScopedFD> fds;
   std::vector<gfx::NativePixmapPlane> planes;
 
-  const uint64_t modifier = gbm_bo_get_format_modifier(bo);
-  for (size_t i = 0; i < gbm_bo_get_num_planes(bo); ++i) {
+  const uint64_t modifier = gbm_bo_get_modifier(bo);
+  for (size_t i = 0; i < gbm_bo_get_plane_count(bo); ++i) {
     // The fd returned by gbm_bo_get_fd is not ref-counted and need to be
     // kept open for the lifetime of the buffer.
-    base::ScopedFD fd(gbm_bo_get_plane_fd(bo, i));
+    base::ScopedFD fd(gbm_bo_get_fd(bo));
 
     // TODO(dcastagna): support multiple fds.
     // crbug.com/642410
@@ -138,9 +138,9 @@ std::unique_ptr<Buffer> CreateBufferForBO(struct gbm_bo* bo,
       fds.emplace_back(std::move(fd));
     }
 
-    planes.emplace_back(gbm_bo_get_plane_stride(bo, i),
-                        gbm_bo_get_plane_offset(bo, i),
-                        gbm_bo_get_plane_size(bo, i), modifier);
+    planes.emplace_back(gbm_bo_get_stride_for_plane(bo, i),
+                        gbm_bo_get_offset(bo, i),
+                        gbm_bo_get_height(bo) * gbm_bo_get_stride_for_plane(bo, i), modifier);
   }
   return std::make_unique<Buffer>(bo, format, flags, modifier, std::move(fds),
                                   size, std::move(planes));
@@ -181,6 +181,7 @@ class Device final : public ui::GbmDevice {
       const gfx::Size& size,
       std::vector<base::ScopedFD> fds,
       const std::vector<gfx::NativePixmapPlane>& planes) override {
+#if defined (OS_CHROMEOS)
     DCHECK_LE(fds.size(), planes.size());
     DCHECK_EQ(planes[0].offset, 0);
 
@@ -215,6 +216,10 @@ class Device final : public ui::GbmDevice {
 
     return std::make_unique<Buffer>(bo, format, gbm_flags, planes[0].modifier,
                                     std::move(fds), size, std::move(planes));
+#else
+    NOTREACHED();
+    return nullptr;
+#endif
   }
 
  private:
