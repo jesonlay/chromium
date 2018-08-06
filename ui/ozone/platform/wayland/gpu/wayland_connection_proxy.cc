@@ -12,8 +12,10 @@
 namespace ui {
 
 WaylandConnectionProxy::WaylandConnectionProxy(WaylandConnection* connection)
-    : connection_(connection),
-      ui_runner_(base::ThreadTaskRunnerHandle::Get()) {}
+    : connection_(connection) {
+  if (!connection_)
+    ui_runner_ = base::ThreadTaskRunnerHandle::Get();
+}
 
 WaylandConnectionProxy::~WaylandConnectionProxy() = default;
 
