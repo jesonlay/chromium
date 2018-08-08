@@ -167,12 +167,8 @@ const base::Feature kEnableOzoneDrmMojo = {"OzoneDrmMojo",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
 bool IsOzoneDrmMojo() {
-#if defined(OS_CHROMEOS)
   return base::FeatureList::IsEnabled(kEnableOzoneDrmMojo) ||
          !IsAshInBrowserProcess();
-#else
-  return true;
-#endif
 }
 
 }  // namespace features

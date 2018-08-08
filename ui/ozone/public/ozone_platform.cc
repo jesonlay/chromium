@@ -20,7 +20,7 @@ bool g_platform_initialized_gpu = false;
 base::LazyInstance<base::OnceCallback<void(OzonePlatform*)>>::Leaky
     instance_callback = LAZY_INSTANCE_INITIALIZER;
 
-const OzonePlatform::PlatformProperties kDefaultPlatformProperties = {
+constexpr OzonePlatform::PlatformProperties kDefaultPlatformProperties = {
     /*needs_view_owner_request=*/false,
 };
 
