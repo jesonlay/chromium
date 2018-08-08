@@ -18,6 +18,7 @@ class Rect;
 
 namespace ui {
 
+class OSExchangeData;
 class PlatformImeController;
 
 // Platform window.
@@ -75,6 +76,12 @@ class PlatformWindow {
   // the |hittest|.
   virtual void StartWindowMoveOrResize(int hittest,
                                        gfx::Point pointer_location) = 0;
+
+  // TODO(jkim): Make pure virtual functions.
+  // Initiates Drag Action.
+  virtual void StartDrag(const ui::OSExchangeData& data,
+                         const int operation,
+                         gfx::NativeCursor cursor) {}
 
   // Asks to window move client to start move loop.
   virtual bool RunMoveLoop(const gfx::Vector2d& drag_offset) = 0;
