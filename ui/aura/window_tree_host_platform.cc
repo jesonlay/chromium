@@ -256,4 +256,38 @@ void WindowTreeHostPlatform::OnActivationChanged(bool active) {
     OnHostActivated();
 }
 
+void WindowTreeHostPlatform::OnDragEnter(
+    ui::PlatformWindow* window,
+    const gfx::PointF& point,
+    std::unique_ptr<ui::OSExchangeData> data,
+    int operation) {
+  NOTIMPLEMENTED();
+}
+
+int WindowTreeHostPlatform::OnDragMotion(const gfx::PointF& point,
+                                         uint32_t time,
+                                         int operation,
+                                         gfx::AcceleratedWidget* widget) {
+  NOTIMPLEMENTED();
+  return 0;
+}
+
+void WindowTreeHostPlatform::OnDragDrop(
+    std::unique_ptr<ui::OSExchangeData> data) {
+  NOTIMPLEMENTED();
+}
+
+void WindowTreeHostPlatform::OnDragLeave() {
+  NOTIMPLEMENTED();
+}
+
+void WindowTreeHostPlatform::OnMouseMoved(const gfx::Point& point,
+                                          gfx::AcceleratedWidget* widget) {
+  NOTIMPLEMENTED();
+}
+
+void WindowTreeHostPlatform::OnDragSessionClose(int operation) {
+  NOTIMPLEMENTED();
+}
+
 }  // namespace aura

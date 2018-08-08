@@ -11,6 +11,8 @@
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host.h"
 
 namespace views {
+class DesktopDragDropClientOzone;
+class PlatformWindow;
 
 class VIEWS_EXPORT DesktopWindowTreeHostPlatform
     : public aura::WindowTreeHostPlatform,
@@ -97,6 +99,19 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform
   void OnWindowStateChanged(ui::PlatformWindowState new_state) override;
   void OnCloseRequest() override;
   void OnActivationChanged(bool active) override;
+  void OnDragEnter(ui::PlatformWindow* window,
+                   const gfx::PointF& point,
+                   std::unique_ptr<ui::OSExchangeData> data,
+                   int operation) override;
+  int OnDragMotion(const gfx::PointF& point,
+                   uint32_t time,
+                   int operation,
+                   gfx::AcceleratedWidget* widget) override;
+  void OnDragDrop(std::unique_ptr<ui::OSExchangeData> data) override;
+  void OnDragLeave() override;
+  void OnMouseMoved(const gfx::Point& point,
+                    gfx::AcceleratedWidget* widget) override;
+  void OnDragSessionClose(int operation) override;
 
  private:
   void Relayout();
@@ -120,6 +135,8 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform
 
   // A handler for events inteded for non client area.
   std::unique_ptr<ui::EventHandler> non_client_window_event_filter_;
+
+  DesktopDragDropClientOzone* drag_drop_client_;
 
   base::WeakPtrFactory<DesktopWindowTreeHostPlatform> weak_factory_{this};
 
