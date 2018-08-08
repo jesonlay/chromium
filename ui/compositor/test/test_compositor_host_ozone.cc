@@ -48,6 +48,12 @@ class StubPlatformWindowDelegate : public PlatformWindowDelegate {
     widget_ = gfx::kNullAcceleratedWidget;
   }
   void OnActivationChanged(bool active) override {}
+  int OnDragMotion(const gfx::PointF& point,
+                   uint32_t time,
+                   int operation,
+                   gfx::AcceleratedWidget* widget) override {
+    return 0;
+  }
 
  private:
   gfx::AcceleratedWidget widget_ = gfx::kNullAcceleratedWidget;

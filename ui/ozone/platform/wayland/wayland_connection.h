@@ -104,6 +104,8 @@ class WaylandConnection : public PlatformEventSource,
   // Returns the current pointer, which may be null.
   WaylandPointer* pointer() { return pointer_.get(); }
 
+  WaylandDataSource* drag_data_source() const { return drag_data_source_.get(); }
+
   // Clipboard implementation.
   ClipboardDelegate* GetClipboardDelegate();
   void DataSourceCancelled();
@@ -121,6 +123,22 @@ class WaylandConnection : public PlatformEventSource,
   void GetAvailableMimeTypes(
       ClipboardDelegate::GetMimeTypesClosure callback) override;
   bool IsSelectionOwner() override;
+
+  // Starts Drag with |data| to be delivered, |operation| supported by the
+  // source side.
+  void StartDrag(const ui::OSExchangeData& data, const int operation);
+  // Finishes drag and drop session. it happens when WaylandDataSource gets
+  // 'OnDnDFinished' or 'OnCancel'.
+  void FinishDragSession(uint32_t dnd_action, WaylandWindow* source_window);
+  // Gets the data which Chromium has when it is a source for Drag and Drop.
+  // |buffer| is an output parameter and it should be filled with the data
+  // corresponding to mime_type.
+  void GetDragData(const std::string& mime_type, std::string* buffer);
+  // Requests the data to platform when Chromium is a client for Drag and Drop.
+  // Once reading data from platform is done, |callback| should be called with
+  // the data.
+  void RequestDragData(const std::string& mime_type,
+                       base::OnceCallback<void(const std::string&)> callback);
 
   // Returns bound pointer to own mojo interface.
   ozone::mojom::WaylandConnectionPtr BindInterface();
@@ -227,6 +245,7 @@ class WaylandConnection : public PlatformEventSource,
   std::unique_ptr<WaylandDataDeviceManager> data_device_manager_;
   std::unique_ptr<WaylandDataDevice> data_device_;
   std::unique_ptr<WaylandDataSource> data_source_;
+  std::unique_ptr<WaylandDataSource> drag_data_source_;
   std::unique_ptr<WaylandPointer> pointer_;
   std::unique_ptr<WaylandKeyboard> keyboard_;
   std::unique_ptr<WaylandTouch> touch_;

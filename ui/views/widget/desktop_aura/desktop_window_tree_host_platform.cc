@@ -13,6 +13,7 @@
 #include "ui/platform_window/platform_window.h"
 #include "ui/platform_window/platform_window_init_properties.h"
 #include "ui/views/corewm/tooltip_aura.h"
+#include "ui/views/widget/desktop_aura/desktop_drag_drop_client_ozone.h"
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
 #include "ui/views/widget/desktop_aura/window_event_filter.h"
 #include "ui/views/widget/widget_aura_utils.h"
@@ -117,9 +118,9 @@ DesktopWindowTreeHostPlatform::CreateTooltip() {
 std::unique_ptr<aura::client::DragDropClient>
 DesktopWindowTreeHostPlatform::CreateDragDropClient(
     DesktopNativeCursorManager* cursor_manager) {
-  // TODO: needs PlatformWindow support.
-  NOTIMPLEMENTED_LOG_ONCE();
-  return nullptr;
+  drag_drop_client_ = new DesktopDragDropClientOzone(
+      window(), cursor_manager, platform_window(), GetAcceleratedWidget());
+  return base::WrapUnique(drag_drop_client_);
 }
 
 void DesktopWindowTreeHostPlatform::Close() {
@@ -524,6 +525,41 @@ void DesktopWindowTreeHostPlatform::OnActivationChanged(bool active) {
   is_active_ = active;
   aura::WindowTreeHostPlatform::OnActivationChanged(active);
   desktop_native_widget_aura_->HandleActivationChanged(active);
+}
+
+void DesktopWindowTreeHostPlatform::OnDragEnter(
+    ui::PlatformWindow* window,
+    const gfx::PointF& point,
+    std::unique_ptr<ui::OSExchangeData> data,
+    int operation) {
+  drag_drop_client_->OnDragEnter(window, point, std::move(data), operation);
+}
+
+int DesktopWindowTreeHostPlatform::OnDragMotion(
+    const gfx::PointF& point,
+    uint32_t time,
+    int operation,
+    gfx::AcceleratedWidget* widget) {
+  return drag_drop_client_->OnDragMotion(point, time, operation, widget);
+}
+
+void DesktopWindowTreeHostPlatform::OnDragDrop(
+    std::unique_ptr<ui::OSExchangeData> data) {
+  drag_drop_client_->OnDragDrop(std::move(data));
+}
+
+void DesktopWindowTreeHostPlatform::OnDragLeave() {
+  drag_drop_client_->OnDragLeave();
+}
+
+void DesktopWindowTreeHostPlatform::OnMouseMoved(
+    const gfx::Point& point,
+    gfx::AcceleratedWidget* widget) {
+  drag_drop_client_->OnMouseMoved(point, widget);
+}
+
+void DesktopWindowTreeHostPlatform::OnDragSessionClose(int operation) {
+  drag_drop_client_->OnDragSessionClose(operation);
 }
 
 void DesktopWindowTreeHostPlatform::Relayout() {
