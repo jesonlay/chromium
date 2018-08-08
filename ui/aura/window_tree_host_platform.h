@@ -23,6 +23,9 @@ class KeyboardHook;
 struct PlatformWindowInitProperties;
 }  // namespace ui
 
+namespace gfx {
+class PointF;
+}
 namespace aura {
 
 // The unified WindowTreeHost implementation for platforms
@@ -76,6 +79,19 @@ class AURA_EXPORT WindowTreeHostPlatform : public WindowTreeHost,
   void OnAcceleratedWidgetAvailable(gfx::AcceleratedWidget widget) override;
   void OnAcceleratedWidgetDestroyed() override;
   void OnActivationChanged(bool active) override;
+  void OnDragEnter(ui::PlatformWindow* window,
+                   const gfx::PointF& point,
+                   std::unique_ptr<ui::OSExchangeData> data,
+                   int operation) override;
+  int OnDragMotion(const gfx::PointF& point,
+                   uint32_t time,
+                   int operation,
+                   gfx::AcceleratedWidget* widget) override;
+  void OnDragDrop(std::unique_ptr<ui::OSExchangeData> data) override;
+  void OnDragLeave() override;
+  void OnMouseMoved(const gfx::Point& point,
+                    gfx::AcceleratedWidget* widget) override;
+  void OnDragSessionClose(int operation) override;
 
   // Overridden from aura::WindowTreeHost:
   bool CaptureSystemKeyEventsImpl(

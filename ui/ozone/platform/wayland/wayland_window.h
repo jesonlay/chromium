@@ -16,6 +16,7 @@
 namespace ui {
 
 class BitmapCursorOzone;
+class OSExchangeData;
 class PlatformWindowDelegate;
 class WaylandConnection;
 class XDGPopupWrapper;
@@ -92,6 +93,9 @@ class WaylandWindow : public PlatformWindow, public PlatformEventDispatcher {
   gfx::Rect GetRestoredBoundsInPixels() const override;
   void StartWindowMoveOrResize(int hittest,
                                gfx::Point pointer_location) override;
+  void StartDrag(const ui::OSExchangeData& data,
+                 const int operation,
+                 gfx::NativeCursor cursor) override;
   bool RunMoveLoop(const gfx::Vector2d& drag_offset) override;
   void StopMoveLoop() override;
 
@@ -106,6 +110,14 @@ class WaylandWindow : public PlatformWindow, public PlatformEventDispatcher {
                               bool is_activated);
 
   void OnCloseRequest();
+
+  void OnDragEnter(const gfx::PointF& point,
+                   std::unique_ptr<OSExchangeData> data,
+                   int operation);
+  int OnDragMotion(const gfx::PointF& point, uint32_t time, int operation);
+  void OnDragDrop(std::unique_ptr<OSExchangeData> data);
+  void OnDragLeave();
+  void OnDragSessionClose(uint32_t dnd_action);
 
  private:
   bool IsMinimized() const;
