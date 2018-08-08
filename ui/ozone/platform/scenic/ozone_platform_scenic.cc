@@ -29,9 +29,9 @@ namespace ui {
 
 namespace {
 
-constexpr OzonePlatform::PlatformProperties kScenicPlatformProperties = {
-    /*needs_view_owner_request=*/true,
-};
+const OzonePlatform::PlatformProperties kScenicPlatformProperties(
+    true,
+    std::vector<gfx::BufferFormat>());
 
 class ScenicPlatformEventSource : public ui::PlatformEventSource {
  public:

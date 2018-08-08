@@ -20,16 +20,27 @@ bool g_platform_initialized_gpu = false;
 base::LazyInstance<base::OnceCallback<void(OzonePlatform*)>>::Leaky
     instance_callback = LAZY_INSTANCE_INITIALIZER;
 
-constexpr OzonePlatform::PlatformProperties kDefaultPlatformProperties = {
-    /*needs_view_owner_request=*/false,
-};
-
 base::Lock& GetOzoneInstanceLock() {
   static base::Lock lock;
   return lock;
 }
 
+const OzonePlatform::PlatformProperties kDefaultPlatformProperties;
+
 }  // namespace
+
+OzonePlatform::PlatformProperties::PlatformProperties() = default;
+
+OzonePlatform::PlatformProperties::PlatformProperties(
+    bool needs_request,
+    std::vector<gfx::BufferFormat> buffer_formats)
+    : needs_view_owner_request(needs_request),
+      supported_buffer_formats(buffer_formats) {}
+
+OzonePlatform::PlatformProperties::~PlatformProperties() = default;
+
+OzonePlatform::PlatformProperties::PlatformProperties(
+    const PlatformProperties& other) = default;
 
 OzonePlatform::OzonePlatform() {
   GetOzoneInstanceLock().AssertAcquired();

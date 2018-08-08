@@ -123,6 +123,7 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
 
   void BindInterface(const std::string& interface_name,
                      mojo::ScopedMessagePipeHandle interface_pipe);
+  void TerminateGpuProcess(const std::string& message);
 
   // Get the GPU process host for the GPU process with the given ID. Returns
   // null if the process no longer exists.
