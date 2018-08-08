@@ -84,6 +84,12 @@ class OZONE_EXPORT OzonePlatform {
 
   // Struct used to indicate platform properties.
   struct PlatformProperties {
+    PlatformProperties();
+    PlatformProperties(bool needs_request,
+                       std::vector<gfx::BufferFormat> buffer_formats);
+    ~PlatformProperties();
+    PlatformProperties(const PlatformProperties& other);
+
     // Fuchsia only: set to true when the platforms requires
     // |view_owner_request| field in PlatformWindowInitProperties when creating
     // a window.

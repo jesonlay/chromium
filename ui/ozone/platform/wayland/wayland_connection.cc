@@ -169,10 +169,8 @@ int WaylandConnection::GetKeyboardModifiers() {
 void WaylandConnection::ScheduleBufferSwap(gfx::AcceleratedWidget widget,
                                            uint32_t buffer_id) {
   DCHECK(base::MessageLoopForUI::IsCurrent());
-
-  // Validate data sent from the GPU.
-  CHECK_NE(widget, gfx::kNullAcceleratedWidget);
-  CHECK(buffer_id > 0);
+  if (!ValidateDataFromGpu(widget, buffer_id))
+    return;
 
   auto it = buffers_.find(buffer_id);
   // A buffer might not exist by this time. So, store the request and process
@@ -225,26 +223,23 @@ void WaylandConnection::CreateZwpLinuxDmabuf(
       WaylandConnection::CreateSucceeded, WaylandConnection::CreateFailed};
 
   DCHECK(base::MessageLoopForUI::IsCurrent());
+  if (!ValidateDataFromGpu(file, width, height, strides, offsets, format,
+                           modifiers, planes_count, buffer_id)) {
+    // base::File::Close() has an assertion that checks if blocking operations
+    // are allowed. Thus, manually close the fd here.
+    base::ScopedFD fd(file.TakePlatformFile());
+    fd.reset();
+    return;
+  }
 
-  // Validate the data from the GPU process.
-  CHECK(file.IsValid());
-  CHECK_NE(width, 0u);
-  CHECK_NE(height, 0u);
-  CHECK(planes_count > 0);
-  CHECK(planes_count == strides.size() && planes_count == offsets.size() &&
-        planes_count == modifiers.size());
-  CHECK(IsValidBufferFormat(format));
-  CHECK(buffer_id > 0);
-
-  uint32_t fd = file.TakePlatformFile();
-
-  struct zwp_linux_buffer_params_v1* params =
-      zwp_linux_dmabuf_v1_create_params(zwp_linux_dmabuf());
   // Store |params| connected to |buffer_id| to track buffer creation and
   // identify, which buffer a client wants to use.
+  struct zwp_linux_buffer_params_v1* params =
+      zwp_linux_dmabuf_v1_create_params(zwp_linux_dmabuf());
   params_to_id_map_.insert(
       std::pair<struct zwp_linux_buffer_params_v1*, uint32_t>(params,
                                                               buffer_id));
+  uint32_t fd = file.TakePlatformFile();
   for (size_t i = 0; i < planes_count; i++) {
     zwp_linux_buffer_params_v1_add(params, fd, i /* plane id */, offsets[i],
                                    strides[i], 0 /* modifier hi */,
@@ -262,12 +257,11 @@ void WaylandConnection::DestroyZwpLinuxDmabuf(uint32_t buffer_id) {
 
   DCHECK(base::MessageLoopForUI::IsCurrent());
 
-  // Validate data from the GPU process.
-  CHECK(buffer_id > 0);
-
   auto it = buffers_.find(buffer_id);
-  if (it == buffers_.end())
-    LOG(FATAL) << "Non-existing buffer id";
+  if (it == buffers_.end()) {
+    TerminateGpuProcess("Trying to destroy non-existing buffer");
+    return;
+  }
   buffers_.erase(it);
 
   ScheduleFlush();
@@ -365,6 +359,11 @@ std::vector<gfx::BufferFormat> WaylandConnection::GetSupportedBufferFormats() {
   return buffer_formats_;
 }
 
+void WaylandConnection::SetTerminateGpuCallback(
+    base::OnceCallback<void(std::string)> terminate_callback) {
+  terminate_gpu_cb_ = std::move(terminate_callback);
+}
+
 void WaylandConnection::GetAvailableMimeTypes(
     ClipboardDelegate::GetMimeTypesClosure callback) {
   std::move(callback).Run(data_device_->GetAvailableMimeTypes());
@@ -411,6 +410,81 @@ void WaylandConnection::OnFileCanReadWithoutBlocking(int fd) {
 }
 
 void WaylandConnection::OnFileCanWriteWithoutBlocking(int fd) {}
+
+bool WaylandConnection::ValidateDataFromGpu(
+    const base::File& file,
+    uint32_t width,
+    uint32_t height,
+    const std::vector<uint32_t>& strides,
+    const std::vector<uint32_t>& offsets,
+    uint32_t format,
+    const std::vector<uint64_t>& modifiers,
+    uint32_t planes_count,
+    uint32_t buffer_id) {
+  std::string reason;
+  if (!file.IsValid())
+    reason = "Buffer fd is invalid";
+
+  if (width == 0 || height == 0)
+    reason = "Buffer size is invalid";
+
+  if (planes_count < 1)
+    reason = "Planes count cannot be less than 1";
+
+  if (planes_count != strides.size() || planes_count != offsets.size() ||
+      planes_count != modifiers.size()) {
+    reason = "Number of strides(" + std::to_string(strides.size()) +
+             ")/offsets(" + std::to_string(offsets.size()) + ")/modifiers(" +
+             std::to_string(modifiers.size()) +
+             ") does not correspond to the number of planes(" +
+             std::to_string(planes_count) + ")";
+  }
+
+  for (auto stride : strides) {
+    if (stride == 0)
+      reason = "Strides are invalid";
+  }
+
+  if (!IsValidBufferFormat(format))
+    reason = "Buffer format is invalid";
+
+  if (buffer_id < 1)
+    reason = "Invalid buffer id: " + std::to_string(buffer_id);
+
+  if (!reason.empty()) {
+    TerminateGpuProcess(reason);
+    return false;
+  }
+  return true;
+}
+
+bool WaylandConnection::ValidateDataFromGpu(
+    const gfx::AcceleratedWidget& widget,
+    uint32_t buffer_id) {
+  std::string reason;
+
+  if (widget == gfx::kNullAcceleratedWidget)
+    reason = "Invalid accelerated widget";
+
+  if (buffer_id < 1)
+    reason = "Invalid buffer id: " + std::to_string(buffer_id);
+
+  if (!reason.empty()) {
+    TerminateGpuProcess(reason);
+    return false;
+  }
+
+  return true;
+}
+
+void WaylandConnection::TerminateGpuProcess(std::string reason) {
+  std::move(terminate_gpu_cb_).Run(std::move(reason));
+  binding_.Unbind();
+
+  buffers_.clear();
+  params_to_id_map_.clear();
+  pending_buffer_map_.clear();
+}
 
 const std::vector<std::unique_ptr<WaylandOutput>>&
 WaylandConnection::GetOutputList() const {
@@ -519,6 +593,14 @@ void WaylandConnection::Global(void* data,
     connection->data_device_manager_.reset(
         new WaylandDataDeviceManager(data_device_manager.release()));
     connection->data_device_manager_->set_connection(connection);
+  } else if (!connection->text_input_manager_v1_ &&
+             strcmp(interface, "zwp_text_input_manager_v1") == 0) {
+    connection->text_input_manager_v1_ = wl::Bind<zwp_text_input_manager_v1>(
+        registry, name, std::min(version, kMaxTextInputManagerVersion));
+    if (!connection->text_input_manager_v1_) {
+      LOG(ERROR) << "Failed to bind to zwp_text_input_manager_v1 global";
+      return;
+    }
   } else if (!connection->zwp_linux_dmabuf_ &&
              (strcmp(interface, "zwp_linux_dmabuf_v1") == 0)) {
     connection->zwp_linux_dmabuf_ = wl::Bind<zwp_linux_dmabuf_v1>(
@@ -528,14 +610,6 @@ void WaylandConnection::Global(void* data,
     // A roundtrip after binding guarantees that the client has received all
     // supported formats.
     wl_display_roundtrip(connection->display_.get());
-  } else if (!connection->text_input_manager_v1_ &&
-             strcmp(interface, "zwp_text_input_manager_v1") == 0) {
-    connection->text_input_manager_v1_ = wl::Bind<zwp_text_input_manager_v1>(
-        registry, name, std::min(version, kMaxTextInputManagerVersion));
-    if (!connection->text_input_manager_v1_) {
-      LOG(ERROR) << "Failed to bind to zwp_text_input_manager_v1 global";
-      return;
-    }
   }
 
   connection->ScheduleFlush();

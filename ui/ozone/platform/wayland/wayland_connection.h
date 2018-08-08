@@ -23,6 +23,7 @@
 #include "ui/ozone/platform/wayland/wayland_pointer.h"
 #include "ui/ozone/platform/wayland/wayland_touch.h"
 #include "ui/ozone/public/clipboard_delegate.h"
+#include "ui/ozone/public/gpu_platform_support_host.h"
 #include "ui/ozone/public/interfaces/wayland/wayland_connection.mojom.h"
 
 struct zwp_linux_dmabuf_v1;
@@ -76,10 +77,10 @@ class WaylandConnection : public PlatformEventSource,
   zxdg_shell_v6* shell_v6() { return shell_v6_.get(); }
   wl_seat* seat() { return seat_.get(); }
   wl_data_device* data_device() { return data_device_->data_device(); }
-  zwp_linux_dmabuf_v1* zwp_linux_dmabuf() { return zwp_linux_dmabuf_.get(); }
   zwp_text_input_manager_v1* text_input_manager_v1() {
     return text_input_manager_v1_.get();
   }
+  zwp_linux_dmabuf_v1* zwp_linux_dmabuf() { return zwp_linux_dmabuf_.get(); }
 
   WaylandWindow* GetWindow(gfx::AcceleratedWidget widget);
   WaylandWindow* GetCurrentFocusedWindow();
@@ -128,10 +129,13 @@ class WaylandConnection : public PlatformEventSource,
   // not delivered.
   void ResetPointerFlags();
 
-  // Returns binded pointer to own mojo interface.
+  // Returns bound pointer to own mojo interface.
   ozone::mojom::WaylandConnectionPtr BindInterface();
 
   std::vector<gfx::BufferFormat> GetSupportedBufferFormats();
+
+  void SetTerminateGpuCallback(
+      base::OnceCallback<void(std::string)> terminate_gpu_cb);
 
  private:
   void Flush();
@@ -142,6 +146,22 @@ class WaylandConnection : public PlatformEventSource,
   // base::MessagePumpLibevent::FdWatcher
   void OnFileCanReadWithoutBlocking(int fd) override;
   void OnFileCanWriteWithoutBlocking(int fd) override;
+
+  // Validates data sent by the GPU. If anything, terminates the gpu process.
+  bool ValidateDataFromGpu(const base::File& file,
+                           uint32_t width,
+                           uint32_t height,
+                           const std::vector<uint32_t>& strides,
+                           const std::vector<uint32_t>& offsets,
+                           uint32_t format,
+                           const std::vector<uint64_t>& modifiers,
+                           uint32_t planes_count,
+                           uint32_t buffer_id);
+  bool ValidateDataFromGpu(const gfx::AcceleratedWidget& widget,
+                           uint32_t buffer_id);
+
+  // Terminates the GPU process on invalid data received
+  void TerminateGpuProcess(std::string reason);
 
   // wl_registry_listener
   static void Global(void* data,
@@ -189,7 +209,7 @@ class WaylandConnection : public PlatformEventSource,
   wl::Object<zwp_linux_dmabuf_v1> zwp_linux_dmabuf_;
   wl::Object<zxdg_shell_v6> shell_v6_;
   wl::Object<zwp_text_input_manager_v1> text_input_manager_v1_;
-
+  
   // Stores a wl_buffer and it's id provided by the GbmBuffer object on the
   // GPU process side.
   base::flat_map<uint32_t, wl::Object<wl_buffer>> buffers_;
@@ -203,6 +223,7 @@ class WaylandConnection : public PlatformEventSource,
   // is created, it will be attached to requested WaylandWindow based on the
   // gfx::AcceleratedWidget.
   base::flat_map<uint32_t, gfx::AcceleratedWidget> pending_buffer_map_;
+
 
   std::unique_ptr<WaylandDataDeviceManager> data_device_manager_;
   std::unique_ptr<WaylandDataDevice> data_device_;
@@ -230,6 +251,10 @@ class WaylandConnection : public PlatformEventSource,
   mojo::Binding<ozone::mojom::WaylandConnection> binding_;
 
   std::vector<gfx::BufferFormat> buffer_formats_;
+
+  // A callback, which is used to terminate a GPU process in case of invalid
+  // data sent by the GPU to the browser process.
+  base::OnceCallback<void(std::string)> terminate_gpu_cb_;
 
   DISALLOW_COPY_AND_ASSIGN(WaylandConnection);
 };

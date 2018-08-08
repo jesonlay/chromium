@@ -11,7 +11,7 @@ import "ui/gfx/mojo/accelerated_widget.mojom";
 // Used by the GPU for communication with a WaylandConnection on the browser
 // process.
 interface WaylandConnection {
-  // Asks Wayalnd to create a wl_buffer based on the dmabuf |file| descriptor.
+  // Asks Wayland to create a wl_buffer based on the dmabuf |file| descriptor.
   CreateZwpLinuxDmabuf(mojo_base.mojom.File file,
                             uint32 width,
                             uint32 height,

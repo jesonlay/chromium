@@ -11,24 +11,6 @@
 
 namespace ui {
 
-namespace {
-
-bool ValidateParameters(const base::File& file,
-                        const gfx::Size& size,
-                        const std::vector<uint32_t>& strides,
-                        const std::vector<uint32_t>& offsets,
-                        const std::vector<uint64_t>& modifiers,
-                        uint32_t current_format,
-                        uint32_t planes_count,
-                        uint32_t buffer_id) {
-  return file.IsValid() && !size.IsEmpty() && planes_count > 0 &&
-         planes_count == strides.size() && planes_count == offsets.size() &&
-         planes_count == modifiers.size() && buffer_id > 0 &&
-         IsValidBufferFormat(current_format);
-}
-
-}  // namespace
-
 WaylandConnectionProxy::WaylandConnectionProxy(WaylandConnection* connection)
     : connection_(connection) {
   if (!connection_)
@@ -55,14 +37,6 @@ void WaylandConnectionProxy::CreateZwpLinuxDmabuf(
     uint32_t current_format,
     uint32_t planes_count,
     uint32_t buffer_id) {
-  // For security reasons, validate the data sent by the GPU process.
-  if (!ValidateParameters(file, size, strides, offsets, modifiers,
-                          current_format, planes_count, buffer_id)) {
-    LOG(ERROR) << "Failed to import a dmabuf based wl_buffer";
-    base::Process::Current().Terminate(1, false);
-    return;
-  }
-
   DCHECK(ui_runner_->BelongsToCurrentThread());
   DCHECK(wc_ptr_);
   wc_ptr_->CreateZwpLinuxDmabuf(std::move(file), size.width(), size.height(),
@@ -80,13 +54,6 @@ void WaylandConnectionProxy::DestroyZwpLinuxDmabuf(uint32_t buffer_id) {
 }
 
 void WaylandConnectionProxy::DestroyZwpLinuxDmabufInternal(uint32_t buffer_id) {
-  // For security reasons, validate the data sent by the GPU process.
-  if (buffer_id < 1) {
-    LOG(ERROR) << "Failed to destroy a dmabuf based wl_buffer";
-    base::Process::Current().Terminate(1, false);
-    return;
-  }
-
   DCHECK(ui_runner_->BelongsToCurrentThread());
   DCHECK(wc_ptr_);
   wc_ptr_->DestroyZwpLinuxDmabuf(buffer_id);
@@ -105,13 +72,6 @@ void WaylandConnectionProxy::ScheduleBufferSwap(gfx::AcceleratedWidget widget,
 void WaylandConnectionProxy::ScheduleBufferSwapInternal(
     gfx::AcceleratedWidget widget,
     uint32_t buffer_id) {
-  // For security reasons, validate the data sent by the GPU process.
-  if (buffer_id < 1 && widget == gfx::kNullAcceleratedWidget) {
-    LOG(ERROR) << "Failed to swap a dmabuf based wl_buffer";
-    base::Process::Current().Terminate(1, false);
-    return;
-  }
-
   DCHECK(ui_runner_->BelongsToCurrentThread());
   DCHECK(wc_ptr_);
   wc_ptr_->ScheduleBufferSwap(widget, buffer_id);

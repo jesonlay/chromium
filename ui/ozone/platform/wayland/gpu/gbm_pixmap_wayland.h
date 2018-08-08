@@ -23,7 +23,6 @@ class GbmPixmapWayland : public gfx::NativePixmap {
  public:
   GbmPixmapWayland(WaylandSurfaceFactory* surface_manager,
                    WaylandConnectionProxy* connection);
-  ~GbmPixmapWayland() override;
 
   // Creates a buffer object and initializes the pixmap buffer.
   bool InitializeBuffer(gfx::Size size,
@@ -50,7 +49,7 @@ class GbmPixmapWayland : public gfx::NativePixmap {
   gfx::NativePixmapHandle ExportHandle() override;
 
  private:
-  bool CreateBo(uint32_t format, const gfx::Size& size, uint32_t flags);
+  ~GbmPixmapWayland() override;
 
   // Asks Wayland to create a dmabuf based wl_buffer.
   void CreateZwpLinuxDmabuf();

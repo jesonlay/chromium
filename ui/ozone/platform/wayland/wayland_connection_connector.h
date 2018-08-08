@@ -33,17 +33,23 @@ class WaylandConnectionConnector : public GpuPlatformSupportHost {
   void OnGpuServiceLaunched(
       scoped_refptr<base::SingleThreadTaskRunner> ui_runner,
       scoped_refptr<base::SingleThreadTaskRunner> io_runner,
-      GpuHostBindInterfaceCallback binder) override;
+      GpuHostBindInterfaceCallback binder,
+      GpuHostTerminateCallback terminate_callback) override;
 
  private:
   void OnWaylandConnectionPtrBinded(
       ozone::mojom::WaylandConnectionPtr wc_ptr) const;
+
+  void OnTerminateGpuProcess(std::string message);
 
   // Non-owning pointer, which is used to bind a mojo pointer to the
   // WaylandConnection.
   WaylandConnection* connection_ = nullptr;
 
   GpuHostBindInterfaceCallback binder_;
+  GpuHostTerminateCallback terminate_callback_;
+
+  scoped_refptr<base::SingleThreadTaskRunner> io_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(WaylandConnectionConnector);
 };

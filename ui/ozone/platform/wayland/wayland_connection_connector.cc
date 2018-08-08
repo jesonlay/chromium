@@ -57,8 +57,16 @@ void WaylandConnectionConnector::OnMessageReceived(
 void WaylandConnectionConnector::OnGpuServiceLaunched(
     scoped_refptr<base::SingleThreadTaskRunner> ui_runner,
     scoped_refptr<base::SingleThreadTaskRunner> io_runner,
-    GpuHostBindInterfaceCallback binder) {
+    GpuHostBindInterfaceCallback binder,
+    GpuHostTerminateCallback terminate_callback) {
+  terminate_callback_ = std::move(terminate_callback);
   binder_ = std::move(binder);
+
+  io_runner_ = io_runner;
+  auto on_terminate_gpu_cb =
+      base::BindOnce(&WaylandConnectionConnector::OnTerminateGpuProcess,
+                     base::Unretained(this));
+  connection_->SetTerminateGpuCallback(std::move(on_terminate_gpu_cb));
 
   base::PostTaskAndReplyWithResult(
       ui_runner.get(), FROM_HERE,
@@ -74,6 +82,11 @@ void WaylandConnectionConnector::OnWaylandConnectionPtrBinded(
   auto request = mojo::MakeRequest(&wcp_ptr);
   BindInterfaceInGpuProcess(std::move(request), binder_);
   wcp_ptr->SetWaylandConnection(std::move(wc_ptr));
+}
+
+void WaylandConnectionConnector::OnTerminateGpuProcess(std::string message) {
+  io_runner_->PostTask(FROM_HERE, base::BindOnce(std::move(terminate_callback_),
+                                                 std::move(message)));
 }
 
 }  // namespace ui

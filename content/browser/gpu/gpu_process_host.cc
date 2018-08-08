@@ -655,6 +655,10 @@ void GpuProcessHost::BindInterface(
                                               std::move(interface_pipe));
 }
 
+void GpuProcessHost::TerminateGpuProcess(const std::string& message) {
+  process_->TerminateOnBadMessageReceived(message);
+}
+
 // static
 GpuProcessHost* GpuProcessHost::FromID(int host_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -834,19 +838,22 @@ void GpuProcessHost::InitOzone() {
     // necessary. https://crbug.com/806092
     auto interface_binder = base::BindRepeating(&GpuProcessHost::BindInterface,
                                                 weak_ptr_factory_.GetWeakPtr());
+    auto terminate_cb = base::BindOnce(&GpuProcessHost::TerminateGpuProcess,
+                                       weak_ptr_factory_.GetWeakPtr());
 
     auto io_callback = base::BindOnce(
         [](const base::RepeatingCallback<void(const std::string&,
                                               mojo::ScopedMessagePipeHandle)>&
                interface_binder,
+           base::OnceCallback<void(const std::string&)> terminate_cb,
            ui::OzonePlatform* platform) {
           DCHECK_CURRENTLY_ON(BrowserThread::IO);
           platform->GetGpuPlatformSupportHost()->OnGpuServiceLaunched(
               BrowserThread::GetTaskRunnerForThread(BrowserThread::UI),
               BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
-              interface_binder);
+              interface_binder, std::move(terminate_cb));
         },
-        interface_binder);
+        interface_binder, std::move(terminate_cb));
 
     OzoneRegisterStartupCallbackHelper(std::move(io_callback));
   } else {
