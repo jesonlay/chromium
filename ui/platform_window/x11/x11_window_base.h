@@ -52,6 +52,10 @@ class X11_WINDOW_EXPORT X11WindowBase : public PlatformWindow {
   gfx::Rect GetRestoredBoundsInPixels() const override;
   void StartWindowMoveOrResize(int hittest,
                                gfx::Point pointer_location) override;
+  // Initiates Drag Action.
+  void StartDrag(const ui::OSExchangeData& data,
+                 const int operation,
+                 gfx::NativeCursor cursor) override;
   bool RunMoveLoop(const gfx::Vector2d& drag_offset) override;
   void StopMoveLoop() override;
 
