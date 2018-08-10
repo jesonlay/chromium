@@ -32925,6 +32925,14 @@ uploading your change for review.
   </summary>
 </histogram>
 
+<histogram name="GPU.ContextLost.OzoneWaylandProxy" enum="ContextLostReason">
+  <owner>rjkroege@chromium.org</owner>
+  <owner>msisov@igalia.com</owner>
+  <summary>
+    The reason a GPU context is lost and the process is terminated.
+  </summary>
+</histogram>
+
 <histogram name="GPU.ContextMemory" units="MB">
   <owner>ericrk@chromium.org</owner>
   <summary>The amount of memory used by a GL Context.</summary>
