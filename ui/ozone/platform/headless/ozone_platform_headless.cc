@@ -91,6 +91,9 @@ class OzonePlatformHeadless : public OzonePlatform {
     input_controller_ = CreateStubInputController();
     cursor_factory_ozone_ = std::make_unique<BitmapCursorFactoryOzone>();
     gpu_platform_support_host_.reset(CreateStubGpuPlatformSupportHost());
+
+    if (LinuxInputMethodContextFactory::instance())
+      return;
     fake_input_method_factory_ =
         std::make_unique<FakeInputMethodContextFactory>();
     LinuxInputMethodContextFactory::SetInstance(
