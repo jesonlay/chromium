@@ -115,6 +115,8 @@ class OzonePlatformWayland : public OzonePlatform {
     input_controller_ = CreateStubInputController();
     gpu_platform_support_host_.reset(CreateStubGpuPlatformSupportHost());
 
+    if (LinuxInputMethodContextFactory::instance())
+      return;
     wayland_input_method_context_factory_.reset(
         new WaylandInputMethodContextFactory(connection_.get()));
   }
