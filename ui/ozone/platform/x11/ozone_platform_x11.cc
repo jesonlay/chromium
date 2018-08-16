@@ -85,11 +85,13 @@ class OzonePlatformX11 : public OzonePlatform {
     input_controller_ = CreateStubInputController();
     cursor_factory_ozone_ = std::make_unique<X11CursorFactoryOzone>();
     gpu_platform_support_host_.reset(CreateStubGpuPlatformSupportHost());
+    TouchFactory::SetTouchDeviceListFromCommandLine();
+
+    if (LinuxInputMethodContextFactory::instance())
+      return;
     fake_input_method_factory_ =
         std::make_unique<FakeInputMethodContextFactory>();
     LinuxInputMethodContextFactory::SetInstance(fake_input_method_factory_.get());
-
-    TouchFactory::SetTouchDeviceListFromCommandLine();
   }
 
   void InitializeGPU(const InitParams& params) override {
