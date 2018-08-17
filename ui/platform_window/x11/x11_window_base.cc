@@ -428,6 +428,15 @@ void X11WindowBase::StartWindowMoveOrResize(int hittest,
              SubstructureRedirectMask | SubstructureNotifyMask, &event);
 }
 
+void X11WindowBase::StartDrag(const ui::OSExchangeData& data,
+                              const int operation,
+                              gfx::NativeCursor cursor) {
+  // If this is for ozone/X11, the child class of this, X11WindowOzone, will
+  // handle it. Otherwise, DragDrop has been implemented directly, for instance
+  // DesktopDragDropClientAuraX11 or DragDropControllerMus.
+  NOTREACHED();
+}
+
 bool X11WindowBase::RunMoveLoop(const gfx::Vector2d& drag_offset) {
   return false;
 }

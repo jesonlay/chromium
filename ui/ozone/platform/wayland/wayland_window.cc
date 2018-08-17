@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "ui/base/cursor/ozone/bitmap_cursor_factory_ozone.h"
+#include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/hit_test.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
@@ -402,6 +403,12 @@ void WaylandWindow::StartWindowMoveOrResize(int hittest,
     xdg_surface_->SurfaceResize(connection_, hittest);
 }
 
+void WaylandWindow::StartDrag(const ui::OSExchangeData& data,
+                              const int operation,
+                              gfx::NativeCursor cursor) {
+  connection_->StartDrag(data, operation);
+}
+
 bool WaylandWindow::RunMoveLoop(const gfx::Vector2d& drag_offset) {
   return true;
 }
@@ -530,6 +537,31 @@ void WaylandWindow::OnCloseRequest() {
   // only then call OnCloseRequest().
   DCHECK(!xdg_popup_);
   delegate_->OnCloseRequest();
+}
+
+void WaylandWindow::OnDragEnter(const gfx::PointF& point,
+                                std::unique_ptr<OSExchangeData> data,
+                                int operation) {
+  delegate_->OnDragEnter(this, point, std::move(data), operation);
+}
+
+int WaylandWindow::OnDragMotion(const gfx::PointF& point,
+                                uint32_t time,
+                                int operation) {
+  gfx::AcceleratedWidget widget = gfx::kNullAcceleratedWidget;
+  return delegate_->OnDragMotion(point, time, operation, &widget);
+}
+
+void WaylandWindow::OnDragDrop(std::unique_ptr<OSExchangeData> data) {
+  delegate_->OnDragDrop(std::move(data));
+}
+
+void WaylandWindow::OnDragLeave() {
+  delegate_->OnDragLeave();
+}
+
+void WaylandWindow::OnDragSessionClose(uint32_t dnd_action) {
+  delegate_->OnDragSessionClose(dnd_action);
 }
 
 bool WaylandWindow::IsMinimized() const {
