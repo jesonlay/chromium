@@ -12,7 +12,7 @@
 #include "build/build_config.h"
 #include "ui/gfx/native_pixmap_handle.h"
 
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || defined(USE_OZONE)
 // This can be enabled on all linux but it is not a requirement to support
 // glCreateImageChromium+Dmabuf since it uses gfx::BufferUsage::SCANOUT and
 // the pixmap does not need to be mappable on the client side.
@@ -85,7 +85,7 @@ class ClientNativePixmapFactoryDmabuf : public ClientNativePixmapFactory {
         return false;
       case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE:
       case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE_PERSISTENT: {
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || defined(USE_OZONE)
         return
 #if defined(ARCH_CPU_X86_FAMILY)
             // Currently only Intel driver (i.e. minigbm and Mesa) supports R_8
@@ -100,7 +100,7 @@ class ClientNativePixmapFactoryDmabuf : public ClientNativePixmapFactory {
 #endif
       }
       case gfx::BufferUsage::SCANOUT_CAMERA_READ_WRITE: {
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || defined(USE_OZONE)
         // Each platform only supports one camera buffer type. We list the
         // supported buffer formats on all platforms here. When allocating a
         // camera buffer the caller is responsible for making sure a buffer is
@@ -112,7 +112,7 @@ class ClientNativePixmapFactoryDmabuf : public ClientNativePixmapFactory {
 #endif
       }
       case gfx::BufferUsage::CAMERA_AND_CPU_READ_WRITE: {
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || defined(USE_OZONE)
         // R_8 is used as the underlying pixel format for BLOB buffers.
         return format == gfx::BufferFormat::R_8;
 #else
@@ -134,7 +134,7 @@ class ClientNativePixmapFactoryDmabuf : public ClientNativePixmapFactory {
       case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE_PERSISTENT:
       case gfx::BufferUsage::SCANOUT_CAMERA_READ_WRITE:
       case gfx::BufferUsage::CAMERA_AND_CPU_READ_WRITE:
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || defined(USE_OZONE)
         return ClientNativePixmapDmaBuf::ImportFromDmabuf(handle, size);
 #else
         NOTREACHED();
