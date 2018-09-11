@@ -404,6 +404,12 @@ void WaylandWindow::StartWindowMoveOrResize(int hittest,
     xdg_surface_->SurfaceResize(connection_, hittest);
 }
 
+void WaylandWindow::StartDrag(const ui::OSExchangeData& data,
+                              const int operation,
+                              gfx::NativeCursor cursor) {
+  connection_->StartDrag(data, operation);
+}
+
 bool WaylandWindow::RunMoveLoop(const gfx::Vector2d& drag_offset) {
   return true;
 }
