@@ -105,6 +105,8 @@ void DemoWindow::OnAcceleratedWidgetDestroyed() {
 
 void DemoWindow::OnActivationChanged(bool active) {}
 
+void DemoWindow::OnDragSessionClosed(int operation) {}
+
 void DemoWindow::StartOnGpu() {
   renderer_ =
       renderer_factory_->CreateRenderer(GetAcceleratedWidget(), GetSize());

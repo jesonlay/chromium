@@ -62,6 +62,7 @@ class TestPlatformDelegate : public ui::PlatformWindowDelegate {
   void OnAcceleratedWidgetAvailable(gfx::AcceleratedWidget widget) override {}
   void OnAcceleratedWidgetDestroyed() override {}
   void OnActivationChanged(bool active) override {}
+  void OnDragSessionClosed(int operation) override {}
 };
 
 TEST(GLSurfaceEGLTest, FixedSizeExtension) {
