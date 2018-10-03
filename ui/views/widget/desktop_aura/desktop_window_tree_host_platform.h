@@ -90,11 +90,8 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform
   bool ShouldUpdateWindowTransparency() const override;
   bool ShouldUseDesktopNativeCursorManager() const override;
   bool ShouldCreateVisibilityController() const override;
-  void StartWindowMoveOrResize(int hittest,
-                               gfx::Point pointer_location) override;
 
   // WindowTreeHostPlatform:
-  void DispatchEvent(ui::Event* event) override;
   void OnClosed() override;
   void OnWindowStateChanged(ui::PlatformWindowState new_state) override;
   void OnCloseRequest() override;
@@ -118,8 +115,6 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform
  private:
   void Relayout();
 
-  void RemoveNonClientEventFilter();
-
   Widget* GetWidget();
 
   gfx::Rect ToDIPRect(const gfx::Rect& rect_in_pixels) const;
@@ -135,8 +130,6 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform
 
   bool is_active_ = false;
 
-  // A handler for events inteded for non client area.
-  std::unique_ptr<ui::EventHandler> non_client_window_event_filter_;
   DesktopDragDropClientOzone* drag_drop_client_;
 
   base::WeakPtrFactory<DesktopWindowTreeHostPlatform> weak_factory_{this};

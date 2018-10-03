@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "ui/base/cursor/ozone/bitmap_cursor_factory_ozone.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
-#include "ui/base/hit_test.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/ozone/events_ozone.h"
@@ -397,18 +396,6 @@ bool WaylandWindow::RunMoveLoop(const gfx::Vector2d& drag_offset) {
 }
 
 void WaylandWindow::StopMoveLoop() {}
-
-void WaylandWindow::StartWindowMoveOrResize(int hittest,
-                                            gfx::Point pointer_location) {
-  DCHECK(xdg_surface_);
-
-  connection_->ResetPointerFlags();
-
-  if (hittest == HTCAPTION)
-    xdg_surface_->SurfaceMove(connection_);
-  else
-    xdg_surface_->SurfaceResize(connection_, hittest);
-}
 
 void WaylandWindow::StartDrag(const ui::OSExchangeData& data,
                               const int operation,
