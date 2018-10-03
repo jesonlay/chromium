@@ -72,8 +72,8 @@ class WaylandConnection : public PlatformEventSource,
   wl_compositor* compositor() { return compositor_.get(); }
   wl_subcompositor* subcompositor() { return subcompositor_.get(); }
   wl_shm* shm() { return shm_.get(); }
-  xdg_shell* shell() { return shell_.get(); }
-  zxdg_shell_v6* shell_v6() { return shell_v6_.get(); }
+  xdg_shell* shell() const { return shell_.get(); }
+  zxdg_shell_v6* shell_v6() const { return shell_v6_.get(); }
   wl_seat* seat() { return seat_.get(); }
   wl_data_device* data_device() { return data_device_->data_device(); }
   wp_presentation* presentation() const { return presentation_.get(); }

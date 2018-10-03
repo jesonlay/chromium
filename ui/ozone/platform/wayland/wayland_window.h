@@ -12,6 +12,7 @@
 #include "ui/ozone/platform/wayland/wayland_object.h"
 #include "ui/platform_window/platform_window.h"
 #include "ui/platform_window/platform_window_delegate.h"
+#include "ui/platform_window/platform_window_handler/wm_move_resize_handler.h"
 
 namespace gfx {
 class PointF;
@@ -32,7 +33,9 @@ namespace {
 class XDGShellObjectFactory;
 }  // namespace
 
-class WaylandWindow : public PlatformWindow, public PlatformEventDispatcher {
+class WaylandWindow : public PlatformWindow,
+                      public PlatformEventDispatcher,
+                      public WmMoveResizeHandler {
  public:
   WaylandWindow(PlatformWindowDelegate* delegate,
                 WaylandConnection* connection);
@@ -73,6 +76,11 @@ class WaylandWindow : public PlatformWindow, public PlatformEventDispatcher {
 
   bool is_active() const { return is_active_; }
 
+  // WmMoveResizeHandler
+  void DispatchHostWindowDragMovement(
+      int hittest,
+      const gfx::Point& pointer_location) override;
+
   // PlatformWindow
   void Show() override;
   void Hide() override;
@@ -97,8 +105,6 @@ class WaylandWindow : public PlatformWindow, public PlatformEventDispatcher {
   gfx::Rect GetRestoredBoundsInPixels() const override;
   bool RunMoveLoop(const gfx::Vector2d& drag_offset) override;
   void StopMoveLoop() override;
-  void StartWindowMoveOrResize(int hittest,
-                               gfx::Point pointer_location) override;
   void StartDrag(const ui::OSExchangeData& data,
                  const int operation,
                  gfx::NativeCursor cursor) override;
@@ -137,6 +143,8 @@ class WaylandWindow : public PlatformWindow, public PlatformEventDispatcher {
 
   // Gets a parent window for this window.
   WaylandWindow* GetParentWindow(gfx::AcceleratedWidget parent_widget);
+
+  WmMoveResizeHandler* AsWmMoveResizeHandler();
 
   PlatformWindowDelegate* delegate_;
   WaylandConnection* connection_;

@@ -74,7 +74,11 @@ WaylandWindow::WaylandWindow(PlatformWindowDelegate* delegate,
     : delegate_(delegate),
       connection_(connection),
       xdg_shell_objects_factory_(new XDGShellObjectFactory()),
-      state_(PlatformWindowState::PLATFORM_WINDOW_STATE_NORMAL) {}
+      state_(PlatformWindowState::PLATFORM_WINDOW_STATE_NORMAL) {
+  // Set a class property key, which allows |this| to be used for interactive
+  // events, e.g. move or resize.
+  SetWmMoveResizeHandler(this, AsWmMoveResizeHandler());
+}
 
 WaylandWindow::~WaylandWindow() {
   PlatformEventSource::GetInstance()->RemovePlatformEventDispatcher(this);
@@ -194,6 +198,20 @@ void WaylandWindow::ApplyPendingBounds() {
   xdg_surface_->SetWindowGeometry(bounds_);
   xdg_surface_->AckConfigure();
   pending_bounds_ = gfx::Rect();
+  connection_->ScheduleFlush();
+}
+
+void WaylandWindow::DispatchHostWindowDragMovement(
+    int hittest,
+    const gfx::Point& pointer_location) {
+  DCHECK(xdg_surface_);
+
+  connection_->ResetPointerFlags();
+  if (hittest == HTCAPTION)
+    xdg_surface_->SurfaceMove(connection_);
+  else
+    xdg_surface_->SurfaceResize(connection_, hittest);
+
   connection_->ScheduleFlush();
 }
 
@@ -398,18 +416,6 @@ bool WaylandWindow::RunMoveLoop(const gfx::Vector2d& drag_offset) {
 
 void WaylandWindow::StopMoveLoop() {}
 
-void WaylandWindow::StartWindowMoveOrResize(int hittest,
-                                            gfx::Point pointer_location) {
-  DCHECK(xdg_surface_);
-
-  connection_->ResetPointerFlags();
-
-  if (hittest == HTCAPTION)
-    xdg_surface_->SurfaceMove(connection_);
-  else
-    xdg_surface_->SurfaceResize(connection_, hittest);
-}
-
 void WaylandWindow::StartDrag(const ui::OSExchangeData& data,
                               const int operation,
                               gfx::NativeCursor cursor) {
@@ -595,6 +601,10 @@ WaylandWindow* WaylandWindow::GetParentWindow(
   if (!parent_window)
     return connection_->GetCurrentFocusedWindow();
   return parent_window;
+}
+
+WmMoveResizeHandler* WaylandWindow::AsWmMoveResizeHandler() {
+  return static_cast<WmMoveResizeHandler*>(this);
 }
 
 }  // namespace ui

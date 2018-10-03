@@ -9,56 +9,10 @@
 #include "base/strings/utf_string_conversions.h"
 #include "ui/base/hit_test.h"
 #include "ui/ozone/platform/wayland/wayland_connection.h"
+#include "ui/ozone/platform/wayland/wayland_util.h"
 #include "ui/ozone/platform/wayland/wayland_window.h"
 
 namespace ui {
-
-namespace {
-
-// Identifies the direction of the "hittest" for Wayland.
-bool IdentifyDirection(int hittest, int* direction) {
-  DCHECK(direction);
-  *direction = -1;
-  switch (hittest) {
-    case HTBOTTOM:
-      *direction =
-          zxdg_toplevel_v6_resize_edge::ZXDG_TOPLEVEL_V6_RESIZE_EDGE_BOTTOM;
-      break;
-    case HTBOTTOMLEFT:
-      *direction = zxdg_toplevel_v6_resize_edge::
-          ZXDG_TOPLEVEL_V6_RESIZE_EDGE_BOTTOM_LEFT;
-      break;
-    case HTBOTTOMRIGHT:
-      *direction = zxdg_toplevel_v6_resize_edge::
-          ZXDG_TOPLEVEL_V6_RESIZE_EDGE_BOTTOM_RIGHT;
-      break;
-    case HTLEFT:
-      *direction =
-          zxdg_toplevel_v6_resize_edge::ZXDG_TOPLEVEL_V6_RESIZE_EDGE_LEFT;
-      break;
-    case HTRIGHT:
-      *direction =
-          zxdg_toplevel_v6_resize_edge::ZXDG_TOPLEVEL_V6_RESIZE_EDGE_RIGHT;
-      break;
-    case HTTOP:
-      *direction =
-          zxdg_toplevel_v6_resize_edge::ZXDG_TOPLEVEL_V6_RESIZE_EDGE_TOP;
-      break;
-    case HTTOPLEFT:
-      *direction =
-          zxdg_toplevel_v6_resize_edge::ZXDG_TOPLEVEL_V6_RESIZE_EDGE_TOP_LEFT;
-      break;
-    case HTTOPRIGHT:
-      *direction =
-          zxdg_toplevel_v6_resize_edge::ZXDG_TOPLEVEL_V6_RESIZE_EDGE_TOP_RIGHT;
-      break;
-    default:
-      return false;
-  }
-  return true;
-}
-
-}  // namespace
 
 XDGSurfaceWrapperV6::XDGSurfaceWrapperV6(WaylandWindow* wayland_window)
     : wayland_window_(wayland_window) {}
@@ -137,12 +91,10 @@ void XDGSurfaceWrapperV6::SurfaceMove(WaylandConnection* connection) {
 
 void XDGSurfaceWrapperV6::SurfaceResize(WaylandConnection* connection,
                                         uint32_t hittest) {
-  int direction;
-  if (!IdentifyDirection(hittest, &direction))
-    return;
   DCHECK(zxdg_toplevel_v6_);
   zxdg_toplevel_v6_resize(zxdg_toplevel_v6_.get(), connection->seat(),
-                          connection->serial(), direction);
+                          connection->serial(),
+                          wl::IdentifyDirection(*connection, hittest));
 }
 
 void XDGSurfaceWrapperV6::SetTitle(const base::string16& title) {

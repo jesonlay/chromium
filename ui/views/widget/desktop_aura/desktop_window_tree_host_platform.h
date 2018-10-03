@@ -13,6 +13,7 @@
 namespace views {
 class DesktopDragDropClientOzone;
 class PlatformWindow;
+class WindowEventFilter;
 
 class VIEWS_EXPORT DesktopWindowTreeHostPlatform
     : public aura::WindowTreeHostPlatform,
@@ -90,8 +91,6 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform
   bool ShouldUpdateWindowTransparency() const override;
   bool ShouldUseDesktopNativeCursorManager() const override;
   bool ShouldCreateVisibilityController() const override;
-  void StartWindowMoveOrResize(int hittest,
-                               gfx::Point pointer_location) override;
 
   // WindowTreeHostPlatform:
   void DispatchEvent(ui::Event* event) override;
@@ -116,6 +115,8 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform
                     gfx::AcceleratedWidget* widget) override;
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(DesktopWindowTreeHostPlatformTest, HitTest);
+
   void Relayout();
 
   void RemoveNonClientEventFilter();
@@ -135,9 +136,10 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform
 
   bool is_active_ = false;
 
-  // A handler for events inteded for non client area.
-  std::unique_ptr<ui::EventHandler> non_client_window_event_filter_;
   DesktopDragDropClientOzone* drag_drop_client_;
+
+  // A handler for events intended for non client area.
+  std::unique_ptr<WindowEventFilter> non_client_window_event_filter_;
 
   base::WeakPtrFactory<DesktopWindowTreeHostPlatform> weak_factory_{this};
 
