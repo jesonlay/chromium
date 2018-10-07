@@ -20,6 +20,7 @@
 #include "ui/ozone/platform/wayland/xdg_popup_wrapper_v6.h"
 #include "ui/ozone/platform/wayland/xdg_surface_wrapper_v5.h"
 #include "ui/ozone/platform/wayland/xdg_surface_wrapper_v6.h"
+#include "ui/platform_window/platform_window_handler/wm_drop_handler.h"
 #include "ui/platform_window/platform_window_init_properties.h"
 
 namespace ui {
@@ -78,6 +79,9 @@ WaylandWindow::WaylandWindow(PlatformWindowDelegate* delegate,
   // Set a class property key, which allows |this| to be used for interactive
   // events, e.g. move or resize.
   SetWmMoveResizeHandler(this, AsWmMoveResizeHandler());
+
+  // Set a class property key, which allows |this| to be used for drag action.
+  SetWmDragHandler(this, AsWmDragHandler());
 }
 
 WaylandWindow::~WaylandWindow() {
@@ -213,6 +217,12 @@ void WaylandWindow::DispatchHostWindowDragMovement(
     xdg_surface_->SurfaceResize(connection_, hittest);
 
   connection_->ScheduleFlush();
+}
+
+void WaylandWindow::StartDrag(const ui::OSExchangeData& data,
+                              const int operation,
+                              gfx::NativeCursor cursor) {
+  connection_->StartDrag(data, operation);
 }
 
 void WaylandWindow::Show() {
@@ -556,7 +566,13 @@ void WaylandWindow::OnDragLeave() {
 }
 
 void WaylandWindow::OnDragSessionClose(uint32_t dnd_action) {
-  NOTIMPLEMENTED_LOG_ONCE();
+  WmDropHandler* drop_handler = GetWmDropHandler(*delegate_);
+  if (!drop_handler) {
+    LOG(ERROR) << "Failed to get drag handler.";
+    return;
+  }
+
+  drop_handler->OnDragSessionClosed(dnd_action);
 }
 
 bool WaylandWindow::IsMinimized() const {
@@ -593,6 +609,10 @@ WaylandWindow* WaylandWindow::GetParentWindow(
 
 WmMoveResizeHandler* WaylandWindow::AsWmMoveResizeHandler() {
   return static_cast<WmMoveResizeHandler*>(this);
+}
+
+WmDragHandler* WaylandWindow::AsWmDragHandler() {
+  return static_cast<WmDragHandler*>(this);
 }
 
 }  // namespace ui
