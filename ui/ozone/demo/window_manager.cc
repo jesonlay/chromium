@@ -10,7 +10,6 @@
 #include "ui/display/types/native_display_delegate.h"
 #include "ui/ozone/demo/demo_window.h"
 #include "ui/ozone/public/ozone_platform.h"
-#include "ui/platform_window/platform_window.h"
 
 namespace ui {
 namespace {
@@ -110,36 +109,6 @@ void WindowManager::OnDisplayConfigured(const gfx::Rect& bounds, bool success) {
   } else {
     LOG(ERROR) << "Failed to configure display at " << bounds.ToString();
   }
-}
-
-void WindowManager::OnDragEnter(
-    ui::PlatformWindow* window,
-    const gfx::PointF& point,
-    std::unique_ptr<ui::OSExchangeData> data,
-    int operation) {
-  NOTIMPLEMENTED();
-}
-
-int WindowManager::OnDragMotion(const gfx::PointF& point,
-                                uint32_t time,
-                                int operation,
-                                gfx::AcceleratedWidget* widget) {
-  NOTIMPLEMENTED();
-  return 0;
-}
-
-void WindowManager::OnDragDrop(
-    std::unique_ptr<ui::OSExchangeData> data) {
-  NOTIMPLEMENTED();
-}
-
-void WindowManager::OnDragLeave() {
-  NOTIMPLEMENTED();
-}
-
-void WindowManager::OnMouseMoved(const gfx::Point& point,
-                                 gfx::AcceleratedWidget* widget) {
-  NOTIMPLEMENTED();
 }
 
 }  // namespace ui

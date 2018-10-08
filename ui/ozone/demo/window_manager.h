@@ -19,15 +19,9 @@ class NativeDisplayDelegate;
 
 }  // namespace display
 
-namespace gfx {
-class PointF;
-}
-
 namespace ui {
 
 class DemoWindow;
-class PlatformWindow;
-class OSExchangeData;
 
 class WindowManager : public display::NativeDisplayObserver {
  public:
@@ -48,19 +42,6 @@ class WindowManager : public display::NativeDisplayObserver {
   // display::NativeDisplayDelegate:
   void OnConfigurationChanged() override;
   void OnDisplaySnapshotsInvalidated() override;
-
-  void OnDragEnter(ui::PlatformWindow* window,
-                   const gfx::PointF& point,
-                   std::unique_ptr<ui::OSExchangeData> data,
-                   int operation) override;
-  int OnDragMotion(const gfx::PointF& point,
-                   uint32_t time,
-                   int operation,
-                   gfx::AcceleratedWidget* widget) override;
-  void OnDragDrop(std::unique_ptr<ui::OSExchangeData> data) override;
-  void OnDragLeave() override;
-  void OnMouseMoved(const gfx::Point& point,
-                    gfx::AcceleratedWidget* widget) override;
 
   std::unique_ptr<display::NativeDisplayDelegate> delegate_;
   base::OnceClosure quit_closure_;
