@@ -70,10 +70,7 @@ source_set("x11") {
     deps += [ "//gpu/vulkan/x" ]
   }
 
-  configs += [
-    "//build/config/linux:x11",
-    "//build/config/linux:xrandr",
-  ]
+  configs += [ "//build/config/linux:x11" ]
 
   public_configs = [ "//third_party/khronos:khronos_headers" ]
 }
