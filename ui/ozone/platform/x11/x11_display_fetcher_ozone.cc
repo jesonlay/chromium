@@ -1,14 +1,15 @@
-// Copyright (c) 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ui/ozone/platform/x11/x11_display_manager_ozone.h"
+#include "ui/ozone/platform/x11/x11_display_fetcher_ozone.h"
+
+#include <dlfcn.h>
 
 #include "base/logging.h"
 #include "base/memory/protected_memory_cfi.h"
 #include "ui/base/x/x11_util.h"
 #include "ui/display/display.h"
-#include "ui/display/types/display_snapshot.h"
 #include "ui/display/util/display_util.h"
 #include "ui/display/util/x11/edid_parser_x11.h"
 #include "ui/events/platform/platform_event_source.h"
@@ -16,58 +17,51 @@
 #include "ui/gfx/x/x11_atom_cache.h"
 #include "ui/gfx/x/x11_types.h"
 
-#include <dlfcn.h>
-
 namespace ui {
 
 namespace {
 
-constexpr int default_refresh = 60;
-
-std::unique_ptr<display::DisplaySnapshot> CreateSnapshot(
-    int64_t display_id,
-    gfx::Rect bounds,
-    gfx::ColorSpace color_space) {
-  display::DisplaySnapshot::DisplayModeList modes;
-  std::unique_ptr<display::DisplayMode> display_mode =
-      std::make_unique<display::DisplayMode>(
-          gfx::Size(bounds.width(), bounds.height()), false, default_refresh);
-  modes.push_back(std::move(display_mode));
-  const display::DisplayMode* mode = modes.back().get();
-
-  return std::make_unique<display::DisplaySnapshot>(
-      display_id, gfx::Point(bounds.x(), bounds.y()),
-      gfx::Size(bounds.width(), bounds.height()),
-      display::DisplayConnectionType::DISPLAY_CONNECTION_TYPE_NONE, false,
-      false, false, false, color_space, "", base::FilePath(), std::move(modes),
-      std::vector<uint8_t>(), mode, mode, 0, 0, gfx::Size());
+float GetDeviceScaleFactor() {
+  float device_scale_factor = 1.0f;
+  // TODO(jkim) : Get device scale factor using scale factor and resolution like
+  // 'GtkUi::GetRawDeviceScaleFactor'.
+  if (display::Display::HasForceDeviceScaleFactor())
+    device_scale_factor = display::Display::GetForcedDeviceScaleFactor();
+  return device_scale_factor;
 }
 
-std::vector<std::unique_ptr<display::DisplaySnapshot>>
-BuildFallbackDisplayList() {
-  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+display::Display GetFallbackDisplay() {
   ::XDisplay* display = gfx::GetXDisplay();
   ::Screen* screen = DefaultScreenOfDisplay(display);
   int width = WidthOfScreen(screen);
   int height = HeightOfScreen(screen);
-  int64_t display_id = 0;
-  gfx::Rect bounds(0, 0, width, height);
-  std::unique_ptr<display::DisplaySnapshot> snapshot =
-      CreateSnapshot(display_id, bounds, gfx::ColorSpace());
-  snapshots.push_back(std::move(snapshot));
-  return snapshots;
+  gfx::Size physical_size(WidthMMOfScreen(screen), HeightMMOfScreen(screen));
+
+  gfx::Rect bounds_in_pixels(0, 0, width, height);
+  display::Display fallback_display(0, bounds_in_pixels);
+  if (!display::Display::HasForceDeviceScaleFactor() &&
+      !display::IsDisplaySizeBlackListed(physical_size)) {
+    const float device_scale_factor = GetDeviceScaleFactor();
+    DCHECK_LE(1.0f, device_scale_factor);
+    fallback_display.SetScaleAndBounds(device_scale_factor, bounds_in_pixels);
+  }
+
+  return fallback_display;
 }
 
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
-// X11DisplayManagerOzone, public:
+// X11DisplayFetcherOzone, public:
 
-X11DisplayManagerOzone::X11DisplayManagerOzone()
+X11DisplayFetcherOzone::X11DisplayFetcherOzone(
+    X11DisplayFetcherOzone::Delegate* delegate)
     : xdisplay_(gfx::GetXDisplay()),
       x_root_window_(DefaultRootWindow(xdisplay_)),
       xrandr_version_(0),
-      xrandr_event_base_(0) {
+      xrandr_event_base_(0),
+      delegate_(delegate) {
+  DCHECK(delegate);
   // We only support 1.3+. There were library changes before this and we should
   // use the new interface instead of the 1.2 one.
   int randr_version_major = 0;
@@ -77,7 +71,7 @@ X11DisplayManagerOzone::X11DisplayManagerOzone()
   }
   // Need at least xrandr version 1.3.
   if (xrandr_version_ < 103) {
-    snapshots_ = BuildFallbackDisplayList();
+    delegate_->AddDisplay(GetFallbackDisplay(), true);
     return;
   }
 
@@ -89,36 +83,24 @@ X11DisplayManagerOzone::X11DisplayManagerOzone()
   XRRSelectInput(xdisplay_, x_root_window_,
                  RRScreenChangeNotifyMask | RROutputChangeNotifyMask |
                      RRCrtcChangeNotifyMask);
-  BuildDisplaysFromXRandRInfo();
-  return;
+
+  const std::vector<display::Display> displays = BuildDisplaysFromXRandRInfo();
+  for (auto& display : displays)
+    delegate_->AddDisplay(display, display.id() == primary_display_index_);
 }
 
-X11DisplayManagerOzone::~X11DisplayManagerOzone() {
+X11DisplayFetcherOzone::~X11DisplayFetcherOzone() {
   if (xrandr_version_ >= 103 && ui::PlatformEventSource::GetInstance())
     ui::PlatformEventSource::GetInstance()->RemovePlatformEventDispatcher(this);
 }
 
-void X11DisplayManagerOzone::SetObserver(Observer* observer) {
-  observer_ = observer;
-  if (snapshots_.size() > 0)
-    observer_->OnOutputReadyForUse();
-}
-
-void X11DisplayManagerOzone::GetDisplaysSnapshot(
-    display::GetDisplaysCallback callback) {
-  std::vector<display::DisplaySnapshot*> snapshots;
-  for (const auto& snapshot : snapshots_)
-    snapshots.push_back(snapshot.get());
-  std::move(callback).Run(snapshots);
-}
-
-bool X11DisplayManagerOzone::CanDispatchEvent(const ui::PlatformEvent& event) {
+bool X11DisplayFetcherOzone::CanDispatchEvent(const ui::PlatformEvent& event) {
   // TODO(msisov, jkim): implement this.
   NOTIMPLEMENTED_LOG_ONCE();
   return false;
 }
 
-uint32_t X11DisplayManagerOzone::DispatchEvent(const ui::PlatformEvent& event) {
+uint32_t X11DisplayFetcherOzone::DispatchEvent(const ui::PlatformEvent& event) {
   // TODO(msisov, jkim): implement this.
   NOTIMPLEMENTED_LOG_ONCE();
   return ui::POST_DISPATCH_NONE;
@@ -132,16 +114,18 @@ PROTECTED_MEMORY_SECTION base::ProtectedMemory<XRRGetMonitors>
 PROTECTED_MEMORY_SECTION base::ProtectedMemory<XRRFreeMonitors>
     g_XRRFreeMonitors_ptr;
 
-void X11DisplayManagerOzone::BuildDisplaysFromXRandRInfo() {
+std::vector<display::Display>
+X11DisplayFetcherOzone::BuildDisplaysFromXRandRInfo() {
   DCHECK(xrandr_version_ >= 103);
+  std::vector<display::Display> displays;
   gfx::XScopedPtr<
       XRRScreenResources,
       gfx::XObjectDeleter<XRRScreenResources, void, XRRFreeScreenResources>>
       resources(XRRGetScreenResourcesCurrent(xdisplay_, x_root_window_));
   if (!resources) {
     LOG(ERROR) << "XRandR returned no displays. Falling back to Root Window.";
-    snapshots_ = BuildFallbackDisplayList();
-    return;
+    displays.push_back(GetFallbackDisplay());
+    return displays;
   }
 
   std::map<RROutput, int> output_to_monitor;
@@ -168,12 +152,23 @@ void X11DisplayManagerOzone::BuildDisplaysFromXRandRInfo() {
     }
   }
 
-  primary_display_index_ = 0;
   RROutput primary_display_id = XRRGetOutputPrimary(xdisplay_, x_root_window_);
 
   int explicit_primary_display_index = -1;
   int monitor_order_primary_display_index = -1;
 
+  bool has_work_area = false;
+  gfx::Rect work_area_in_pixels;
+  std::vector<int> value;
+  if (ui::GetIntArrayProperty(x_root_window_, "_NET_WORKAREA", &value) &&
+      value.size() >= 4) {
+    work_area_in_pixels = gfx::Rect(value[0], value[1], value[2], value[3]);
+    has_work_area = true;
+  }
+
+  // As per-display scale factor is not supported right now,
+  // the X11 root window's scale factor is always used.
+  const float device_scale_factor = GetDeviceScaleFactor();
   for (int i = 0; i < resources->noutput; ++i) {
     RROutput output_id = resources->outputs[i];
     gfx::XScopedPtr<XRROutputInfo,
@@ -200,6 +195,41 @@ void X11DisplayManagerOzone::BuildDisplaysFromXRandRInfo() {
       }
 
       gfx::Rect crtc_bounds(crtc->x, crtc->y, crtc->width, crtc->height);
+      display::Display display(display_id, crtc_bounds);
+
+      if (!display::Display::HasForceDeviceScaleFactor()) {
+        display.SetScaleAndBounds(device_scale_factor, crtc_bounds);
+      }
+
+      if (has_work_area) {
+        gfx::Rect intersection_in_pixels = crtc_bounds;
+        if (is_primary_display) {
+          intersection_in_pixels.Intersect(work_area_in_pixels);
+        }
+        // SetScaleAndBounds() above does the conversion from pixels to DIP for
+        // us, but set_work_area does not, so we need to do it here.
+        display.set_work_area(gfx::Rect(
+            gfx::ScaleToFlooredPoint(intersection_in_pixels.origin(),
+                                     1.0f / display.device_scale_factor()),
+            gfx::ScaleToFlooredSize(intersection_in_pixels.size(),
+                                    1.0f / display.device_scale_factor())));
+      }
+
+      switch (crtc->rotation) {
+        case RR_Rotate_0:
+          display.set_rotation(display::Display::ROTATE_0);
+          break;
+        case RR_Rotate_90:
+          display.set_rotation(display::Display::ROTATE_90);
+          break;
+        case RR_Rotate_180:
+          display.set_rotation(display::Display::ROTATE_180);
+          break;
+        case RR_Rotate_270:
+          display.set_rotation(display::Display::ROTATE_270);
+          break;
+      }
+
       if (is_primary_display)
         explicit_primary_display_index = display_id;
 
@@ -217,9 +247,7 @@ void X11DisplayManagerOzone::BuildDisplaysFromXRandRInfo() {
         color_space = display::Display::GetForcedDisplayColorProfile();
       }
 
-      std::unique_ptr<display::DisplaySnapshot> snapshot =
-          CreateSnapshot(display_id, crtc_bounds, color_space);
-      snapshots_.push_back(std::move(snapshot));
+      displays.push_back(display);
     }
   }
 
@@ -228,6 +256,11 @@ void X11DisplayManagerOzone::BuildDisplaysFromXRandRInfo() {
   } else if (monitor_order_primary_display_index != -1) {
     primary_display_index_ = monitor_order_primary_display_index;
   }
+
+  if (displays.empty())
+    displays.push_back(GetFallbackDisplay());
+
+  return displays;
 }
 
 }  // namespace ui

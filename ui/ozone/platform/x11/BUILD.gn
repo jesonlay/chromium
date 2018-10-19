@@ -24,16 +24,16 @@ source_set("x11") {
     "x11_cursor_factory_ozone.h",
     "x11_cursor_ozone.cc",
     "x11_cursor_ozone.h",
-    "x11_display_manager_ozone.cc",
-    "x11_display_manager_ozone.h",
-    "x11_native_display_delegate.cc",
-    "x11_native_display_delegate.h",
-    "x11_drag_context.h",
+    "x11_display_fetcher_ozone.cc",
+    "x11_display_fetcher_ozone.h",
     "x11_drag_context.cc",
-    "x11_drag_source.h",
+    "x11_drag_context.h",
     "x11_drag_source.cc",
-    "x11_drag_util.h",
+    "x11_drag_source.h",
     "x11_drag_util.cc",
+    "x11_drag_util.h",
+    "x11_screen_ozone.cc",
+    "x11_screen_ozone.h",
     "x11_surface_factory.cc",
     "x11_surface_factory.h",
     "x11_window_manager_ozone.cc",
@@ -82,6 +82,7 @@ source_set("x11_unittests") {
   testonly = true
   sources = [
     "x11_cursor_factory_ozone_unittest.cc",
+    "x11_screen_ozone_unittest.cc",
     "x11_window_ozone_unittest.cc",
   ]
 
