@@ -16,8 +16,8 @@ import org.chromium.base.LocaleUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.chrome.autofill_assistant.R;
+import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
-import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.payments.mojom.PaymentOptions;
@@ -70,10 +70,9 @@ public class AutofillAssistantUiController implements AutofillAssistantUiDelegat
     /**
      * Construct Autofill Assistant UI controller.
      *
-     * @param activity The CustomTabActivity of the controller associated with.
+     * @param activity The ChromeActivity of the controller associated with.
      */
-    public AutofillAssistantUiController(
-            CustomTabActivity activity, Map<String, String> parameters) {
+    public AutofillAssistantUiController(ChromeActivity activity, Map<String, String> parameters) {
         mWebContents = activity.getActivityTab().getWebContents();
         mInitialUrl = activity.getInitialIntent().getDataString();
 
@@ -136,6 +135,11 @@ public class AutofillAssistantUiController implements AutofillAssistantUiDelegat
     }
 
     @Override
+    public void onChoice(byte[] serverPayload) {
+        nativeOnChoice(mUiControllerAndroid, serverPayload);
+    }
+
+    @Override
     public void onAddressSelected(String guid) {
         nativeOnAddressSelected(mUiControllerAndroid, guid);
     }
@@ -177,6 +181,11 @@ public class AutofillAssistantUiController implements AutofillAssistantUiDelegat
     }
 
     @CalledByNative
+    private String onGetStatusMessage() {
+        return mStatusMessage;
+    }
+
+    @CalledByNative
     private void onShowOverlay() {
         mUiDelegateHolder.performUiOperation(uiDelegate -> {
             uiDelegate.showOverlay();
@@ -198,8 +207,8 @@ public class AutofillAssistantUiController implements AutofillAssistantUiDelegat
     }
 
     @CalledByNative
-    private void onCloseCustomTab() {
-        mUiDelegateHolder.closeCustomTab();
+    private void onClose() {
+        mUiDelegateHolder.close();
     }
 
     @CalledByNative
@@ -213,15 +222,38 @@ public class AutofillAssistantUiController implements AutofillAssistantUiDelegat
         assert scriptNames.length == scriptPaths.length;
         assert scriptNames.length == scriptsHighlightFlags.length;
 
-        ArrayList<AutofillAssistantUiDelegate.ScriptHandle> scriptHandles = new ArrayList<>();
-        // Note that scriptNames, scriptPaths and scriptsHighlightFlags are one-on-one matched by
+        List<AutofillAssistantUiDelegate.ScriptHandle> scriptHandles = new ArrayList<>();
+        // Note that scriptNames, scriptsHighlightFlags and scriptPaths are one-on-one matched by
         // index.
         for (int i = 0; i < scriptNames.length; i++) {
             scriptHandles.add(new AutofillAssistantUiDelegate.ScriptHandle(
-                    scriptNames[i], scriptPaths[i], scriptsHighlightFlags[i]));
+                    scriptNames[i], scriptsHighlightFlags[i], scriptPaths[i]));
         }
 
         mUiDelegateHolder.performUiOperation(uiDelegate -> uiDelegate.updateScripts(scriptHandles));
+    }
+
+    @CalledByNative
+    private void onChoose(String[] names, byte[][] serverPayloads, boolean[] highlightFlags) {
+        assert names.length == serverPayloads.length;
+        assert names.length == highlightFlags.length;
+
+        // An empty choice list is supported, as selection can still be forced. onForceChoose should
+        // be a no-op in this case.
+        if (names.length == 0) return;
+
+        List<AutofillAssistantUiDelegate.Choice> choices = new ArrayList<>();
+        assert (names.length == serverPayloads.length);
+        for (int i = 0; i < names.length; i++) {
+            choices.add(new AutofillAssistantUiDelegate.Choice(
+                    names[i], highlightFlags[i], serverPayloads[i]));
+        }
+        mUiDelegateHolder.performUiOperation(uiDelegate -> uiDelegate.showChoices(choices));
+    }
+
+    @CalledByNative
+    private void onForceChoose() {
+        mUiDelegateHolder.performUiOperation(uiDelegate -> uiDelegate.clearCarousel());
     }
 
     @CalledByNative
@@ -283,6 +315,7 @@ public class AutofillAssistantUiController implements AutofillAssistantUiDelegat
         if (mCurrentDetails.isEmpty() && newDetails.isEmpty()) {
             // No update on UI needed.
             nativeOnShowDetails(mUiControllerAndroid, /* canContinue= */ true);
+            return;
         }
 
         Details mergedDetails = Details.merge(mCurrentDetails, newDetails);
@@ -295,8 +328,8 @@ public class AutofillAssistantUiController implements AutofillAssistantUiDelegat
     }
 
     @CalledByNative
-    private void onShowDetails(String title, String url, String description, int year, int month,
-            int day, int hour, int minute, int second) {
+    private void onShowDetails(String title, String url, String description, String mId, int year,
+            int month, int day, int hour, int minute, int second) {
         Date date;
         if (year > 0 && month > 0 && day > 0 && hour >= 0 && minute >= 0 && second >= 0) {
             Calendar calendar = Calendar.getInstance();
@@ -309,7 +342,7 @@ public class AutofillAssistantUiController implements AutofillAssistantUiDelegat
         }
 
         maybeUpdateDetails(new Details(
-                title, url, date, description, /* isFinal= */ true, Collections.emptySet()));
+                title, url, date, description, mId, /* isFinal= */ true, Collections.emptySet()));
     }
 
     @CalledByNative
@@ -375,9 +408,9 @@ public class AutofillAssistantUiController implements AutofillAssistantUiDelegat
     /** Choose an account to authenticate as for making RPCs to the backend. */
     private void chooseAccountAsync(Bundle extras) {
         AccountManagerFacade.get().tryGetGoogleAccounts(accounts -> {
-            if (accounts.length == 1) {
+            if (accounts.size() == 1) {
                 // If there's only one account, there aren't any doubts.
-                onAccountChosen(accounts[0]);
+                onAccountChosen(accounts.get(0));
                 return;
             }
             Account signedIn =
@@ -413,8 +446,9 @@ public class AutofillAssistantUiController implements AutofillAssistantUiDelegat
         }
     }
 
-    private static Account findAccountByName(Account[] accounts, String name) {
-        for (Account account : accounts) {
+    private static Account findAccountByName(List<Account> accounts, String name) {
+        for (int i = 0; i < accounts.size(); i++) {
+            Account account = accounts.get(i);
             if (account.name.equals(name)) {
                 return account;
             }
@@ -447,6 +481,7 @@ public class AutofillAssistantUiController implements AutofillAssistantUiDelegat
             long nativeUiControllerAndroid, float distanceXRatio, float distanceYRatio);
     private native void nativeUpdateTouchableArea(long nativeUiControllerAndroid);
     private native void nativeOnScriptSelected(long nativeUiControllerAndroid, String scriptPath);
+    private native void nativeOnChoice(long nativeUiControllerAndroid, byte[] serverPayload);
     private native void nativeOnAddressSelected(long nativeUiControllerAndroid, String guid);
     private native void nativeOnCardSelected(long nativeUiControllerAndroid, String guid);
     private native void nativeOnShowDetails(long nativeUiControllerAndroid, boolean canContinue);

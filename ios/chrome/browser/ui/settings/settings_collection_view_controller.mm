@@ -54,9 +54,9 @@
 #import "ios/chrome/browser/ui/settings/content_settings_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/google_services_settings_coordinator.h"
 #import "ios/chrome/browser/ui/settings/material_cell_catalog_view_controller.h"
-#import "ios/chrome/browser/ui/settings/privacy_collection_view_controller.h"
+#import "ios/chrome/browser/ui/settings/privacy_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/save_passwords_collection_view_controller.h"
-#import "ios/chrome/browser/ui/settings/search_engine_settings_collection_view_controller.h"
+#import "ios/chrome/browser/ui/settings/search_engine_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/sync_utils/sync_util.h"
 #import "ios/chrome/browser/ui/settings/table_cell_catalog_view_controller.h"
 #import "ios/chrome/browser/ui/settings/utils/pref_backed_boolean.h"
@@ -855,7 +855,7 @@ void IdentityObserverBridge::OnPrimaryAccountCleared(
       [self showSyncGoogleService];
       break;
     case ItemTypeSearchEngine:
-      controller = [[SearchEngineSettingsCollectionViewController alloc]
+      controller = [[SearchEngineTableViewController alloc]
           initWithBrowserState:_browserState];
       break;
     case ItemTypeSavedPasswords:
@@ -875,7 +875,7 @@ void IdentityObserverBridge::OnPrimaryAccountCleared(
           initWithPrefs:_browserState->GetPrefs()];
       break;
     case ItemTypePrivacy:
-      controller = [[PrivacyCollectionViewController alloc]
+      controller = [[PrivacyTableViewController alloc]
           initWithBrowserState:_browserState];
       break;
     case ItemTypeContentSettings:

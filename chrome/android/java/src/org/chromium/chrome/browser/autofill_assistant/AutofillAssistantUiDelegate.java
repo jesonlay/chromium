@@ -39,6 +39,7 @@ import android.widget.TextView;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
 import org.chromium.chrome.autofill_assistant.R;
+import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
 import org.chromium.chrome.browser.autofill_assistant.ui.BottomBarAnimations;
@@ -86,7 +87,7 @@ class AutofillAssistantUiDelegate {
     private static final SimpleDateFormat sDetailsDateFormat =
             new SimpleDateFormat("EEE, MMM d", Locale.getDefault());
 
-    private final CustomTabActivity mActivity;
+    private final ChromeActivity mActivity;
     private final Client mClient;
     private final ViewGroup mCoordinatorView;
     private final View mFullContainer;
@@ -131,6 +132,9 @@ class AutofillAssistantUiDelegate {
          * @param scriptPath The path for the selected script.
          */
         void onScriptSelected(String scriptPath);
+
+        /** Called when a choice has been selected, with the result of {@link Choice#getData()}. */
+        void onChoice(byte[] serverPayload);
 
         /**
          * Called when an address has been selected.
@@ -177,37 +181,61 @@ class AutofillAssistantUiDelegate {
         void onInitOk();
     }
 
-    /**
-     * Java side equivalent of autofill_assistant::ScriptHandle.
-     */
-    protected static class ScriptHandle {
-        /** The display name of this script. */
+    /** Describes a chip to display. */
+    static class Chip {
         private final String mName;
-        /** The script path. */
-        private final String mPath;
-        /** Whether the script should be highlighted. */
         private final boolean mHighlight;
 
-        /** Constructor. */
-        public ScriptHandle(String name, String path, boolean highlight) {
-            mName = name;
-            mPath = path;
-            mHighlight = highlight;
-        }
-
-        /** Returns the display name. */
-        public String getName() {
+        /** Returns the localized name to display. */
+        String getName() {
             return mName;
         }
 
-        /** Returns the script path. */
-        public String getPath() {
-            return mPath;
+        /** Returns {@code true} if the choice should be highlight. */
+        boolean isHighlight() {
+            return mHighlight;
         }
 
-        /** Returns whether the script should be highlighted. */
-        public boolean isHighlight() {
-            return mHighlight;
+        Chip(String name, boolean highlight) {
+            mName = name;
+            mHighlight = highlight;
+        }
+    }
+
+    /** Functional interface that acts on a chip. */
+    interface ChipAction<T extends Chip> {
+        void apply(T chip);
+    }
+
+    /** Java side equivalent of autofill_assistant::ScriptHandle. */
+    static class ScriptHandle extends Chip {
+        private final String mPath;
+
+        /** Constructor. */
+        ScriptHandle(String name, boolean highlight, String path) {
+            super(name, highlight);
+            mPath = path;
+        }
+
+        /** Returns the script path. */
+        String getPath() {
+            return mPath;
+        }
+    }
+
+    /** Java side equivalent of autofill_assistant::UiController::Choice. */
+    static class Choice extends Chip {
+        private final byte[] mServerPayload;
+
+        /** Constructor. */
+        Choice(String name, boolean highlight, byte[] serverPayload) {
+            super(name, highlight);
+            mServerPayload = serverPayload;
+        }
+
+        /** Returns the serverPayload that corresponds to that choice. */
+        byte[] getServerPayload() {
+            return mServerPayload;
         }
     }
 
@@ -228,7 +256,7 @@ class AutofillAssistantUiDelegate {
      * @param activity The ChromeActivity
      * @param client The client to forward events to
      */
-    public AutofillAssistantUiDelegate(CustomTabActivity activity, Client client) {
+    public AutofillAssistantUiDelegate(ChromeActivity activity, Client client) {
         mActivity = activity;
         mClient = client;
 
@@ -238,8 +266,6 @@ class AutofillAssistantUiDelegate {
                                  .findViewById(R.id.autofill_assistant);
         // TODO(crbug.com/806868): Set hint text on overlay.
         mTouchEventFilter = (TouchEventFilter) mFullContainer.findViewById(R.id.touch_event_filter);
-        mTouchEventFilter.init(client, activity.getFullscreenManager(),
-                activity.getActivityTab().getWebContents());
         mBottomBar = mFullContainer.findViewById(R.id.bottombar);
         mBottomBar.findViewById(R.id.close_button)
                 .setOnClickListener(unusedView -> mClient.onDismiss());
@@ -296,41 +322,43 @@ class AutofillAssistantUiDelegate {
      *
      * @param scriptHandles List of scripts to show.
      */
-    public void updateScripts(ArrayList<ScriptHandle> scriptHandles) {
+    public void updateScripts(List<ScriptHandle> scriptHandles) {
         if (scriptHandles.isEmpty()) {
             clearCarousel();
             return;
         }
 
-        boolean alignRight = hasHighlightedScript(scriptHandles);
+        addChips(scriptHandles, scriptHandle -> {
+            clearCarousel();
+            mClient.onScriptSelected(scriptHandle.getPath());
+        });
+    }
+
+    private <T extends Chip> void addChips(Iterable<T> chips, ChipAction<T> onClick) {
+        boolean alignRight = hasHighlightedScript(chips);
         @ChipStyle
         int nonHighlightStyle = alignRight ? ChipStyle.BUTTON_HAIRLINE : ChipStyle.CHIP_ASSISTIVE;
-        ArrayList<View> childViews = new ArrayList<>();
-        for (int i = 0; i < scriptHandles.size(); i++) {
-            ScriptHandle scriptHandle = scriptHandles.get(i);
+        List<View> childViews = new ArrayList<>();
+        for (T chip : chips) {
             @ChipStyle
-            int chipStyle =
-                    scriptHandle.isHighlight() ? ChipStyle.BUTTON_FILLED : nonHighlightStyle;
-            TextView chipView = createChipView(scriptHandle.getName(), chipStyle);
-            chipView.setOnClickListener((unusedView) -> {
-                clearCarousel();
-                mClient.onScriptSelected(scriptHandle.getPath());
-            });
+            int chipStyle = chip.isHighlight() ? ChipStyle.BUTTON_FILLED : nonHighlightStyle;
+            TextView chipView = createChipView(chip.getName(), chipStyle);
+            chipView.setOnClickListener((unusedView) -> onClick.apply(chip));
             childViews.add(chipView);
         }
         setCarouselChildViews(childViews, alignRight);
     }
 
-    private boolean hasHighlightedScript(ArrayList<ScriptHandle> scripts) {
-        for (int i = 0; i < scripts.size(); i++) {
-            if (scripts.get(i).isHighlight()) {
+    private boolean hasHighlightedScript(Iterable<? extends Chip> chips) {
+        for (Chip chip : chips) {
+            if (chip.isHighlight()) {
                 return true;
             }
         }
         return false;
     }
 
-    private void clearCarousel() {
+    public void clearCarousel() {
         setCarouselChildViews(Collections.emptyList(), /* alignRight= */ false);
     }
 
@@ -403,6 +431,8 @@ class AutofillAssistantUiDelegate {
 
     public void show() {
         if (mFullContainer.getVisibility() != View.VISIBLE) {
+            mTouchEventFilter.init(mClient, mActivity.getFullscreenManager(),
+                    mActivity.getActivityTab().getWebContents());
             mFullContainer.setVisibility(View.VISIBLE);
 
             // Set the initial progress. It is OK to make multiple calls to this method as it will
@@ -412,6 +442,7 @@ class AutofillAssistantUiDelegate {
     }
 
     public void hide() {
+        mTouchEventFilter.deInit();
         mFullContainer.setVisibility(View.GONE);
     }
 
@@ -448,20 +479,25 @@ class AutofillAssistantUiDelegate {
     }
 
     /**
-     * Closes the Chrome Custom Tab.
+     * Closes the activity.
+     *
+     * Note: The close() logic here assumes that |mActivity| is a CustomTabActivity since in the
+     * more general case we probably just want to close the active tab instead of the entire Chrome
+     * activity.
      */
-    public void closeCustomTab() {
-        mActivity.finishAndClose(false);
+    public void close() {
+        assert mActivity instanceof CustomTabActivity;
+        mActivity.finish();
     }
 
     /** Called to show overlay. */
     public void showOverlay() {
-        mTouchEventFilter.setEnableFiltering(true);
+        mTouchEventFilter.setFullOverlay(true);
     }
 
     /** Called to hide overlay. */
     public void hideOverlay() {
-        mTouchEventFilter.setEnableFiltering(false);
+        mTouchEventFilter.setFullOverlay(false);
     }
 
     public void hideDetails() {
@@ -657,7 +693,15 @@ class AutofillAssistantUiDelegate {
     }
 
     public void updateTouchableArea(boolean enabled, List<RectF> boxes) {
-        mTouchEventFilter.updateTouchableArea(enabled, boxes);
+        mTouchEventFilter.setPartialOverlay(enabled, boxes);
+    }
+
+    /** Shows chip with the given choices. */
+    public void showChoices(List<Choice> choices) {
+        addChips(choices, choice -> {
+            clearCarousel();
+            mClient.onChoice(choice.getServerPayload());
+        });
     }
 
     /**
@@ -767,6 +811,9 @@ class AutofillAssistantUiDelegate {
                 webContents, paymentOptions, unusedTitle, supportedBasicCardNetworks);
         // Make sure we wrap content in the container.
         mBottomBarAnimations.setBottomBarHeightToWrapContent();
+        // Note: We show and hide (below) the carousel so that the margins are adjusted correctly.
+        // This is an intermediate adjustment before the UI refactoring.
+        mBottomBarAnimations.showCarousel();
         mPaymentRequest.show(mCarouselScroll, callback);
         enableProgressBarPulsing();
     }
@@ -776,6 +823,7 @@ class AutofillAssistantUiDelegate {
         mPaymentRequest.close();
         mPaymentRequest = null;
         mBottomBarAnimations.setBottomBarHeightToFixed();
+        mBottomBarAnimations.hideCarousel();
         disableProgressBarPulsing();
     }
 }

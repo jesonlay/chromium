@@ -30,7 +30,9 @@
 
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 
+#include <limits>
 #include <memory>
+#include <utility>
 
 #include "services/network/public/cpp/features.h"
 #include "services/service_manager/public/cpp/connector.h"
@@ -212,7 +214,7 @@ LocalFrame* LocalFrame::Create(LocalFrameClient* client,
                                Page& page,
                                FrameOwner* owner,
                                InterfaceRegistry* interface_registry) {
-  LocalFrame* frame = new LocalFrame(
+  LocalFrame* frame = MakeGarbageCollected<LocalFrame>(
       client, page, owner,
       interface_registry ? interface_registry
                          : InterfaceRegistry::GetEmptyInterfaceRegistry());
@@ -426,9 +428,6 @@ void LocalFrame::DetachImpl(FrameDetachType type) {
 
   DomWindow()->FrameDestroyed();
 
-  if (GetPage() && GetPage()->GetFocusController().FocusedFrame() == this)
-    GetPage()->GetFocusController().SetFocusedFrame(nullptr);
-
   probe::frameDetachedFromParent(this);
 
   supplements_.clear();
@@ -493,6 +492,10 @@ void LocalFrame::DidAttachDocument() {
   Document* document = GetDocument();
   DCHECK(document);
   GetEditor().Clear();
+  // Clearing the event handler clears many events, but notably can ensure that
+  // for a drag started on an element in a frame that was moved (likely via
+  // appendChild()), the drag source will detach and stop firing drag events
+  // even after the frame reattaches.
   GetEventHandler().Clear();
   Selection().DidAttachDocument(document);
   GetInputMethodController().DidAttachDocument(document);
@@ -704,7 +707,7 @@ void LocalFrame::SetPrinting(bool printing,
   } else {
     if (LayoutView* layout_view = View()->GetLayoutView()) {
       layout_view->SetPreferredLogicalWidthsDirty();
-      layout_view->SetNeedsLayout(LayoutInvalidationReason::kPrintingChanged);
+      layout_view->SetNeedsLayout(layout_invalidation_reason::kPrintingChanged);
       layout_view->SetShouldDoFullPaintInvalidationForViewAndAllDescendants();
     }
     View()->UpdateLayout();
@@ -979,7 +982,7 @@ inline LocalFrame::LocalFrame(LocalFrameClient* client,
     ad_tracker_ = LocalFrameRoot().ad_tracker_;
     performance_monitor_ = LocalFrameRoot().performance_monitor_;
   }
-  idleness_detector_ = new IdlenessDetector(this);
+  idleness_detector_ = MakeGarbageCollected<IdlenessDetector>(this);
   inspector_task_runner_->InitIsolate(V8PerIsolateData::MainThreadIsolate());
 
   if (ad_tracker_) {

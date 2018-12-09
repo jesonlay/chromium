@@ -48,6 +48,7 @@
 #include "third_party/blink/renderer/core/dom/events/event_dispatch_forbidden_scope.h"
 #include "third_party/blink/renderer/core/dom/events/event_dispatcher.h"
 #include "third_party/blink/renderer/core/dom/events/event_listener.h"
+#include "third_party/blink/renderer/core/dom/flat_tree_node_data.h"
 #include "third_party/blink/renderer/core/dom/flat_tree_traversal.h"
 #include "third_party/blink/renderer/core/dom/get_root_node_options.h"
 #include "third_party/blink/renderer/core/dom/layout_tree_builder_traversal.h"
@@ -1103,6 +1104,14 @@ void Node::MarkAncestorsWithChildNeedsStyleRecalc() {
     ancestor->SetChildNeedsStyleRecalc();
     if (ancestor->NeedsStyleRecalc())
       break;
+    // If we reach a locked ancestor, we should abort since the ancestor marking
+    // will be done when the lock is committed.
+    if (RuntimeEnabledFeatures::DisplayLockingEnabled()) {
+      if (ancestor->IsElementNode() &&
+          ToElement(ancestor)->StyleRecalcBlockedByDisplayLock()) {
+        break;
+      }
+    }
   }
   if (!isConnected())
     return;
@@ -1110,6 +1119,23 @@ void Node::MarkAncestorsWithChildNeedsStyleRecalc() {
   // early return here is a performance optimization.
   if (parent_dirty)
     return;
+
+  // If we're in a locked subtree, then we should not update the style recalc
+  // roots. These would be updated when we commit the lock.
+  // TODO(vmpstr): There's currently no easy way to determine whether we're in a
+  // locked subtree other than navigating up the ancestor chain. We can probably
+  // do better and only do this walk if there is in fact a lock somewhere in the
+  // document.
+  if (RuntimeEnabledFeatures::DisplayLockingEnabled()) {
+    for (auto* ancestor_copy = ancestor; ancestor_copy;
+         ancestor_copy = ancestor_copy->ParentOrShadowHostNode()) {
+      if (ancestor_copy->IsElementNode() &&
+          ToElement(ancestor_copy)->StyleRecalcBlockedByDisplayLock()) {
+        return;
+      }
+    }
+  }
+
   GetDocument().GetStyleEngine().UpdateStyleRecalcRoot(ancestor, this);
   GetDocument().ScheduleLayoutTreeUpdateIfNeeded();
 }
@@ -1168,7 +1194,7 @@ void Node::SetNeedsStyleRecalc(StyleChangeType change_type,
   TRACE_EVENT_INSTANT1(
       TRACE_DISABLED_BY_DEFAULT("devtools.timeline.invalidationTracking"),
       "StyleRecalcInvalidationTracking", TRACE_EVENT_SCOPE_THREAD, "data",
-      InspectorStyleRecalcInvalidationTrackingEvent::Data(this, reason));
+      inspector_style_recalc_invalidation_tracking_event::Data(this, reason));
 
   StyleChangeType existing_change_type = GetStyleChangeType();
   if (change_type > existing_change_type)
@@ -1248,6 +1274,21 @@ NodeListsNodeData* Node::NodeLists() {
 
 void Node::ClearNodeLists() {
   RareData()->ClearNodeLists();
+}
+
+FlatTreeNodeData& Node::EnsureFlatTreeNodeData() {
+  return EnsureRareData().EnsureFlatTreeNodeData();
+}
+
+FlatTreeNodeData* Node::GetFlatTreeNodeData() const {
+  if (!HasRareData())
+    return nullptr;
+  return RareData()->GetFlatTreeNodeData();
+}
+
+void Node::ClearFlatTreeNodeData() {
+  if (FlatTreeNodeData* data = GetFlatTreeNodeData())
+    data->Clear();
 }
 
 bool Node::IsDescendantOf(const Node* other) const {

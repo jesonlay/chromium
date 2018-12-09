@@ -16,16 +16,122 @@
 __gCrWeb.findInPage = {};
 
 /**
+ * A Match represents a match result in the document. |this.nodes| stores all
+ * the <chrome_find> Nodes created for highlighting the matched text. If it
+ * contains only one Node, it means the match is found within one HTML TEXT
+ * Node, otherwise the match involves multiple HTML TEXT Nodes.
+ */
+class Match {
+  constructor(nodes) {
+    this.nodes = nodes;
+  }
+
+  /**
+   * Returns if all <chrome_find> Nodes of this match are visible.
+   * @return {Boolean} If the Match is visible.
+   */
+  visible() {
+    for (let i = 0; i < this.nodes.length; ++i) {
+      if (!isElementVisible_(this.nodes[i]))
+        return false;
+    }
+    return true;
+  }
+
+  /**
+   * Adds orange color highlight for "selected match result", over the yellow
+   * color highlight for "normal match result".
+   * @return {undefined}
+   */
+  addSelectHighlight() {
+    for (let i = 0; i < this.nodes.length; ++i) {
+      this.nodes[i].className = (this.nodes[i].className || '') + ' findysel';
+    }
+  }
+
+  /**
+   * Clears the orange color highlight.
+   * @return {undefined}
+   */
+  removeSelectHighlight() {
+    for (let i = 0; i < this.nodes.length; ++i) {
+      this.nodes[i].className =
+          (this.nodes[i].className || '').replace(/\sfindysel/g, '');
+    }
+  }
+}
+
+/**
+ * The list of all the matches in current page.
+ * @type {Array<Match>}
+ */
+__gCrWeb.findInPage.matches = [];
+
+/**
  * Index of the current highlighted choice.  -1 means none.
  * @type {number}
  */
-__gCrWeb.findInPage.index = -1;
+__gCrWeb.findInPage.selectedMatchIndex = -1;
 
 /**
- * The list of found searches in span form.
- * @type {Array<Element>}
+ * A Replacement represents a DOM operation that swaps |oldNode| with |newNodes|
+ * under the parent of |oldNode| to highlight the match result inside |oldNode|.
+ * |newNodes| may contain plain TEXT Nodes for unhighlighted parts and
+ * <chrome_find> nodes for highlighted parts. This operation will be executed
+ * reversely when clearing current highlights for next FindInPage action.
  */
-__gCrWeb.findInPage.spans = [];
+class Replacement {
+  /**
+   * Contructor for Replacement.
+   * @param {Node} The HTML Node containing search result.
+   * @param {Array<Node>} New HTML Nodes created for substitution of |oldNode|.
+   */
+  constructor(oldNode, newNodes) {
+    this.oldNode = oldNode;
+    this.newNodes = newNodes;
+  }
+
+  /**
+   * Executes the replacement to highlight search result.
+   * @return {undefined}
+   */
+  doSwap() {
+    let parentNode = this.oldNode.parentNode;
+    if (!parentNode)
+      return;
+    for (var i = 0; i < this.newNodes.length; ++i) {
+      parentNode.insertBefore(this.newNodes[i], this.oldNode);
+    }
+    parentNode.removeChild(this.oldNode);
+  }
+
+  /**
+   * Executes the replacement reversely to clear the highlight.
+   * @return {undefined}
+   */
+  undoSwap() {
+    let parentNode = this.newNodes[0].parentNode;
+    if (!parentNode)
+      return;
+    parentNode.insertBefore(this.oldNode, this.newNodes[0]);
+    for (var i = 0; i < this.newNodes.length; ++i) {
+      parentNode.removeChild(this.newNodes[i]);
+    }
+  }
+}
+
+/**
+ * The replacements of current FindInPage action.
+ * @type {Array<Replacement>}
+ */
+let replacements_ = [];
+
+/**
+ * The index of the Replacement from which the highlight process continue when
+ * pumpSearch is called.
+ * @type {Number}
+ */
+let replacementsIndex_ = 0;
 
 /**
  * The list of frame documents.
@@ -100,34 +206,17 @@ const NO_RESULTS = '[0,[0,0,0]]';
  */
 const REGEX_ESCAPER = /([.?*+^$[\]\\(){}|-])/g;
 
-function getCurrentSpan_() {
-  return __gCrWeb.findInPage.spans[__gCrWeb.findInPage.index];
+function getCurrentSelectedMatch_() {
+  return __gCrWeb.findInPage.matches[__gCrWeb.findInPage.selectedMatchIndex];
 };
 
 /**
  * Creates the regex needed to find the text.
  * @param {string} findText Phrase to look for.
- * @param {boolean} opt_split True to split up the phrase.
  * @return {RegExp} regex needed to find the text.
  */
-function getRegex_(findText, opt_split) {
-  let regexString = '';
-  if (opt_split) {
-    let words = [];
-    let split = findText.split(' ');
-    for (let i = 0; i < split.length; i++) {
-      words.push(escapeRegex_(split[i]));
-    }
-    let joinedWords = words.join('|');
-    regexString = '(' +
-        // Match at least one word.
-        '\\b(?:' + joinedWords + ')' +
-        // Include zero or more additional words separated by whitespace.
-        '(?:\\s*\\b(?:' + joinedWords + '))*' +
-        ')';
-  } else {
-    regexString = '(' + escapeRegex_(findText) + ')';
-  }
+function getRegex_(findText) {
+  let regexString = '(' + escapeRegex_(findText) + ')';
   return new RegExp(regexString, 'ig');
 };
 
@@ -153,15 +242,12 @@ __gCrWeb.findInPage.overTime = function() {
 /**
  * Looks for a phrase in the DOM.
  * @param {string} findText Phrase to look for like "ben franklin".
- * @param {boolean} opt_split True to split up the words and look for any
- *     of them.  False to require the full phrase to be there.
- *     Undefined will try the full phrase, and if nothing is found do the split.
  * @param {number} timeout Maximum time to run.
  * @return {string} How many results there are in the page in the form of
        [highlightedWordsCount, [index, pageLocationX, pageLocationY]].
  */
-__gCrWeb.findInPage.highlightWord = function(findText, opt_split, timeout) {
-  if (__gCrWeb.findInPage.spans && __gCrWeb.findInPage.spans.length) {
+__gCrWeb.findInPage.highlightWord = function(findText, timeout) {
+  if (__gCrWeb.findInPage.matches && __gCrWeb.findInPage.matches.length) {
     // Clean up a previous run.
     clearHighlight_();
   }
@@ -169,9 +255,6 @@ __gCrWeb.findInPage.highlightWord = function(findText, opt_split, timeout) {
     // No searching for emptyness.
     return NO_RESULTS;
   }
-
-  // Store all DOM modifications to do them in a tight loop at once.
-  __gCrWeb.findInPage.replacements = [];
 
   // Node is what we are currently looking at.
   __gCrWeb.findInPage.node = document.body;
@@ -190,10 +273,8 @@ __gCrWeb.findInPage.highlightWord = function(findText, opt_split, timeout) {
 
   // Index tracking variables so search can be broken up into multiple calls.
   __gCrWeb.findInPage.visibleIndex = 0;
-  __gCrWeb.findInPage.replacementsIndex = 0;
-  __gCrWeb.findInPage.replacementNewNodesIndex = 0;
 
-  __gCrWeb.findInPage.regex = getRegex_(findText, opt_split);
+  __gCrWeb.findInPage.regex = getRegex_(findText);
 
   searchInProgress_ = true;
 
@@ -209,7 +290,6 @@ __gCrWeb.findInPage.highlightWord = function(findText, opt_split, timeout) {
                     whether the text was found and int idicates text position.
  */
 __gCrWeb.findInPage.pumpSearch = function(timeout) {
-  let opt_split = false;
   // TODO(justincohen): It would be better if this DCHECKed.
   if (searchInProgress_ == false)
     return NO_RESULTS;
@@ -251,6 +331,7 @@ __gCrWeb.findInPage.pumpSearch = function(timeout) {
           element.setAttribute('class', CSS_CLASS_NAME);
           element.innerHTML = escapeHTML_(matchText);
           nodes.push(element);
+          __gCrWeb.findInPage.matches.push(new Match([element]));
 
           strIndex = match.index + matchText.length;
         } catch (e) {
@@ -264,7 +345,7 @@ __gCrWeb.findInPage.pumpSearch = function(timeout) {
               node.textContent.substring(strIndex, node.textContent.length);
           nodes.push(node.ownerDocument.createTextNode(substr));
         }
-        __gCrWeb.findInPage.replacements.push({oldNode: node, newNodes: nodes});
+        replacements_.push(new Replacement(node, nodes));
         regex.lastIndex = 0;
       }
     }
@@ -279,42 +360,20 @@ __gCrWeb.findInPage.pumpSearch = function(timeout) {
     }
   }
 
-  // Insert each of the replacement nodes into the old node's parent, then
-  // remove the old node.
-  let replacements = __gCrWeb.findInPage.replacements;
-
-  // Last position in replacements array.
-  let rIndex = __gCrWeb.findInPage.replacementsIndex;
-  let rMax = replacements.length;
-  for (; rIndex < rMax; rIndex++) {
-    let replacement = replacements[rIndex];
-    let parent = replacement.oldNode.parentNode;
-    if (parent == null)
-      continue;
-    let rNodesMax = replacement.newNodes.length;
-    for (let rNodesIndex = __gCrWeb.findInPage.replacementNewNodesIndex;
-         rNodesIndex < rNodesMax; rNodesIndex++) {
-      if (__gCrWeb.findInPage.overTime()) {
-        __gCrWeb.findInPage.replacementsIndex = rIndex;
-        __gCrWeb.findInPage.replacementNewNodesIndex = rNodesIndex;
-        return __gCrWeb.stringify([false]);
-      }
-      parent.insertBefore(
-          replacement.newNodes[rNodesIndex], replacement.oldNode);
+  // Execute replacements to highlight search results.
+  for (let i = replacementsIndex_; i < replacements_.length; ++i) {
+    if (__gCrWeb.findInPage.overTime()) {
+      replacementsIndex_ = i;
+      return __gCrWeb.stringify([false]);
     }
-    parent.removeChild(replacement.oldNode);
-    __gCrWeb.findInPage.replacementNewNodesIndex = 0;
+    replacements_[i].doSwap();
   }
-  // Save last position in replacements array.
-  __gCrWeb.findInPage.replacementsIndex = rIndex;
-
-  __gCrWeb.findInPage.spans = getAllElementsByClassName_(CSS_CLASS_NAME);
 
   // Count visible elements.
-  let max = __gCrWeb.findInPage.spans.length;
+  let max = __gCrWeb.findInPage.matches.length;
   let maxVisible = MAX_VISIBLE_ELEMENTS;
   for (let index = __gCrWeb.findInPage.visibleIndex; index < max; index++) {
-    let elem = __gCrWeb.findInPage.spans[index];
+    let match = __gCrWeb.findInPage.matches[index];
     if (__gCrWeb.findInPage.overTime()) {
       __gCrWeb.findInPage.visibleIndex = index;
       return __gCrWeb.stringify([false]);
@@ -322,145 +381,50 @@ __gCrWeb.findInPage.pumpSearch = function(timeout) {
 
     // Stop after |maxVisible| elements.
     if (__gCrWeb.findInPage.visibleFound > maxVisible) {
-      __gCrWeb.findInPage.spans[index].visibleIndex = maxVisible;
+      match.visibleIndex = maxVisible;
       continue;
     }
 
-    if (isVisible_(elem)) {
+    if (match.visible()) {
       __gCrWeb.findInPage.visibleFound++;
-      __gCrWeb.findInPage.spans[index].visibleIndex =
-          __gCrWeb.findInPage.visibleFound;
+      match.visibleIndex = __gCrWeb.findInPage.visibleFound;
     }
   }
 
   searchInProgress_ = false;
 
-  // Try again flow.
-  // If opt_split is true, we are done since we won't do any better.
-  // If opt_split is false, they were explicit about wanting the full thing
-  // so do not try with a split.
-  // If opt_split is undefined and we did not find an answer, go ahead and try
-  // splitting the terms.
-  if (__gCrWeb.findInPage.spans.length == 0 && opt_split === undefined) {
-    // Try to be more aggressive:
-    return __gCrWeb.findInPage.highlightWord(findText, true);
+  let pos = __gCrWeb.findInPage.goNext();
+  if (pos) {
+    return '[' + __gCrWeb.findInPage.visibleFound + ',' + pos + ']';
   } else {
-    let pos = __gCrWeb.findInPage.goNext();
-    if (pos) {
-      return '[' + __gCrWeb.findInPage.visibleFound + ',' + pos + ']';
-    } else if (opt_split === undefined) {
-      // Nothing visible, go ahead and be more aggressive.
-      return __gCrWeb.findInPage.highlightWord(findText, true);
-    } else {
-      return NO_RESULTS;
-    }
+    return NO_RESULTS;
   }
 };
 
 /**
- * Converts a node list to an array.
- * @param {NodeList} nodeList DOM node list.
- * @return {Array<Node>} array.
- */
-function toArray_(nodeList) {
-  let array = [];
-  for (let i = 0; i < nodeList.length; i++)
-    array[i] = nodeList[i];
-  return array;
-};
-
-/**
- * Return all elements of class name, spread out over letious frames.
- * @param {string} name of class.
- * @return {Array<Node>} array of elements matching class name.
- */
-function getAllElementsByClassName_(name) {
-  let nodeList = document.getElementsByClassName(name);
-  let elements = toArray_(nodeList);
-  for (let i = frameDocs_.length - 1; i >= 0; i--) {
-    let doc = frameDocs_[i];
-    nodeList = doc.getElementsByClassName(name);
-    elements = elements.concat(toArray_(nodeList));
-  }
-  return elements;
-};
-
-/**
- * Removes all currently highlighted spans.
+ * Removes all currently highlighted matches.
  * Note: It does not restore previous state, just removes the class name.
  */
 function clearHighlight_() {
-  if (__gCrWeb.findInPage.index >= 0) {
-    removeSelectHighlight_(getCurrentSpan_());
+  for (let i = 0; i < replacements_.length; ++i) {
+    replacements_[i].undoSwap();
   }
-  // Store all DOM modifications to do them in a tight loop.
-  let modifications = [];
-  let length = __gCrWeb.findInPage.spans.length;
-  let prevParent = null;
-  for (let i = length - 1; i >= 0; i--) {
-    let elem = __gCrWeb.findInPage.spans[i];
-    let parentNode = elem.parentNode;
-    // Safari has an occasional |elem.innerText| bug that drops the trailing
-    // space.  |elem.innerText| would be more correct in this situation, but
-    // since we only allow text in this element, grabbing the HTML value should
-    // not matter.
-    let nodeText = elem.innerHTML;
-    // If this element has the same parent as the previous, check if we should
-    // add this node to the previous one.
-    if (prevParent && prevParent.isSameNode(parentNode) &&
-        elem.nextSibling.isSameNode(
-            __gCrWeb.findInPage.spans[i + 1].previousSibling)) {
-      let prevMod = modifications[modifications.length - 1];
-      prevMod.nodesToRemove.push(elem);
-      let elemText = elem.innerText;
-      if (elem.previousSibling) {
-        prevMod.nodesToRemove.push(elem.previousSibling);
-        elemText = elem.previousSibling.textContent + elemText;
-      }
-      prevMod.replacement.textContent =
-          elemText + prevMod.replacement.textContent;
-    } else {
-      // Element isn't attached to previous, so create a new modification.
-      let nodesToRemove = [elem];
-      if (elem.previousSibling && elem.previousSibling.nodeType == 3) {
-        nodesToRemove.push(elem.previousSibling);
-        nodeText = elem.previousSibling.textContent + nodeText;
-      }
-      if (elem.nextSibling && elem.nextSibling.nodeType == 3) {
-        nodesToRemove.push(elem.nextSibling);
-        nodeText = nodeText + elem.nextSibling.textContent;
-      }
-      let textNode = elem.ownerDocument.createTextNode(nodeText);
-      modifications.push({nodesToRemove: nodesToRemove, replacement: textNode});
-    }
-    prevParent = parentNode;
-  }
-  let numMods = modifications.length;
-  for (i = numMods - 1; i >= 0; i--) {
-    let mod = modifications[i];
-    for (let j = 0; j < mod.nodesToRemove.length; j++) {
-      let existing = mod.nodesToRemove[j];
-      if (j == 0) {
-        existing.parentNode.replaceChild(mod.replacement, existing);
-      } else {
-        existing.parentNode.removeChild(existing);
-      }
-    }
-  }
-
-  __gCrWeb.findInPage.spans = [];
-  __gCrWeb.findInPage.index = -1;
+  replacements_ = [];
+  replacementsIndex_ = 0;
+  __gCrWeb.findInPage.matches = [];
+  __gCrWeb.findInPage.selectedMatchIndex = -1;
 };
 
 /**
- * Increments the index of the current highlighted span or, if the index is
- * already at the end, sets it to the index of the first span in the page.
+ * Increments the index of the current selected Match or, if the index is
+ * already at the end, sets it to the index of the first Match in the page.
  */
 __gCrWeb.findInPage.incrementIndex = function() {
-  if (__gCrWeb.findInPage.index >= __gCrWeb.findInPage.spans.length - 1) {
-    __gCrWeb.findInPage.index = 0;
+  if (__gCrWeb.findInPage.selectedMatchIndex >=
+      __gCrWeb.findInPage.matches.length - 1) {
+    __gCrWeb.findInPage.selectedMatchIndex = 0;
   } else {
-    __gCrWeb.findInPage.index++;
+    __gCrWeb.findInPage.selectedMatchIndex++;
   }
 };
 
@@ -470,25 +434,25 @@ __gCrWeb.findInPage.incrementIndex = function() {
  *     nothing happened.
  */
 __gCrWeb.findInPage.goNext = function() {
-  if (!__gCrWeb.findInPage.spans || __gCrWeb.findInPage.spans.length == 0) {
+  if (!__gCrWeb.findInPage.matches || __gCrWeb.findInPage.matches.length == 0) {
     return '';
   }
-  if (__gCrWeb.findInPage.index >= 0) {
+  if (__gCrWeb.findInPage.selectedMatchIndex >= 0) {
     // Remove previous highlight.
-    removeSelectHighlight_(getCurrentSpan_());
+    getCurrentSelectedMatch_().removeSelectHighlight();
   }
   // Iterate through to the next index, but because they might not be visible,
   // keep trying until you find one that is.  Make sure we don't loop forever by
   // stopping on what we are currently highlighting.
-  let oldIndex = __gCrWeb.findInPage.index;
+  let oldIndex = __gCrWeb.findInPage.selectedMatchIndex;
   __gCrWeb.findInPage.incrementIndex();
-  while (!isVisible_(getCurrentSpan_())) {
-    if (oldIndex === __gCrWeb.findInPage.index) {
-      // Checked all spans but didn't find anything else visible.
+  while (!getCurrentSelectedMatch_().visible()) {
+    if (oldIndex === __gCrWeb.findInPage.selectedMatchIndex) {
+      // Checked all matches but didn't find anything else visible.
       return '';
     }
     __gCrWeb.findInPage.incrementIndex();
-    if (0 === __gCrWeb.findInPage.index && oldIndex < 0) {
+    if (0 === __gCrWeb.findInPage.selectedMatchIndex && oldIndex < 0) {
       // Didn't find anything visible and haven't highlighted anything yet.
       return '';
     }
@@ -498,14 +462,15 @@ __gCrWeb.findInPage.goNext = function() {
 };
 
 /**
- * Decrements the index of the current highlighted span or, if the index is
- * already at the beginning, sets it to the index of the last span in the page.
+ * Decrements the index of the current selected Match or, if the index is
+ * already at the beginning, sets it to the index of the last Match in the page.
  */
 __gCrWeb.findInPage.decrementIndex = function() {
-  if (__gCrWeb.findInPage.index <= 0) {
-    __gCrWeb.findInPage.index = __gCrWeb.findInPage.spans.length - 1;
+  if (__gCrWeb.findInPage.selectedMatchIndex <= 0) {
+    __gCrWeb.findInPage.selectedMatchIndex =
+        __gCrWeb.findInPage.matches.length - 1;
   } else {
-    __gCrWeb.findInPage.index--;
+    __gCrWeb.findInPage.selectedMatchIndex--;
   }
 };
 
@@ -515,56 +480,28 @@ __gCrWeb.findInPage.decrementIndex = function() {
  *     nothing happened.
  */
 __gCrWeb.findInPage.goPrev = function() {
-  if (!__gCrWeb.findInPage.spans || __gCrWeb.findInPage.spans.length == 0) {
+  if (!__gCrWeb.findInPage.matches || __gCrWeb.findInPage.matches.length == 0) {
     return '';
   }
-  if (__gCrWeb.findInPage.index >= 0) {
+  if (__gCrWeb.findInPage.selectedMatchIndex >= 0) {
     // Remove previous highlight.
-    removeSelectHighlight_(getCurrentSpan_());
+    getCurrentSelectedMatch_().removeSelectHighlight();
   }
   // Iterate through to the next index, but because they might not be visible,
   // keep trying until you find one that is.  Make sure we don't loop forever by
   // stopping on what we are currently highlighting.
-  let old = __gCrWeb.findInPage.index;
+  let old = __gCrWeb.findInPage.selectedMatchIndex;
   __gCrWeb.findInPage.decrementIndex();
-  while (!isVisible_(getCurrentSpan_())) {
+  while (!getCurrentSelectedMatch_().visible()) {
     __gCrWeb.findInPage.decrementIndex();
-    if (old == __gCrWeb.findInPage.index) {
-      // Checked all spans but didn't find anything.
+    if (old == __gCrWeb.findInPage.selectedMatchIndex) {
+      // Checked all matches but didn't find anything.
       return '';
     }
   }
 
   // Return scroll dimensions.
   return findScrollDimensions_();
-};
-
-/**
- * Adds the special highlighting to the result at the index.
- * @param {number=} opt_index Index to replace __gCrWeb.findInPage.index
- *                  with.
- */
-function addHighlightToIndex_(opt_index) {
-  if (opt_index !== undefined) {
-    __gCrWeb.findInPage.index = opt_index;
-  }
-  addSelectHighlight_(getCurrentSpan_());
-};
-
-/**
- * Adds selected highlight style to the specified element.
- * @param {Element} element Element to highlight.
- */
-function addSelectHighlight_(element) {
-  element.className = (element.className || '') + ' findysel';
-};
-
-/**
- * Removes selected highlight style from the specified element.
- * @param {Element} element Element to remove highlighting from.
- */
-function removeSelectHighlight_(element) {
-  element.className = (element.className || '').replace(/\sfindysel/g, '');
 };
 
 /**
@@ -600,18 +537,14 @@ function scaleCoordinates_(coordinates) {
 
 /**
  * Finds the position of the result and scrolls to it.
- * @param {number=} opt_index Index to replace __gCrWeb.findInPage.index with.
  * @return {string} JSON encoded array of the scroll coordinates "[x, y]".
  */
-function findScrollDimensions_(opt_index) {
-  if (opt_index !== undefined) {
-    __gCrWeb.findInPage.index = opt_index;
-  }
-  let elem = getCurrentSpan_();
-  if (!elem) {
+function findScrollDimensions_() {
+  let match = getCurrentSelectedMatch_();
+  if (!match) {
     return '';
   }
-  let normalized = getNormalizedCoordinates_(elem);
+  let normalized = getNormalizedCoordinates_(match.nodes[0]);
   let xPos = normalized[0];
   let yPos = normalized[1];
 
@@ -624,12 +557,12 @@ function findScrollDimensions_(opt_index) {
       yPos >= (window.pageYOffset + window.innerHeight)) {
     // If it's off the screen.  Wait a bit to start the highlight animation so
     // that scrolling can get there first.
-    window.setTimeout(addHighlightToIndex_, 250);
+    window.setTimeout(() => match.addSelectHighlight(), 250);
   } else {
-    addHighlightToIndex_();
+    match.addSelectHighlight();
   }
   let scaled = scaleCoordinates_(normalized);
-  let index = getCurrentSpan_().visibleIndex;
+  let index = match.visibleIndex;
   scaled.unshift(index);
   return __gCrWeb.stringify(scaled);
 };
@@ -649,20 +582,6 @@ __gCrWeb.findInPage.init = function(width, height) {
   frameDocs_ = getFrameDocuments_();
   enable_();
   __gCrWeb.findInPage.hasInitialized = true;
-};
-
-/**
- * When the GSA app detects a zoom change, we need to update our css.
- * @param {number} width Width of page.
- * @param {number} height Height of page.
- */
-function fixZoom_(width, height) {
-  pageWidth_ = width;
-  pageHeight_ = height;
-  if (styleElement_) {
-    removeStyle_();
-    addStyle_();
-  }
 };
 
 /**
@@ -787,7 +706,7 @@ function getBodyHeight_() {
  * @param {Element} elem Element to check.
  * @return {boolean} Whether elem is visible or not.
  */
-function isVisible_(elem) {
+function isElementVisible_(elem) {
   if (!elem) {
     return false;
   }
@@ -913,5 +832,4 @@ function getFrameDocuments_() {
 };
 
 window.addEventListener('pagehide', __gCrWeb.findInPage.disable);
-
 })();

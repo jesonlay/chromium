@@ -39,6 +39,18 @@ static constexpr int kAutostartCheckCountLimit = 5;
 // Caller parameter name.
 static const char* const kCallerScriptParameterName = "CALLER";
 
+// Cookie experiment name.
+// TODO(crbug.com/806868): Introduce a dedicated experiment extra parameter to
+// pass allow passing more than one experiment.
+static const char* const kCookieExperimentName = "EXP_COOKIE";
+// Website visited before parameter.
+// Note: This parameter goes with the previous experiment name. I.e. it is only
+// set when the cookie experiment is active.
+static const char* const kWebsiteVisitedBeforeParameterName =
+    "WEBSITE_VISITED_BEFORE";
+
+static const char* const kTrueValue = "true";
+
 }  // namespace
 
 // static
@@ -88,6 +100,11 @@ content::WebContents* Controller::GetWebContents() {
   return web_contents();
 }
 
+void Controller::SetTouchableElementArea(
+    const std::vector<Selector>& elements) {
+  touchable_element_area_.SetElements(elements);
+}
+
 Controller::Controller(
     content::WebContents* web_contents,
     std::unique_ptr<Client> client,
@@ -126,10 +143,8 @@ Controller::~Controller() {
 }
 
 void Controller::Start(const GURL& initialUrl) {
-  started_ = true;
-  if (initialUrl.is_valid())
-    GetOrCheckScripts(initialUrl);
-
+  DCHECK(initialUrl.is_valid());
+  GetOrCheckScripts(initialUrl);
   if (allow_autostart_) {
     auto iter = parameters_->find(kCallerScriptParameterName);
     // TODO(crbug.com/806868): Put back an explicit AUTOSTART parameter so we
@@ -137,8 +152,6 @@ void Controller::Start(const GURL& initialUrl) {
     if (iter != parameters_->end() && iter->second == "1") {
       should_fail_after_checking_scripts_ = true;
       GetUiController()->ShowOverlay();
-      // TODO(crbug.com/806868): Find out how to add template string and add
-      // domain in the "Loading..." message.
       GetUiController()->ShowStatusMessage(l10n_util::GetStringFUTF8(
           IDS_AUTOFILL_ASSISTANT_LOADING,
           base::UTF8ToUTF16(web_contents()->GetVisibleURL().host())));
@@ -153,11 +166,19 @@ void Controller::Start(const GURL& initialUrl) {
 }
 
 void Controller::GetOrCheckScripts(const GURL& url) {
-  if (!started_) {
+  if (IsCookieExperimentEnabled() && !started_) {
+    GetWebController()->HasCookie(
+        base::BindOnce(&Controller::OnGetCookie,
+                       // WebController is owned by Controller.
+                       base::Unretained(this), url));
+    return;
+  } else {
+    started_ = true;
+  }
+
+  if (!started_ || script_tracker_->running()) {
     return;
   }
-  if (script_tracker_->running())
-    return;
 
   if (script_domain_ != url.host()) {
     StopPeriodicScriptChecks();
@@ -237,9 +258,29 @@ void Controller::OnGetScripts(const GURL& url,
   StartPeriodicScriptChecks();
 }
 
+void Controller::ExecuteScript(const std::string& script_path) {
+  DCHECK(!script_tracker_->running());
+
+  GetUiController()->ShowOverlay();
+  touchable_element_area_.ClearElements();
+
+  StopPeriodicScriptChecks();
+  // Runnable scripts will be checked and reported if necessary after executing
+  // the script.
+  script_tracker_->ClearRunnableScripts();
+  GetUiController()->UpdateScripts({});  // Clear scripts.
+  // TODO(crbug.com/806868): Consider making ClearRunnableScripts part of
+  // ExecuteScripts to simplify the controller.
+  script_tracker_->ExecuteScript(
+      script_path, base::BindOnce(&Controller::OnScriptExecuted,
+                                  // script_tracker_ is owned by Controller.
+                                  base::Unretained(this), script_path));
+}
+
 void Controller::OnScriptExecuted(const std::string& script_path,
-                                  ScriptExecutor::Result result) {
-  GetUiController()->HideOverlay();
+                                  const ScriptExecutor::Result& result) {
+  if (!allow_autostart_)
+    GetUiController()->HideOverlay();
   if (!result.success) {
     LOG(ERROR) << "Failed to execute script " << script_path;
     GetUiController()->ShowStatusMessage(
@@ -254,11 +295,12 @@ void Controller::OnScriptExecuted(const std::string& script_path,
       return;
 
     case ScriptExecutor::SHUTDOWN_GRACEFULLY:
+      GetWebController()->ClearCookie();
       GetUiController()->ShutdownGracefully();
       return;
 
     case ScriptExecutor::CLOSE_CUSTOM_TAB:
-      GetUiController()->CloseCustomTab();
+      GetUiController()->Close();
       return;
 
     case ScriptExecutor::RESTART:
@@ -284,28 +326,81 @@ void Controller::GiveUp() {
   GetUiController()->ShutdownGracefully();
 }
 
+bool Controller::MaybeAutostartScript(
+    const std::vector<ScriptHandle>& runnable_scripts) {
+  // We want to g through all runnable autostart interrupts first, one at a
+  // time. To do that, always run highest priority autostartable interrupt from
+  // runnable_script, which is ordered by priority.
+  for (const auto& script : runnable_scripts) {
+    if (script.autostart && script.interrupt) {
+      std::string script_path = script.path;
+      ExecuteScript(script_path);
+      // making a copy of script.path is necessary, as ExecuteScript clears
+      // runnable_scripts, so script.path will not survive until the end of
+      // ExecuteScript.
+      return true;
+    }
+  }
+
+  // Under specific conditions, we can directly run a non-interrupt script
+  // without first displaying it. This is meant to work only at the very
+  // beginning, when no non-interrupt scripts have run, and only if there's
+  // exactly one autostartable script.
+  if (allow_autostart_) {
+    int autostart_count = 0;
+    std::string autostart_path;
+    for (const auto& script : runnable_scripts) {
+      if (script.autostart && !script.interrupt) {
+        autostart_count++;
+        autostart_path = script.path;
+      }
+    }
+    if (autostart_count == 1) {
+      allow_autostart_ = false;
+      ExecuteScript(autostart_path);
+      return true;
+    }
+  }
+  return false;
+}
+
 void Controller::OnClickOverlay() {
   GetUiController()->HideOverlay();
   // TODO(crbug.com/806868): Stop executing scripts.
 }
 
+void Controller::OnGetCookie(const GURL& initial_url, bool has_cookie) {
+  if (has_cookie) {
+    // This code is only active with the experiment parameter.
+    parameters_->insert(
+        std::make_pair(kWebsiteVisitedBeforeParameterName, kTrueValue));
+    OnSetCookie(initial_url, has_cookie);
+    return;
+  }
+  GetWebController()->SetCookie(
+      initial_url.host(),
+      base::BindOnce(&Controller::OnSetCookie,
+                     // WebController is owned by Controller.
+                     base::Unretained(this), initial_url));
+}
+
+void Controller::OnSetCookie(const GURL& initial_url, bool result) {
+  DCHECK(result) << "Setting cookie failed";
+  // Failing to set the cookie should not be fatal since it would prevent
+  // checking for available scripts.
+  started_ = true;
+
+  // Kick off another check scripts run since we may have blocked the first one.
+  GetOrCheckScripts(initial_url);
+}
+
 void Controller::OnScriptSelected(const std::string& script_path) {
   DCHECK(!script_path.empty());
-  DCHECK(!script_tracker_->running());
 
-  GetUiController()->ShowOverlay();
-  touchable_element_area_.ClearElements();
+  // This is a script selected from the UI, so it should disable autostart.
+  allow_autostart_ = false;
 
-  StopPeriodicScriptChecks();
-  // Runnable scripts will be checked and reported if necessary after executing
-  // the script.
-  script_tracker_->ClearRunnableScripts();
-  GetUiController()->UpdateScripts({});  // Clear scripts.
-  allow_autostart_ = false;  // Only ever autostart the very first script.
-  script_tracker_->ExecuteScript(
-      script_path, base::BindOnce(&Controller::OnScriptExecuted,
-                                  // script_tracker_ is owned by Controller.
-                                  base::Unretained(this), script_path));
+  ExecuteScript(script_path);
 }
 
 std::string Controller::GetDebugContext() {
@@ -346,9 +441,6 @@ void Controller::DidGetUserInteraction(const blink::WebInputEvent::Type type) {
   switch (type) {
     case blink::WebInputEvent::kTouchStart:
     case blink::WebInputEvent::kGestureTapDown:
-      // Disable autostart after interaction with the web page.
-      allow_autostart_ = false;
-
       if (!script_tracker_->running()) {
         script_tracker_->CheckScripts(kPeriodicScriptCheckInterval);
         StartPeriodicScriptChecks();
@@ -382,23 +474,8 @@ void Controller::OnRunnableScriptsChanged(
     GetUiController()->HideOverlay();
   }
 
-  // Under specific conditions, we can directly run a script without first
-  // displaying it. This is meant to work only at the very beginning, when no
-  // scripts have run, there has been no interaction with the webpage and only
-  // if there's exactly one runnable autostartable script.
-  if (allow_autostart_) {
-    int autostart_count = 0;
-    std::string autostart_path;
-    for (const auto& script : runnable_scripts) {
-      if (script.autostart) {
-        autostart_count++;
-        autostart_path = script.path;
-      }
-    }
-    if (autostart_count == 1) {
-      OnScriptSelected(autostart_path);
-      return;
-    }
+  if (MaybeAutostartScript(runnable_scripts)) {
+    return;
   }
 
   // Show the initial prompt if available.
@@ -410,11 +487,10 @@ void Controller::OnRunnableScriptsChanged(
     }
   }
 
-  // Update the set of scripts. Only scripts that are not marked as autostart
-  // should be shown.
+  // Update the set of scripts in the UI.
   std::vector<ScriptHandle> scripts_to_update;
   for (const auto& script : runnable_scripts) {
-    if (!script.autostart) {
+    if (!script.autostart && !script.name.empty()) {
       scripts_to_update.emplace_back(script);
     }
   }
@@ -438,7 +514,8 @@ void Controller::DidStartNavigation(
     content::NavigationHandle* navigation_handle) {
   // The following types of navigations are allowed for the main frame:
   //  - first-time URL load
-  //  - script-directed navigation, while a script is running
+  //  - script-directed navigation, while a script is running unless
+  //    there's a touchable area.
   //  - server redirections, which might happen outside of a script, but
   //    because of a load triggered by a previously-running script.
   //  - same-document modifications, which might happen automatically
@@ -454,6 +531,15 @@ void Controller::DidStartNavigation(
       !script_tracker_->running() && !navigation_handle->WasServerRedirect() &&
       !navigation_handle->IsSameDocument() &&
       !navigation_handle->IsRendererInitiated()) {
+    GiveUp();
+    return;
+  }
+
+  // Special case: during a prompt, forbid render-initiated navigation. This is
+  // necessary as there won't be any script lookup to tell us whether the
+  // destination page is acceptable.
+  if (script_tracker_->running() && touchable_element_area_.HasElements() &&
+      navigation_handle->IsRendererInitiated()) {
     GiveUp();
     return;
   }
@@ -482,6 +568,11 @@ void Controller::LoadProgressChanged(content::WebContents* source,
     // DidFinishLoad.
     GetOrCheckScripts(web_contents()->GetLastCommittedURL());
   }
+}
+
+bool Controller::IsCookieExperimentEnabled() const {
+  auto iter = parameters_->find(kCookieExperimentName);
+  return iter != parameters_->end() && iter->second == "1";
 }
 
 }  // namespace autofill_assistant

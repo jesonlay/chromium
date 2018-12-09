@@ -12,9 +12,6 @@
 function FileBrowserBackgroundImpl() {
   BackgroundBase.call(this);
 
-  /** @type {!analytics.Tracker} */
-  this.tracker = metrics.getTracker();
-
   /**
    * Progress center of the background page.
    * @type {!ProgressCenter}
@@ -33,7 +30,7 @@ function FileBrowserBackgroundImpl() {
    *
    * @type {!importer.HistoryLoader}
    */
-  this.historyLoader = new importer.RuntimeHistoryLoader(this.tracker);
+  this.historyLoader = new importer.RuntimeHistoryLoader();
 
   /**
    * Event handler for progress center.
@@ -61,8 +58,8 @@ function FileBrowserBackgroundImpl() {
   /**
    * @type {!importer.DispositionChecker.CheckerFunction}
    */
-  this.dispositionChecker_ = importer.DispositionChecker.createChecker(
-      this.historyLoader, this.tracker);
+  this.dispositionChecker_ =
+      importer.DispositionChecker.createChecker(this.historyLoader);
 
   /**
    * Provides support for scaning media devices as part of Cloud Import.

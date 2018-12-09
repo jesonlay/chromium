@@ -14,8 +14,9 @@
 
 namespace blink {
 
-// This class is representing a polymorphic WebInputEvent structure with its
-// coalesced events. The event could be any events defined in WebInputEvent.h.
+// This class represents a polymorphic WebInputEvent structure with its
+// coalesced events. The event could be any event defined in WebInputEvent.h,
+// including those that cannot be coalesced.
 class BLINK_PLATFORM_EXPORT WebCoalescedInputEvent {
  public:
   explicit WebCoalescedInputEvent(const WebInputEvent&);
@@ -41,8 +42,6 @@ class BLINK_PLATFORM_EXPORT WebCoalescedInputEvent {
   std::vector<const WebInputEvent*> GetPredictedEventsPointers() const;
 
  private:
-  // TODO(hans): Remove this once clang-cl knows to not inline dtors that
-  // call operator(), https://crbug.com/691714
   struct BLINK_PLATFORM_EXPORT WebInputEventDeleter {
     void operator()(blink::WebInputEvent*) const;
   };

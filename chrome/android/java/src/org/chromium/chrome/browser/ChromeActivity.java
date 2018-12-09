@@ -63,6 +63,7 @@ import org.chromium.chrome.browser.bookmarks.BookmarkModel;
 import org.chromium.chrome.browser.bookmarks.BookmarkUtils;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.StateChangeReason;
+import org.chromium.chrome.browser.compositor.bottombar.ephemeraltab.EphemeralTabPanel;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
 import org.chromium.chrome.browser.compositor.layouts.SceneChangeObserver;
@@ -163,7 +164,6 @@ import org.chromium.policy.CombinedPolicyProvider.PolicyChangeListener;
 import org.chromium.printing.PrintManagerDelegateImpl;
 import org.chromium.printing.PrintingController;
 import org.chromium.printing.PrintingControllerImpl;
-import org.chromium.ui.DeferredViewStubInflationProvider;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.DeviceFormFactor;
@@ -264,6 +264,7 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
     private CompositorViewHolder mCompositorViewHolder;
     private InsetObserverView mInsetObserverView;
     private ContextualSearchManager mContextualSearchManager;
+    private EphemeralTabPanel mEphemeralTabPanel;
     protected ReaderModeManager mReaderModeManager;
     private SnackbarManager mSnackbarManager;
     private DataReductionPromoSnackbarController mDataReductionPromoSnackbarController;
@@ -703,7 +704,7 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
             }
 
             @Override
-            public void onPageLoadFinished(Tab tab) {
+            public void onPageLoadFinished(Tab tab, String url) {
                 postDeferredStartupIfNeeded();
                 OfflinePageUtils.showOfflineSnackbarIfNecessary(tab);
             }
@@ -1434,16 +1435,11 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         }
         super.finishNativeInitialization();
 
-        ViewGroup coordinator = findViewById(R.id.coordinator);
-        ViewStub accessoryBarStub = findViewById(R.id.keyboard_accessory_stub);
-        ViewStub accessorySheetStub = findViewById(R.id.keyboard_accessory_sheet_stub);
-        if (accessoryBarStub != null && accessorySheetStub != null) {
-            mManualFillingController.initialize(getWindowAndroid(),
-                    new DeferredViewStubInflationProvider<>(accessoryBarStub),
-                    new DeferredViewStubInflationProvider<>(accessorySheetStub));
-            getCompositorViewHolder().setKeyboardExtensionView(
-                    mManualFillingController.getKeyboardExtensionSizeManager());
-        }
+        mManualFillingController.initialize(getWindowAndroid(),
+                findViewById(R.id.keyboard_accessory_stub),
+                findViewById(R.id.keyboard_accessory_sheet_stub));
+        getCompositorViewHolder().setKeyboardExtensionView(
+                mManualFillingController.getKeyboardExtensionSizeManager());
 
         // Create after native initialization so subclasses that override this method have a chance
         // to setup.
@@ -1451,6 +1447,7 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
 
         if (supportsContextualSuggestionsBottomSheet()
                 && FeatureUtilities.areContextualSuggestionsEnabled(this)) {
+            ViewGroup coordinator = findViewById(R.id.coordinator);
             getLayoutInflater().inflate(R.layout.bottom_sheet, coordinator);
             mBottomSheet = coordinator.findViewById(R.id.bottom_sheet);
             mBottomSheet.init(coordinator, this);
@@ -1535,6 +1532,10 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
 
         // Do not show the menu if Contextual Search panel is opened.
         if (mContextualSearchManager != null && mContextualSearchManager.isSearchPanelOpened()) {
+            return false;
+        }
+
+        if (getEphemeralTabPanel() != null && getEphemeralTabPanel().isPanelOpened()) {
             return false;
         }
 
@@ -1805,6 +1806,10 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         return mReaderModeManager;
     }
 
+    public EphemeralTabPanel getEphemeralTabPanel() {
+        return getCompositorViewHolder().getLayoutManager().getEphemeralTabPanel();
+    }
+
     /**
      * Create a full-screen manager to be used by this activity.
      * Note: This is called during {@link #postInflationStartup}, so native code may not have been
@@ -1864,6 +1869,8 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         }
 
         mActivityTabProvider.setLayoutManager(layoutManager);
+        EphemeralTabPanel panel = layoutManager.getEphemeralTabPanel();
+        if (panel != null) panel.setChromeActivity(this);
     }
 
     /**
@@ -2089,6 +2096,9 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
             mFindToolbarManager.showToolbar();
             if (mContextualSearchManager != null) {
                 getContextualSearchManager().hideContextualSearch(StateChangeReason.UNKNOWN);
+            }
+            if (getEphemeralTabPanel() != null) {
+                getEphemeralTabPanel().closePanel(StateChangeReason.UNKNOWN, true);
             }
             if (fromMenu) {
                 RecordUserAction.record("MobileMenuFindInPage");

@@ -878,6 +878,7 @@ void DocumentLoader::StopLoading() {
 void DocumentLoader::DetachFromFrame(bool flush_microtask_queue) {
   DCHECK(frame_);
   StopLoading();
+  fetcher_->ClearContext();
   if (flush_microtask_queue) {
     // Flush microtask queue so that they all run on pre-navigation context.
     // TODO(dcheng): This is a temporary hack that should be removed. This is
@@ -893,7 +894,6 @@ void DocumentLoader::DetachFromFrame(bool flush_microtask_queue) {
     Microtask::PerformCheckpoint(V8PerIsolateData::MainThreadIsolate());
   }
   ScriptForbiddenScope forbid_scripts;
-  fetcher_->ClearContext();
 
   // If that load cancellation triggered another detach, leave.
   // (fast/frames/detach-frame-nested-no-crash.html is an example of this.)
@@ -1081,7 +1081,7 @@ void DocumentLoader::DidCommitNavigation(
     interactive_detector->SetNavigationStartTime(GetTiming().NavigationStart());
 
   TRACE_EVENT1("devtools.timeline", "CommitLoad", "data",
-               InspectorCommitLoadEvent::Data(frame_));
+               inspector_commit_load_event::Data(frame_));
 
   // Needs to run before dispatching preloads, as it may evict the memory cache.
   probe::didCommitLoad(frame_, this);
@@ -1127,6 +1127,29 @@ bool DocumentLoader::ShouldClearWindowName(
 
   return !new_document.GetSecurityOrigin()->IsSameSchemeHostPort(
       previous_security_origin);
+}
+
+// Helper function: Merge the feature policy strings from HTTP headers and the
+// origin policy (if any).
+// Headers go first, which means that the per-page headers override the
+// origin policy features.
+void MergeFeaturesFromOriginPolicy(WTF::String& feature_policy,
+                                   const String& origin_policy_string) {
+  if (origin_policy_string.IsEmpty())
+    return;
+
+  std::unique_ptr<OriginPolicy> origin_policy = OriginPolicy::From(
+      StringUTF8Adaptor(origin_policy_string).AsStringPiece());
+  if (!origin_policy)
+    return;
+
+  for (const std::string& policy : origin_policy->GetFeaturePolicies()) {
+    if (!feature_policy.IsEmpty()) {
+      feature_policy.append(',');
+    }
+    feature_policy.append(
+        WTF::String::FromUTF8(policy.data(), policy.length()));
+  }
 }
 
 void DocumentLoader::InstallNewDocument(
@@ -1246,8 +1269,10 @@ void DocumentLoader::InstallNewDocument(
   // FeaturePolicy is reset in the browser process on commit, so this needs to
   // be initialized and replicated to the browser process after commit messages
   // are sent in didCommitNavigation().
-  document->ApplyFeaturePolicyFromHeader(
+  WTF::String feature_policy(
       response_.HttpHeaderField(http_names::kFeaturePolicy));
+  MergeFeaturesFromOriginPolicy(feature_policy, request_.GetOriginPolicy());
+  document->ApplyFeaturePolicyFromHeader(feature_policy);
 
   GetFrameLoader().DispatchDidClearDocumentOfWindowObject();
 }

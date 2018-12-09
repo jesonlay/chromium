@@ -95,6 +95,7 @@ class SaveCardBubbleViewsBrowserTestBase
   void FillAndSubmitFormWithoutName();
   void FillAndSubmitFormWithConflictingName();
   void FillAndSubmitFormWithoutExpirationDate();
+  void FillAndSubmitFormWithExpiredExpirationDate();
   void FillAndSubmitFormWithoutAddress();
   void FillAndSubmitFormWithConflictingStreetAddress();
   void FillAndSubmitFormWithConflictingPostalCode();
@@ -122,6 +123,10 @@ class SaveCardBubbleViewsBrowserTestBase
 
   // Returns the views::View* that was previously assigned the id |view_id|.
   views::View* FindViewInBubbleById(DialogViewId view_id);
+
+  // Assert that there is a SaveCardBubbleViews bubble open, then click on the
+  // [No thanks] button.
+  void ClickOnCancelButton();
 
   // Assert that there is a SaveCardBubbleViews bubble open, then click on the
   // [X] button.

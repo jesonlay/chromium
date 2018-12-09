@@ -31,6 +31,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
+#include "base/strings/string_piece.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_member.h"
@@ -53,7 +54,7 @@ class SigninErrorController;
 
 namespace identity {
 class IdentityManager;
-}
+}  // namespace identity
 
 class SigninManager : public SigninManagerBase,
                       public AccountTrackerService::Observer,
@@ -63,7 +64,8 @@ class SigninManager : public SigninManagerBase,
   // but before the profile transitions to the "signed-in" state. This allows
   // callers to load policy and prompt the user appropriately before completing
   // signin. The callback is passed the just-fetched OAuth login refresh token.
-  typedef base::Callback<void(const std::string&)> OAuthTokenFetchedCallback;
+  using OAuthTokenFetchedCallback =
+      base::OnceCallback<void(const std::string&)>;
 
   // Used to remove accounts from the token service and the account tracker.
   enum class RemoveAccountsOption {
@@ -90,10 +92,6 @@ class SigninManager : public SigninManagerBase,
                 signin::AccountConsistencyMethod account_consistency);
   ~SigninManager() override;
 
-  // Returns true if the username is allowed based on the policy string.
-  static bool IsUsernameAllowedByPolicy(const std::string& username,
-                                        const std::string& policy);
-
   // Returns |manager| as a SigninManager instance. Relies on the fact that on
   // platforms where signin_manager.* is built, all SigninManagerBase instances
   // are actually SigninManager instances.
@@ -111,7 +109,7 @@ class SigninManager : public SigninManagerBase,
       const std::string& gaia_id,
       const std::string& username,
       const std::string& password,
-      const OAuthTokenFetchedCallback& oauth_fetched_callback);
+      OAuthTokenFetchedCallback oauth_fetched_callback);
 
   // Copies auth credentials from one SigninManager to this one. This is used
   // when creating a new profile during the signin process to transfer the
@@ -227,8 +225,7 @@ class SigninManager : public SigninManagerBase,
   void FireGoogleSigninSucceeded();
 
   // Send all observers |GoogleSignedOut| notifications.
-  void FireGoogleSignedOut(const std::string& account_id,
-                           const AccountInfo& account_info);
+  void FireGoogleSignedOut(const AccountInfo& account_info);
 
   // Waits for the AccountTrackerService, then sends GoogleSigninSucceeded to
   // the client and clears the local password.

@@ -124,8 +124,6 @@
 #include "chrome/browser/chromeos/printing/synced_printers_manager_factory.h"
 #include "chrome/browser/ui/app_list/arc/arc_package_sync_data_type_controller.h"
 #include "chrome/browser/ui/app_list/arc/arc_package_syncable_service.h"
-#include "components/sync_wifi/wifi_credential_syncable_service.h"
-#include "components/sync_wifi/wifi_credential_syncable_service_factory.h"
 #endif  // defined(OS_CHROMEOS)
 
 using content::BrowserThread;
@@ -151,7 +149,13 @@ syncer::ModelTypeSet GetDisabledTypesFromCommandLine() {
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
           switches::kDisableSyncTypes);
 
-  return syncer::ModelTypeSetFromString(disabled_types_str);
+  syncer::ModelTypeSet disabled_types =
+      syncer::ModelTypeSetFromString(disabled_types_str);
+  if (disabled_types.Has(syncer::DEVICE_INFO)) {
+    DLOG(WARNING) << "DEVICE_INFO cannot be disabled via a command-line switch";
+    disabled_types.Remove(syncer::DEVICE_INFO);
+  }
+  return disabled_types;
 }
 
 }  // namespace
@@ -281,13 +285,11 @@ base::Closure ChromeSyncClient::GetPasswordStateChangedCallback() {
 }
 
 syncer::DataTypeController::TypeVector
-ChromeSyncClient::CreateDataTypeControllers(
-    syncer::LocalDeviceInfoProvider* local_device_info_provider) {
+ChromeSyncClient::CreateDataTypeControllers() {
   syncer::ModelTypeSet disabled_types = GetDisabledTypesFromCommandLine();
 
   syncer::DataTypeController::TypeVector controllers =
-      component_factory_->CreateCommonDataTypeControllers(
-          disabled_types, local_device_info_provider);
+      component_factory_->CreateCommonDataTypeControllers(disabled_types);
 
   const base::RepeatingClosure dump_stack = base::BindRepeating(
       &syncer::ReportUnrecoverableError, chrome::GetChannel());
@@ -445,13 +447,6 @@ ChromeSyncClient::CreateDataTypeControllers(
 #endif  // defined(OS_LINUX) || defined(OS_WIN)
 
 #if defined(OS_CHROMEOS)
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableWifiCredentialSync) &&
-      !disabled_types.Has(syncer::WIFI_CREDENTIALS)) {
-    controllers.push_back(std::make_unique<AsyncDirectoryTypeController>(
-        syncer::WIFI_CREDENTIALS, dump_stack, this, syncer::GROUP_UI,
-        base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::UI})));
-  }
   if (arc::IsArcAllowedForProfile(profile_)) {
     controllers.push_back(std::make_unique<ArcPackageSyncDataTypeController>(
         syncer::ARC_PACKAGE, dump_stack, this, profile_));
@@ -574,21 +569,12 @@ ChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
       return base::WeakPtr<syncer::SyncableService>();
     }
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
-    case syncer::SESSIONS: {
-      return SessionSyncServiceFactory::GetForProfile(profile_)
-          ->GetSyncableService()
-          ->AsWeakPtr();
-    }
     case syncer::PASSWORDS: {
       return password_store_.get()
                  ? password_store_->GetPasswordSyncableService()
                  : base::WeakPtr<syncer::SyncableService>();
     }
 #if defined(OS_CHROMEOS)
-    case syncer::WIFI_CREDENTIALS:
-      return sync_wifi::WifiCredentialSyncableServiceFactory::
-          GetForBrowserContext(profile_)
-              ->AsWeakPtr();
     case syncer::ARC_PACKAGE:
       return arc::ArcPackageSyncableService::Get(profile_)->AsWeakPtr();
 #endif  // defined(OS_CHROMEOS)
@@ -604,9 +590,6 @@ ChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
 base::WeakPtr<syncer::ModelTypeControllerDelegate>
 ChromeSyncClient::GetControllerDelegateForModelType(syncer::ModelType type) {
   switch (type) {
-    case syncer::DEVICE_INFO:
-      return ProfileSyncServiceFactory::GetForProfile(profile_)
-          ->GetDeviceInfoSyncControllerDelegate();
     case syncer::READING_LIST:
       // Reading List is only supported on iOS at the moment.
       NOTREACHED();
@@ -635,6 +618,7 @@ ChromeSyncClient::GetControllerDelegateForModelType(syncer::ModelType type) {
     case syncer::AUTOFILL_WALLET_DATA:
     case syncer::AUTOFILL_WALLET_METADATA:
     case syncer::BOOKMARKS:
+    case syncer::DEVICE_INFO:
     case syncer::SESSIONS:
     case syncer::TYPED_URLS:
       NOTREACHED();

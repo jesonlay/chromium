@@ -7,9 +7,9 @@
 
 #include <map>
 #include <memory>
-#include <string>
 
 #include "ash/multi_user/multi_user_window_manager_delegate.h"
+#include "ash/public/interfaces/multi_user_window_manager.mojom.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
@@ -91,8 +91,8 @@ class MultiUserWindowManagerChromeOS
   // Returns the current user for unit tests.
   const AccountId& GetCurrentUserForTest() const;
 
- protected:
-  friend class UserSwitchAnimatorChromeOS;
+ private:
+  friend class ash::MultiUserWindowManagerChromeOSTest;
 
   class WindowEntry {
    public:
@@ -122,15 +122,10 @@ class MultiUserWindowManagerChromeOS
     DISALLOW_COPY_AND_ASSIGN(WindowEntry);
   };
 
-  // TODO(sky): make this map to unique_ptr<WindowEntry>.
-  using WindowToEntryMap = std::map<aura::Window*, WindowEntry*>;
+  using AccountIdToAppWindowObserver = std::map<AccountId, AppObserver*>;
 
-  const WindowToEntryMap& window_to_entry() { return window_to_entry_; }
-
- private:
-  friend class ash::MultiUserWindowManagerChromeOSTest;
-
-  typedef std::map<AccountId, AppObserver*> AccountIdToAppWindowObserver;
+  using WindowToEntryMap =
+      std::map<aura::Window*, std::unique_ptr<WindowEntry>>;
 
   // Add a browser window to the system so that the owner can be remembered.
   void AddBrowserWindow(Browser* browser);
@@ -153,7 +148,16 @@ class MultiUserWindowManagerChromeOS
   // The notification registrar to track the creation of browser windows.
   content::NotificationRegistrar registrar_;
 
+  // TODO: this won't work in the multi-process mash case. What needs to happen
+  // for the multi-process case is MultiUserWindowManagerDelegate needs to be
+  // converted to a mojom that ash uses to call this code.
+  // https://crbug.com/875111.
   std::unique_ptr<ash::MultiUserWindowManager> ash_multi_user_window_manager_;
+
+  // Only used for windows created for the window-service. For example,
+  // Browser windows when running in mash.
+  ash::mojom::MultiUserWindowManagerAssociatedPtr
+      multi_user_window_manager_mojom_;
 
   DISALLOW_COPY_AND_ASSIGN(MultiUserWindowManagerChromeOS);
 };

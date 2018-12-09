@@ -494,6 +494,10 @@ Bug(none) svg/wicd/test-rightsizing-b.xhtml [ Crash Failure ]
 Bug(none) transforms/transformed-caret.html [ Pass Failure ]
 Bug(none) paint/invalidation/scroll/scroll-in-transformed-layer.html [ Failure ]
 Bug(none) paint/invalidation/scroll/scroll-with-transformed-parent-layer.html [ Failure ]
+Bug(none) fast/overflow/overflow-text-hit-testing.html [ Failure ]
+Bug(none) compositing/reflections/nested-reflection-animated.html [ Failure ]
+Bug(none) compositing/transitions/scale-transition-no-start.html [ Failure ]
+Bug(none) virtual/threaded/animations/skew-notsequential-compositor.html [ Failure ]
 
 crbug.com/644358 fast/block/float/float-overhanging-grandparent-change-self-painting.html [ Crash ]
 
@@ -561,6 +565,9 @@ crbug.com/589265 fast/borders/border-radius-with-composited-child.html [ Failure
 crbug.com/589265 fast/clip/overflow-border-radius-composited-parent.html [ Failure ]
 crbug.com/589265 fast/clip/overflow-border-radius-composited.html [ Failure ]
 
+# Opacity not applied to descendant of animated filter node.
+crbug.com/905859 transitions/opacity-transform-transitions-inside-iframe.html [ Failure ]
+
 # Notes about rebaselined tests:
 #
 # Rebaselined for small pixel differences.
@@ -582,7 +589,6 @@ Bug(none) css3/blending/svg-blend-multiply.html [ Failure ]
 crbug.com/702350 virtual/threaded/transitions/opacity-transform-transitions-inside-iframe.html [ Timeout ]
 crbug.com/702353 virtual/threaded/transitions/transition-end-event-destroy-iframe.html [ Timeout ]
 crbug.com/702365 virtual/threaded/animations/composited-filter-webkit-filter.html [ Failure ]
-crbug.com/702370 virtual/threaded/animations/compositor-independent-transform-cancel.html [ Failure ]
 
 # Eight of the frames in the test below paint no content. In SPv2 we will never
 # composite animations that paint nothing. For now we mark this test as failing,
@@ -825,6 +831,9 @@ Bug(none) virtual/outofblink-cors-ns/http/tests/navigation/same-document-scroll-
 Bug(none) virtual/threaded/external/wpt/css/css-scroll-snap/snap-at-user-scroll-end-manual.html [ Timeout ]
 Bug(none) synthetic_gestures/animated-wheel-tiny-delta.html [ Failure ]
 
+# Duplicated display item id of background of scrollable table cell.
+Bug(none) fast/table/overflowHidden.html [ Crash ]
+
 # These tests have failures that were introduced between enabling BGPT for the
 # first time and later disabling it. These are not real failures and can be
 # rebaselined.
@@ -840,3 +849,4 @@ Bug(none) compositing/overflow/grandchild-with-border-radius-ancestor.html [ Fai
 Bug(none) compositing/overflow/siblings-with-border-radius-ancestor.html [ Failure ]
 Bug(none) compositing/overflow/grandchild-composited-with-border-radius-ancestor.html [ Failure ]
 Bug(none) paint/invalidation/float-offscreen.html [ Failure ]
+Bug(none) compositing/video/video-controls-squashing.html [ Failure ]

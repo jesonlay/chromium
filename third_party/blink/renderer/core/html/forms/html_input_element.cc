@@ -84,12 +84,13 @@ class ListAttributeTargetObserver : public IdTargetObserver {
  public:
   static ListAttributeTargetObserver* Create(const AtomicString& id,
                                              HTMLInputElement*);
+
+  ListAttributeTargetObserver(const AtomicString& id, HTMLInputElement*);
+
   void Trace(blink::Visitor*) override;
   void IdTargetChanged() override;
 
  private:
-  ListAttributeTargetObserver(const AtomicString& id, HTMLInputElement*);
-
   Member<HTMLInputElement> element_;
 };
 
@@ -788,10 +789,11 @@ void HTMLInputElement::ParseAttribute(
       size = kDefaultSize;
     if (size_ != size) {
       size_ = size;
-      if (GetLayoutObject())
+      if (GetLayoutObject()) {
         GetLayoutObject()
             ->SetNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(
-                LayoutInvalidationReason::kAttributeChanged);
+                layout_invalidation_reason::kAttributeChanged);
+      }
     }
   } else if (name == kAltAttr) {
     input_type_view_->AltAttributeChanged();
@@ -1798,7 +1800,7 @@ void HTMLInputElement::setWidth(unsigned width) {
 ListAttributeTargetObserver* ListAttributeTargetObserver::Create(
     const AtomicString& id,
     HTMLInputElement* element) {
-  return new ListAttributeTargetObserver(id, element);
+  return MakeGarbageCollected<ListAttributeTargetObserver>(id, element);
 }
 
 ListAttributeTargetObserver::ListAttributeTargetObserver(

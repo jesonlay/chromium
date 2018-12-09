@@ -100,47 +100,53 @@ InitSessionParams::~InitSessionParams() {}
 
 namespace {
 
+// Creates a JSON object (represented by base::DictionaryValue) that contains
+// the capabilities, for returning to the client app as the result of New
+// Session command.
 std::unique_ptr<base::DictionaryValue> CreateCapabilities(
     Session* session,
-    const Capabilities& capabilities) {
+    const Capabilities& capabilities,
+    const base::DictionaryValue& desired_caps) {
   std::unique_ptr<base::DictionaryValue> caps(new base::DictionaryValue());
-  caps->SetString("browserName", "chrome");
-  caps->SetString("version",
-                  session->chrome->GetBrowserInfo()->browser_version);
-  caps->SetString("chrome.chromedriverVersion", kChromeDriverVersion);
-  caps->SetString(
-      "goog:chromeOptions.debuggerAddress",
-      session->chrome->GetBrowserInfo()->debugger_address.ToString());
-  caps->SetString("platform", session->chrome->GetOperatingSystemName());
-  caps->SetString("pageLoadStrategy", session->chrome->page_load_strategy());
-  caps->SetBoolean("javascriptEnabled", true);
-  caps->SetBoolean("takesScreenshot", true);
-  caps->SetBoolean("takesHeapSnapshot", true);
-  caps->SetBoolean("handlesAlerts", true);
-  caps->SetBoolean("databaseEnabled", false);
-  caps->SetBoolean("locationContextEnabled", true);
-  caps->SetBoolean("mobileEmulationEnabled",
-                   session->chrome->IsMobileEmulationEnabled());
-  caps->SetBoolean("applicationCacheEnabled", false);
-  caps->SetBoolean("browserConnectionEnabled", false);
-  caps->SetBoolean("cssSelectorsEnabled", true);
-  caps->SetBoolean("webStorageEnabled", true);
-  caps->SetBoolean("rotatable", false);
-  caps->SetBoolean("acceptSslCerts", capabilities.accept_insecure_certs);
-  caps->SetBoolean("acceptInsecureCerts", capabilities.accept_insecure_certs);
-  caps->SetBoolean("nativeEvents", true);
-  caps->SetBoolean("hasTouchScreen", session->chrome->HasTouchScreen());
-  caps->SetString(session->w3c_compliant ? "unhandledPromptBehavior"
-                                         : "unexpectedAlertBehaviour",
-                  session->unhandled_prompt_behavior);
 
+  // Capabilities defined by W3C. Some of these capabilities have different
+  // names in legacy mode.
+  caps->SetString("browserName", "chrome");
+  caps->SetString(session->w3c_compliant ? "browserVersion" : "version",
+                  session->chrome->GetBrowserInfo()->browser_version);
+  if (session->w3c_compliant)
+    caps->SetString(
+        "platformName",
+        base::ToLowerASCII(session->chrome->GetOperatingSystemName()));
+  else
+    caps->SetString("platform", session->chrome->GetOperatingSystemName());
+  caps->SetString("pageLoadStrategy", session->chrome->page_load_strategy());
+  caps->SetBoolean("acceptInsecureCerts", capabilities.accept_insecure_certs);
+  const base::Value* proxy = desired_caps.FindKey("proxy");
+  if (proxy == nullptr || proxy->is_none())
+    caps->SetKey("proxy", base::Value(base::Value::Type::DICTIONARY));
+  else
+    caps->SetKey("proxy", proxy->Clone());
   // add setWindowRect based on whether we are desktop/android/remote
   if (capabilities.IsAndroid() || capabilities.IsRemoteBrowser()) {
     caps->SetBoolean("setWindowRect", false);
   } else {
     caps->SetBoolean("setWindowRect", true);
   }
+  caps->SetInteger("timeouts.script", session->script_timeout.InMilliseconds());
+  caps->SetInteger("timeouts.pageLoad",
+                   session->page_load_timeout.InMilliseconds());
+  caps->SetInteger("timeouts.implicit",
+                   session->implicit_wait.InMilliseconds());
+  caps->SetString(session->w3c_compliant ? "unhandledPromptBehavior"
+                                         : "unexpectedAlertBehaviour",
+                  session->unhandled_prompt_behavior);
 
+  // Chrome-specific extensions.
+  caps->SetString("chrome.chromedriverVersion", kChromeDriverVersion);
+  caps->SetString(
+      "goog:chromeOptions.debuggerAddress",
+      session->chrome->GetBrowserInfo()->debugger_address.ToString());
   ChromeDesktopImpl* desktop = NULL;
   Status status = session->chrome->GetAsDesktop(&desktop);
   if (status.IsOk()) {
@@ -148,6 +154,26 @@ std::unique_ptr<base::DictionaryValue> CreateCapabilities(
                     desktop->command().GetSwitchValueNative("user-data-dir"));
     caps->SetBoolean("networkConnectionEnabled",
                      desktop->IsNetworkConnectionEnabled());
+  }
+
+  // Legacy capabilities.
+  if (!session->w3c_compliant) {
+    caps->SetBoolean("javascriptEnabled", true);
+    caps->SetBoolean("takesScreenshot", true);
+    caps->SetBoolean("takesHeapSnapshot", true);
+    caps->SetBoolean("handlesAlerts", true);
+    caps->SetBoolean("databaseEnabled", false);
+    caps->SetBoolean("locationContextEnabled", true);
+    caps->SetBoolean("mobileEmulationEnabled",
+                     session->chrome->IsMobileEmulationEnabled());
+    caps->SetBoolean("applicationCacheEnabled", false);
+    caps->SetBoolean("browserConnectionEnabled", false);
+    caps->SetBoolean("cssSelectorsEnabled", true);
+    caps->SetBoolean("webStorageEnabled", true);
+    caps->SetBoolean("rotatable", false);
+    caps->SetBoolean("acceptSslCerts", capabilities.accept_insecure_certs);
+    caps->SetBoolean("nativeEvents", true);
+    caps->SetBoolean("hasTouchScreen", session->chrome->HasTouchScreen());
   }
 
   return caps;
@@ -293,7 +319,8 @@ Status InitSessionHelper(const InitSessionParams& bound_params,
     return status;
   session->detach = capabilities.detach;
   session->force_devtools_screenshot = capabilities.force_devtools_screenshot;
-  session->capabilities = CreateCapabilities(session, capabilities);
+  session->capabilities =
+      CreateCapabilities(session, capabilities, *desired_caps);
 
   if (session->w3c_compliant) {
     base::DictionaryValue body;
@@ -899,33 +926,6 @@ Status ExecuteSetNetworkConnection(Session* session,
   return Status(kOk);
 }
 
-// TODO(johnchen): There is no public method in Chrome or ChromeDesktopImpl to
-// get both size and position in one call. What we're doing now is kind of
-// wasteful, since both GetWindowPosition and GetWindowSize end up getting both
-// position and size, and then discard one of the two pieces.
-Status ExecuteGetWindowRect(Session* session,
-                            const base::DictionaryValue& params,
-                            std::unique_ptr<base::Value>* value) {
-  int x, y;
-  int width, height;
-
-  Status status = session->chrome->GetWindowPosition(session->window, &x, &y);
-  if (status.IsError())
-    return status;
-  status = session->chrome->GetWindowSize(session->window, &width, &height);
-
-  if (status.IsError())
-    return status;
-
-  base::DictionaryValue rect;
-  rect.SetInteger("x", x);
-  rect.SetInteger("y", y);
-  rect.SetInteger("width", width);
-  rect.SetInteger("height", height);
-  value->reset(rect.DeepCopy());
-  return Status(kOk);
-}
-
 Status ExecuteGetWindowPosition(Session* session,
                                 const base::DictionaryValue& params,
                                 std::unique_ptr<base::Value>* value) {
@@ -972,65 +972,6 @@ Status ExecuteGetWindowSize(Session* session,
   return Status(kOk);
 }
 
-Status ExecuteSetWindowRect(Session* session,
-                            const base::DictionaryValue& params,
-                            std::unique_ptr<base::Value>* value) {
-  const double max_range = 2147483647; // 2^31 - 1
-  const double min_range = -2147483648; // -2^31
-  const base::Value* temp;
-  double width = 0;
-  double height = 0;
-  double x = 0;
-  double y = 0;
-
-  bool has_x = params.Get("x", &temp) && !temp->is_none();
-  if (has_x) {
-    if (!temp->GetAsDouble(&x))
-      return Status(kInvalidArgument, "'x' must be a number");
-    if (x > max_range || x < min_range)
-      return Status(kInvalidArgument, "'x' out of range");
-  }
-  bool has_y = params.Get("y", &temp) && !temp->is_none();
-  if (has_y) {
-    if (!temp->GetAsDouble(&y))
-      return Status(kInvalidArgument, "'y' must be a number");
-    if (y > max_range || y < min_range )
-      return Status(kInvalidArgument, "'y' out of range");
-  }
-  bool has_width = params.Get("width", &temp) && !temp->is_none();
-  if (has_width) {
-    if (!temp->GetAsDouble(&width))
-      return Status(kInvalidArgument, "'width' must be a number");
-    if (width > max_range || width < 0 )
-      return Status(kInvalidArgument, "'width' out of range");
-  }
-  bool has_height = params.Get("height", &temp) && !temp->is_none();
-  if (has_height) {
-    if (!temp->GetAsDouble(&height))
-      return Status(kInvalidArgument, "'height' must be a number");
-    if (height > max_range || height < 0 )
-      return Status(kInvalidArgument, "'height' out of range");
-  }
-
-  // to pass to the set window rect command
-  base::DictionaryValue rect_params;
-  // only set position if both x and y are given
-  if (has_x && has_y) {
-    rect_params.SetInteger("x", static_cast<int>(x));
-    rect_params.SetInteger("y", static_cast<int>(y));
-  }  // only set size if both height and width are given
-  if (has_width && has_height) {
-    rect_params.SetInteger("width", static_cast<int>(width));
-    rect_params.SetInteger("height", static_cast<int>(height));
-  }
-  Status status = session->chrome->SetWindowRect(session->window, rect_params);
-  if (status.IsError())
-    return status;
-
-  // return the current window rect
-  return ExecuteGetWindowRect(session, params, value);
-}
-
 Status ExecuteSetWindowSize(Session* session,
                             const base::DictionaryValue& params,
                             std::unique_ptr<base::Value>* value) {
@@ -1043,36 +984,6 @@ Status ExecuteSetWindowSize(Session* session,
   return session->chrome->SetWindowSize(session->window,
                                         static_cast<int>(width),
                                         static_cast<int>(height));
-}
-
-Status ExecuteMaximizeWindow(Session* session,
-                             const base::DictionaryValue& params,
-                             std::unique_ptr<base::Value>* value) {
-  Status status = session->chrome->MaximizeWindow(session->window);
-  if (status.IsError())
-    return status;
-
-  return ExecuteGetWindowRect(session, params, value);
-}
-
-Status ExecuteMinimizeWindow(Session* session,
-                             const base::DictionaryValue& params,
-                             std::unique_ptr<base::Value>* value) {
-  Status status = session->chrome->MinimizeWindow(session->window);
-  if (status.IsError())
-    return status;
-
-  return ExecuteGetWindowRect(session, params, value);
-}
-
-Status ExecuteFullScreenWindow(Session* session,
-                               const base::DictionaryValue& params,
-                               std::unique_ptr<base::Value>* value) {
-  Status status = session->chrome->FullScreenWindow(session->window);
-  if (status.IsError())
-    return status;
-
-  return ExecuteGetWindowRect(session, params, value);
 }
 
 Status ExecuteGetAvailableLogTypes(Session* session,

@@ -14,6 +14,7 @@
 #include "components/autofill_assistant/browser/actions/get_payment_information_action.h"
 #include "components/autofill_assistant/browser/actions/highlight_element_action.h"
 #include "components/autofill_assistant/browser/actions/navigate_action.h"
+#include "components/autofill_assistant/browser/actions/prompt_action.h"
 #include "components/autofill_assistant/browser/actions/reset_action.h"
 #include "components/autofill_assistant/browser/actions/select_option_action.h"
 #include "components/autofill_assistant/browser/actions/set_attribute_action.h"
@@ -84,14 +85,15 @@ bool ProtocolUtils::ParseScripts(
     const auto& presentation = script_proto.presentation();
     script->handle.name = presentation.name();
     script->handle.autostart = presentation.autostart();
+    script->handle.interrupt = presentation.interrupt();
     script->handle.initial_prompt = presentation.initial_prompt();
     script->handle.highlight = presentation.highlight();
     script->precondition = ScriptPrecondition::FromProto(
         script_proto.path(), presentation.precondition());
     script->priority = presentation.priority();
 
-    if (script->handle.name.empty() || script->handle.path.empty() ||
-        !script->precondition) {
+    if (script->handle.path.empty() || !script->precondition ||
+        (script->handle.name.empty() && !script->handle.interrupt)) {
       LOG(ERROR) << "Ignored invalid or incomplete script '"
                  << script->handle.path << "'";
       continue;
@@ -197,6 +199,10 @@ bool ProtocolUtils::ParseActions(
       }
       case ActionProto::ActionInfoCase::kNavigate: {
         actions->emplace_back(std::make_unique<NavigateAction>(action));
+        break;
+      }
+      case ActionProto::ActionInfoCase::kPrompt: {
+        actions->emplace_back(std::make_unique<PromptAction>(action));
         break;
       }
       case ActionProto::ActionInfoCase::kStop: {

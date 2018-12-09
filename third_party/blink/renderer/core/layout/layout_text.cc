@@ -180,7 +180,7 @@ void LayoutText::StyleDidChange(StyleDifference diff,
   // We do have to schedule layouts, though, since a style change can force us
   // to need to relayout.
   if (diff.NeedsFullLayout()) {
-    SetNeedsLayoutAndPrefWidthsRecalc(LayoutInvalidationReason::kStyleChange);
+    SetNeedsLayoutAndPrefWidthsRecalc(layout_invalidation_reason::kStyleChange);
     known_to_have_no_overflow_and_no_fallback_fonts_ = false;
   }
 
@@ -1564,16 +1564,26 @@ UChar32 LayoutText::FirstCharacterAfterWhitespaceCollapsing() const {
     String text = text_box->GetText();
     return text.length() ? text.CharacterStartingAt(0) : 0;
   }
-  // TODO(kojii): Support LayoutNG once we have NGInlineItem pointers.
+  if (const NGPaintFragment* paint_fragment = FirstInlineFragment()) {
+    const StringView text =
+        ToNGPhysicalTextFragment(paint_fragment->PhysicalFragment()).Text();
+    return text.length() ? text.CodepointAt(0) : 0;
+  }
   return 0;
 }
 
 UChar32 LayoutText::LastCharacterAfterWhitespaceCollapsing() const {
   if (InlineTextBox* text_box = LastTextBox()) {
     String text = text_box->GetText();
-    return text.length() ? text.CharacterStartingAt(text.length() - 1) : 0;
+    return text.length() ? StringView(text).CodepointAt(text.length() - 1) : 0;
   }
-  // TODO(kojii): Support LayoutNG once we have NGInlineItem pointers.
+  if (const NGPaintFragment* paint_fragment = FirstInlineFragment()) {
+    const StringView text =
+        ToNGPhysicalTextFragment(
+            paint_fragment->LastForSameLayoutObject()->PhysicalFragment())
+            .Text();
+    return text.length() ? text.CodepointAt(text.length() - 1) : 0;
+  }
   return 0;
 }
 
@@ -1868,7 +1878,7 @@ void LayoutText::SetText(scoped_refptr<StringImpl> text,
       SetShouldDoFullPaintInvalidation();
     } else {
       SetNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(
-          LayoutInvalidationReason::kTextChanged);
+          layout_invalidation_reason::kTextChanged);
     }
   }
   known_to_have_no_overflow_and_no_fallback_fonts_ = false;

@@ -514,7 +514,7 @@
     Zip selection
   </message>
   <message name="IDS_FILE_BROWSER_SET_WALLPAPER_BUTTON_LABEL" desc="The context menu item to set wallpaper.">
-    Set wallpaper
+    Set as wallpaper
   </message>
   <message name="IDS_FILE_BROWSER_CREATE_FOLDER_SHORTCUT_BUTTON_LABEL" desc="Menu item label, creating a shortcut of the selected folder to the left nav.">
     Create shortcut
@@ -763,6 +763,9 @@
   </message>
   <message name="IDS_FILE_BROWSER_SEARCH_TEXT_LABEL" desc="Search text field label.">
     Search
+  </message>
+  <message name="IDS_FILE_BROWSER_SEARCH_CLEAR_LABEL" desc="Label to clear search text field">
+    Clear
   </message>
 
   <message name="IDS_FILE_BROWSER_DEFAULT_NEW_FOLDER_NAME" desc="The default name for a newly created folder.">
@@ -1024,9 +1027,6 @@
   <message name="IDS_FILE_BROWSER_DRIVE_WELCOME_TITLE_ALTERNATIVE" desc="In the Welcome to Google Drive banner, title of the alternative banner offering 100GB free storage.">
     Get 100 GB free with Google Drive
   </message>
-  <message name="IDS_FILE_BROWSER_DRIVE_WELCOME_TITLE_ALTERNATIVE_1TB" desc="In the Welcome to Google Drive banner, title of the alternative banner offering 1TB free storage.">
-    Get 1 TB free with Google Drive
-  </message>
   <message name="IDS_FILE_BROWSER_DRIVE_WELCOME_TEXT_SHORT" desc="In the Welcome to Google Drive banner, text of the welcome message, short version.">
     All files saved in this folder are backed up online automatically
   </message>
@@ -1264,6 +1264,15 @@
   </message>
   <message name="IDS_FILE_BROWSER_SEE_MENU_FOR_ACTIONS" desc="Text to be used by screen reader to indicate users that there are more options on the action bar.">
     More options available on the action bar. Press Alt + A to focus the action bar.
+  </message>
+  <message name="IDS_FILE_BROWSER_OPEN_A11Y" desc="Text to be used by screen reader to indicate users that the opening one single file is being executed.">
+    Opening file <ph name="FILE_NAME"> $1<ex>file_name.txt</ex>.</ph>
+  </message>
+  <message name="IDS_FILE_BROWSER_OPEN_A11Y_PLURAL" desc="Text to be used by screen reader to indicate users that the opening multiple files is being executed.">
+    Opening <ph name="NUMBER_FILES"> $1<ex>3</ex> files.</ph>
+  </message>
+  <message name="IDS_FILE_BROWSER_A11Y_VOLUME_EJECT" desc="Text to be used by screen reader to indicate users that the eject volume action has finished.">
+    <ph name="VOLUME_NAME">$1<ex>file_name.rar</ex> has been ejected.</ph>
   </message>
 
 <!-- Common for Audio player and Media player -->

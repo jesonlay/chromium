@@ -124,7 +124,14 @@ class AnimationCompositorAnimationsTest : public RenderingTest {
 
     timeline_ = DocumentTimeline::Create(&GetDocument());
     timeline_->ResetForTesting();
-    element_ = GetDocument().CreateElementForBinding("test");
+
+    // Using will-change ensures that this object will need paint properties.
+    // Having an animation would normally ensure this but these tests don't
+    // explicitly construct a full animation on the element.
+    SetBodyInnerHTML(R"HTML(
+        <div id='test' style='will-change: opacity,filter,transform;'></div>
+    )HTML");
+    element_ = GetDocument().getElementById("test");
 
     helper_.Initialize(nullptr, nullptr, nullptr);
     base_url_ = "http://www.test.com/";
@@ -171,9 +178,9 @@ class AnimationCompositorAnimationsTest : public RenderingTest {
       StringKeyframeEffectModel& effect,
       Vector<std::unique_ptr<CompositorKeyframeModel>>& keyframe_models,
       double animation_playback_rate) {
-    CompositorAnimations::GetAnimationOnCompositor(timing, 0, base::nullopt, 0,
-                                                   effect, keyframe_models,
-                                                   animation_playback_rate);
+    CompositorAnimations::GetAnimationOnCompositor(
+        *element_, timing, 0, base::nullopt, 0, effect, keyframe_models,
+        animation_playback_rate);
   }
 
   bool DuplicateSingleKeyframeAndTestIsCandidateOnResult(
@@ -458,7 +465,8 @@ class AnimationCompositorAnimationsTest : public RenderingTest {
   }
 
   void ForceFullCompositingUpdate() {
-    helper_.GetWebView()->MainFrameWidget()->UpdateAllLifecyclePhases();
+    helper_.GetWebView()->MainFrameWidget()->UpdateAllLifecyclePhases(
+        WebWidget::LifecycleUpdateReason::kTest);
   }
 
  private:
@@ -797,6 +805,7 @@ TEST_F(AnimationCompositorAnimationsTest,
 
 TEST_F(AnimationCompositorAnimationsTest,
        CanStartElementOnCompositorEffectOpacity) {
+  ScopedBlinkGenPropertyTreesForTest blink_gen_property_trees(true);
   Persistent<Element> element = GetDocument().CreateElementForBinding("shared");
 
   LayoutObjectProxy* layout_object = LayoutObjectProxy::Create(element.Get());
@@ -805,7 +814,7 @@ TEST_F(AnimationCompositorAnimationsTest,
 
   CompositorElementIdSet compositor_ids;
   compositor_ids.insert(CompositorElementIdFromUniqueObjectId(
-      layout_object->UniqueId(), CompositorElementIdNamespace::kPrimary));
+      layout_object->UniqueId(), CompositorElementIdNamespace::kPrimaryEffect));
 
   // We need an ID to be in the set, but not the same.
   CompositorElementId different_id = CompositorElementIdFromUniqueObjectId(
@@ -870,7 +879,8 @@ TEST_F(AnimationCompositorAnimationsTest,
 
   // Timings have to be convertible for compositor.
   compositor_ids.insert(CompositorElementIdFromUniqueObjectId(
-      new_layout_object->UniqueId(), CompositorElementIdNamespace::kPrimary));
+      new_layout_object->UniqueId(),
+      CompositorElementIdNamespace::kPrimaryEffect));
   EXPECT_TRUE(CheckCanStartEffectOnCompositor(
       timing, *element.Get(), animation, *animation_effect, compositor_ids));
   timing.end_delay = 1.0;
@@ -895,7 +905,7 @@ TEST_F(AnimationCompositorAnimationsTest,
 
   CompositorElementIdSet compositor_ids;
   compositor_ids.insert(CompositorElementIdFromUniqueObjectId(
-      layout_object->UniqueId(), CompositorElementIdNamespace::kPrimary));
+      layout_object->UniqueId(), CompositorElementIdNamespace::kPrimaryEffect));
 
   // Check that we notice the value is not animatable correctly.
   const CSSProperty& target_property1(GetCSSPropertyOutlineStyle());
@@ -1038,6 +1048,7 @@ TEST_F(AnimationCompositorAnimationsTest,
 
 TEST_F(AnimationCompositorAnimationsTest,
        CanStartElementOnCompositorEffectTransform) {
+  ScopedBlinkGenPropertyTreesForTest blink_gen_property_trees(true);
   Persistent<Element> element = GetDocument().CreateElementForBinding("shared");
 
   LayoutObjectProxy* layout_object = LayoutObjectProxy::Create(element.Get());
@@ -1046,7 +1057,10 @@ TEST_F(AnimationCompositorAnimationsTest,
 
   CompositorElementIdSet compositor_ids;
   compositor_ids.insert(CompositorElementIdFromUniqueObjectId(
-      layout_object->UniqueId(), CompositorElementIdNamespace::kPrimary));
+      layout_object->UniqueId(),
+      CompositorElementIdNamespace::kPrimaryTransform));
+  compositor_ids.insert(CompositorElementIdFromUniqueObjectId(
+      layout_object->UniqueId(), CompositorElementIdNamespace::kPrimaryEffect));
 
   CompositorElementId different_id = CompositorElementIdFromUniqueObjectId(
       layout_object->UniqueId(), CompositorElementIdNamespace::kEffectFilter);
@@ -1906,54 +1920,6 @@ TEST_F(AnimationCompositorAnimationsTest,
       document->View()->GetCompositorAnimationHost();
   EXPECT_EQ(host->GetMainThreadAnimationsCountForTesting(), 4u);
   EXPECT_EQ(host->GetCompositedAnimationsCountForTesting(), 0u);
-}
-
-TEST_F(AnimationCompositorAnimationsTest, HasCSSAnimationsWithFillMode) {
-  LoadTestData("css-animation-with-fill-mode.html");
-  Document* document = GetFrame()->GetDocument();
-  Element* target1 = document->getElementById("target1");
-  const ComputedStyle* style1 = target1->GetLayoutObject()->Style();
-  EXPECT_FALSE(style1->HasTransformAnimationWithForwardsOrBothFillMode());
-  EXPECT_FALSE(style1->CanContainFixedPositionObjects(false));
-
-  Element* target2 = document->getElementById("target2");
-  const ComputedStyle* style2 = target2->GetLayoutObject()->Style();
-  EXPECT_TRUE(style2->HasTransformAnimationWithForwardsOrBothFillMode());
-  EXPECT_TRUE(style2->CanContainFixedPositionObjects(false));
-
-  Element* target3 = document->getElementById("target3");
-  const ComputedStyle* style3 = target3->GetLayoutObject()->Style();
-  EXPECT_TRUE(style3->HasTransformAnimationWithForwardsOrBothFillMode());
-  EXPECT_TRUE(style3->CanContainFixedPositionObjects(false));
-
-  Element* target4 = document->getElementById("target4");
-  const ComputedStyle* style4 = target4->GetLayoutObject()->Style();
-  EXPECT_FALSE(style4->HasTransformAnimationWithForwardsOrBothFillMode());
-  EXPECT_FALSE(style4->CanContainFixedPositionObjects(false));
-}
-
-TEST_F(AnimationCompositorAnimationsTest, HasWebAnimationsWithFillMode) {
-  LoadTestData("web-animation-with-fill-mode.html");
-  Document* document = GetFrame()->GetDocument();
-  Element* target1 = document->getElementById("target1");
-  const ComputedStyle* style1 = target1->GetLayoutObject()->Style();
-  EXPECT_FALSE(style1->HasTransformAnimationWithForwardsOrBothFillMode());
-  EXPECT_FALSE(style1->CanContainFixedPositionObjects(false));
-
-  Element* target2 = document->getElementById("target2");
-  const ComputedStyle* style2 = target2->GetLayoutObject()->Style();
-  EXPECT_TRUE(style2->HasTransformAnimationWithForwardsOrBothFillMode());
-  EXPECT_TRUE(style2->CanContainFixedPositionObjects(false));
-
-  Element* target3 = document->getElementById("target3");
-  const ComputedStyle* style3 = target3->GetLayoutObject()->Style();
-  EXPECT_TRUE(style3->HasTransformAnimationWithForwardsOrBothFillMode());
-  EXPECT_TRUE(style3->CanContainFixedPositionObjects(false));
-
-  Element* target4 = document->getElementById("target4");
-  const ComputedStyle* style4 = target4->GetLayoutObject()->Style();
-  EXPECT_FALSE(style4->HasTransformAnimationWithForwardsOrBothFillMode());
-  EXPECT_FALSE(style4->CanContainFixedPositionObjects(false));
 }
 
 }  // namespace blink

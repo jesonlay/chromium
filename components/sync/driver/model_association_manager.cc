@@ -41,9 +41,10 @@ static const ModelType kStartOrder[] = {
     ARC_PACKAGE, READING_LIST, THEMES, SEARCH_ENGINES, SESSIONS,
     APP_NOTIFICATIONS, DICTIONARY, FAVICON_IMAGES, FAVICON_TRACKING, PRINTERS,
     USER_CONSENTS, USER_EVENTS, SUPERVISED_USER_SETTINGS,
-    SUPERVISED_USER_WHITELISTS, WIFI_CREDENTIALS, DEPRECATED_SUPERVISED_USERS,
-    MOUNTAIN_SHARES, DEPRECATED_SUPERVISED_USER_SHARED_SETTINGS,
-    DEPRECATED_ARTICLES, SEND_TAB_TO_SELF};
+    SUPERVISED_USER_WHITELISTS, DEPRECATED_WIFI_CREDENTIALS,
+    DEPRECATED_SUPERVISED_USERS, MOUNTAIN_SHARES,
+    DEPRECATED_SUPERVISED_USER_SHARED_SETTINGS, DEPRECATED_ARTICLES,
+    SEND_TAB_TO_SELF};
 
 static_assert(arraysize(kStartOrder) ==
                   MODEL_TYPE_COUNT - FIRST_REAL_MODEL_TYPE,
@@ -150,8 +151,8 @@ void ModelAssociationManager::Initialize(ModelTypeSet desired_types,
       // reason is that if a user temporarily disables Sync, we don't want to
       // wipe (and later redownload) all their data, just because Sync restarted
       // in transport-only mode.
-      if (storage_option_changed && configure_context_.storage_option ==
-                                        ConfigureContext::STORAGE_IN_MEMORY) {
+      if (storage_option_changed &&
+          configure_context_.storage_option == STORAGE_IN_MEMORY) {
         reason = STOP_SYNC;
       }
       types_to_stop[dtc] = reason;

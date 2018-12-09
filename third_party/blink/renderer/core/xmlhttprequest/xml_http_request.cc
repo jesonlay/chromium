@@ -239,9 +239,7 @@ class XMLHttpRequest::BlobLoader final
     xhr_->DidReceiveData(data, length);
   }
   void DidFinishLoading() override { xhr_->DidFinishLoadingFromBlob(); }
-  void DidFail(file_error::ErrorCode error) override {
-    xhr_->DidFailLoadingFromBlob();
-  }
+  void DidFail(FileErrorCode error) override { xhr_->DidFailLoadingFromBlob(); }
 
   void Cancel() { loader_->Cancel(); }
 
@@ -576,9 +574,9 @@ void XMLHttpRequest::DispatchReadyStateChangeEvent() {
 
   ScopedEventDispatchProtect protect(&event_dispatch_recursion_level_);
   if (async_ || (state_ <= kOpened || state_ == kDone)) {
-    TRACE_EVENT1(
-        "devtools.timeline", "XHRReadyStateChange", "data",
-        InspectorXhrReadyStateChangeEvent::Data(GetExecutionContext(), this));
+    TRACE_EVENT1("devtools.timeline", "XHRReadyStateChange", "data",
+                 inspector_xhr_ready_state_change_event::Data(
+                     GetExecutionContext(), this));
     XMLHttpRequestProgressEventThrottle::DeferredEventAction action =
         XMLHttpRequestProgressEventThrottle::kIgnore;
     if (state_ == kDone) {
@@ -593,7 +591,7 @@ void XMLHttpRequest::DispatchReadyStateChangeEvent() {
 
   if (state_ == kDone && !error_) {
     TRACE_EVENT1("devtools.timeline", "XHRLoad", "data",
-                 InspectorXhrLoadEvent::Data(GetExecutionContext(), this));
+                 inspector_xhr_load_event::Data(GetExecutionContext(), this));
     DispatchProgressEventFromSnapshot(event_type_names::kLoad);
     DispatchProgressEventFromSnapshot(event_type_names::kLoadend);
   }

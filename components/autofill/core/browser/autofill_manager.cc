@@ -72,6 +72,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/security_state/core/security_state.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/version_info/channel.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/geometry/rect.h"
@@ -1045,6 +1046,13 @@ bool AutofillManager::IsCreditCardAutofillEnabled() const {
   return ::autofill::prefs::IsCreditCardAutofillEnabled(client_->GetPrefs());
 }
 
+// static
+bool AutofillManager::IsRichQueryEnabled(version_info::Channel channel) {
+  return base::FeatureList::IsEnabled(features::kAutofillRichMetadataQueries) &&
+         channel != version_info::Channel::STABLE &&
+         channel != version_info::Channel::BETA;
+}
+
 bool AutofillManager::ShouldUploadForm(const FormStructure& form) {
   return IsAutofillEnabled() && !driver()->IsIncognito() &&
          form.ShouldBeUploaded();
@@ -1158,6 +1166,7 @@ AutofillManager::AutofillManager(
 #if defined(OS_ANDROID) || defined(OS_IOS)
       autofill_assistant_(this),
 #endif
+      is_rich_query_enabled_(IsRichQueryEnabled(client->GetChannel())),
       weak_ptr_factory_(this) {
   DCHECK(driver);
   DCHECK(client_);
@@ -1281,6 +1290,9 @@ void AutofillManager::FillOrPreviewDataModelForm(
       !is_refill && !is_credit_card;
 
   for (size_t i = 0; i < form_structure->field_count(); ++i) {
+    // On the renderer, the section is used regardless of the autofill status.
+    result.fields[i].section = form_structure->field(i)->section;
+
     if (form_structure->field(i)->section != autofill_field->section)
       continue;
 
@@ -1352,9 +1364,6 @@ void AutofillManager::FillOrPreviewDataModelForm(
     // will be sent to the renderer.
     FillFieldWithValue(cached_field, data_model, &result.fields[i],
                        should_notify, cvc);
-    // On the renderer, only the section of newly autofilled fields are updated.
-    if (result.fields[i].is_autofilled)
-      result.fields[i].section = form_structure->field(i)->section;
 
     if (!cached_field->IsVisible() && result.fields[i].is_autofilled) {
       AutofillMetrics::LogHiddenOrPresentationalSelectFieldsFilled();
@@ -1502,8 +1511,10 @@ void AutofillManager::OnFormsParsed(
                               client_->GetUkmSourceId(), form_structure);
     std::set<FormType> current_form_types = form_structure->GetFormTypes();
     form_types.insert(current_form_types.begin(), current_form_types.end());
-    // Set aside forms with method GET or author-specified types, so that they
-    // are not included in the query to the server.
+
+    // Configure the query encoding for this form and add it to the appropriate
+    // collection of forms: queryable vs non-queryable.
+    form_structure->set_is_rich_query_enabled(is_rich_query_enabled_);
     if (form_structure->ShouldBeQueried())
       queryable_forms.push_back(form_structure);
     else
@@ -1568,8 +1579,8 @@ void AutofillManager::OnFormsParsed(
   driver()->SendAutofillTypePredictionsToRenderer(non_queryable_forms);
   driver()->SendAutofillTypePredictionsToRenderer(queryable_forms);
 
+  // Query the server if at least one of the forms was parsed.
   if (!queryable_forms.empty() && download_manager_) {
-    // Query the server if at least one of the forms was parsed.
     download_manager_->StartQueryRequest(queryable_forms);
   }
 }
@@ -1864,8 +1875,6 @@ void AutofillManager::FillFieldWithValue(AutofillField* autofill_field,
 bool AutofillManager::ShouldTriggerRefill(const FormStructure& form_structure) {
   if (!base::FeatureList::IsEnabled(features::kAutofillDynamicForms))
     return false;
-
-  address_form_event_logger_->OnDidSeeDynamicForm();
 
   // Should not refill if a form with the same name has not been filled before.
   auto itr =

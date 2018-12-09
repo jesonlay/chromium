@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/window_animation_types.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/public/cpp/window_state_type.h"
@@ -736,6 +737,9 @@ void WindowState::SetBoundsDirectCrossFade(const gfx::Rect& new_bounds,
 }
 
 void WindowState::UpdatePipRoundedCorners() {
+  if (!features::IsPipRoundedCornersEnabled())
+    return;
+
   auto* layer = window()->layer();
   if (!IsPip()) {
     // Only remove the mask layer if it is from the existing PIP mask.
@@ -862,6 +866,15 @@ void WindowState::OnWindowDestroying(aura::Window* window) {
   immersive_gesture_drag_handler_.reset();
   current_state_->OnWindowDestroying(this);
   delegate_.reset();
+}
+
+void WindowState::OnWindowLayerRecreated(aura::Window* window) {
+  DCHECK_EQ(window_, window);
+  // THe mask layer will be moved with old layer.
+  DCHECK(!window_->layer()->layer_mask_layer());
+  pip_mask_.reset();
+  if (IsPip())
+    UpdatePipRoundedCorners();
 }
 
 }  // namespace wm

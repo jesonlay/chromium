@@ -52,8 +52,6 @@ Polymer({
 
     unifiedConsentEnabled: Boolean,
 
-    unifiedConsentGiven: Boolean,
-
     // <if expr="_google_chrome and not chromeos">
     // TODO(dbeam): make a virtual.* pref namespace and set/get this normally
     // (but handled differently in C++).
@@ -132,9 +130,10 @@ Polymer({
    * @private
    */
   showSpellCheckControl_: function() {
-    return !!this.prefs.spellcheck &&
-        /** @type {!Array<string>} */
-        (this.prefs.spellcheck.dictionaries.value).length > 0;
+    return !this.unifiedConsentEnabled ||
+        (!!this.prefs.spellcheck &&
+         /** @type {!Array<string>} */
+         (this.prefs.spellcheck.dictionaries.value).length > 0);
   },
 });
 })();

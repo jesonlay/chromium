@@ -762,7 +762,12 @@ public class CustomTabsConnection {
             CustomTabsSessionToken sessionToken, int relation, Origin origin, Bundle extras) {
         // Essential parts of the verification will depend on native code and will be run sync on UI
         // thread. Make sure the client has called warmup() beforehand.
-        if (!mWarmupHasBeenCalled.get()) return false;
+        if (!mWarmupHasBeenCalled.get()) {
+            Log.d(TAG, "Verification failed due to warmup not having been previously called.");
+            mClientManager.getCallbackForSession(sessionToken).onRelationshipValidationResult(
+                    relation, Uri.parse(origin.toString()), false, null);
+            return false;
+        }
         return mClientManager.validateRelationship(sessionToken, relation, origin, extras);
     }
 
@@ -997,13 +1002,11 @@ public class CustomTabsConnection {
         ThreadUtils.assertOnUiThread();
         // The restrictions are:
         // - Native initialization: Required to get the profile, and the feature state.
-        // - Feature check
         // - The referrer's origin is allowed.
         //
         // TODO(lizeb): Relax the restrictions.
         return ChromeBrowserInitializer.getInstance(ContextUtils.getApplicationContext())
                        .hasNativeInitializationCompleted()
-                && ChromeFeatureList.isEnabled(ChromeFeatureList.CCT_PARALLEL_REQUEST)
                 && mClientManager.isFirstPartyOriginForSession(session, new Origin(referrer));
     }
 
@@ -1445,7 +1448,7 @@ public class CustomTabsConnection {
         if (extras != null) extrasIntent.putExtras(extras);
         if (IntentHandler.getExtraHeadersFromIntent(extrasIntent) != null) return;
 
-        Tab tab = Tab.createDetached(new CustomTabDelegateFactory(false, false, null));
+        Tab tab = Tab.createDetached(CustomTabDelegateFactory.createDummy());
         HiddenTabObserver observer = new HiddenTabObserver(this);
         tab.addObserver(observer);
 

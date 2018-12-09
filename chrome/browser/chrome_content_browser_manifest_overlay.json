@@ -30,7 +30,7 @@
         ]
       },
       "requires": {
-        "apps": [ "app_registry" ],
+        "apps": [ "app_service" ],
         "ash": [ "system_ui", "test", "display" ],
         // Only used in classic ash case.
         "ash_pref_connector": [ "pref_connector" ],
@@ -106,6 +106,7 @@
           "translate.mojom.ContentTranslateDriver",
 
           // TODO(beng): These should be moved to a separate capability.
+          "app_management.mojom.PageHandlerFactory",
           "eoc_internals.mojom.PageHandler",
           "media.mojom.MediaEngagementScoreDetailsProvider",
           "mojom.BluetoothInternalsHandler",

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/extensions/api/permissions/permissions_api.h"
+
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/test/scoped_feature_list.h"
@@ -11,6 +12,7 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_service_test_with_install.h"
 #include "chrome/browser/extensions/extension_util.h"
+#include "chrome/browser/extensions/permissions_test_util.h"
 #include "chrome/browser/extensions/permissions_updater.h"
 #include "chrome/browser/extensions/scripting_permissions_modifier.h"
 #include "chrome/test/base/testing_profile.h"
@@ -24,18 +26,7 @@ namespace extensions {
 
 namespace {
 
-// Returns a list of |patterns| as strings, making it easy to compare for
-// equality with readable errors.
-// TODO(devlin): This was blatantly copy-pasted from
-// scriptable_permissions_modifier_unittest.cc. Put it somewhere common.
-std::vector<std::string> GetPatternsAsStrings(const URLPatternSet& patterns) {
-  std::vector<std::string> pattern_strings;
-  pattern_strings.reserve(patterns.size());
-  for (const auto& pattern : patterns)
-    pattern_strings.push_back(pattern.GetAsString());
-
-  return pattern_strings;
-}
+using permissions_test_util::GetPatternsAsStrings;
 
 scoped_refptr<const Extension> CreateExtensionWithPermissions(
     std::unique_ptr<base::Value> permissions,
@@ -348,8 +339,8 @@ TEST_F(PermissionsAPIUnitTest, ReRequestingWithheldOptionalPermissions) {
     PermissionSet permissions(APIPermissionSet(), ManifestPermissionSet(),
                               URLPatternSet({chromium_org_pattern}),
                               URLPatternSet());
-    PermissionsUpdater(profile()).RevokeRuntimePermissions(*extension,
-                                                           permissions);
+    permissions_test_util::RevokeRuntimePermissionsAndWaitForCompletion(
+        profile(), *extension, permissions);
   }
   EXPECT_TRUE(
       permissions_data->active_permissions().effective_hosts().is_empty());

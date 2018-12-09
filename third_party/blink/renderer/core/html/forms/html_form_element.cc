@@ -44,6 +44,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/remote_frame.h"
 #include "third_party/blink/renderer/core/frame/use_counter.h"
+#include "third_party/blink/renderer/core/html/custom/element_internals.h"
 #include "third_party/blink/renderer/core/html/forms/form_controller.h"
 #include "third_party/blink/renderer/core/html/forms/form_data.h"
 #include "third_party/blink/renderer/core/html/forms/form_data_event.h"
@@ -355,6 +356,15 @@ void HTMLFormElement::Submit(Event* event,
     return;
   }
 
+  if (is_constructing_entry_list_) {
+    DCHECK(RuntimeEnabledFeatures::FormDataEventEnabled());
+    GetDocument().AddConsoleMessage(
+        ConsoleMessage::Create(kJSMessageSource, kWarningMessageLevel,
+                               "Form submission canceled because the form is "
+                               "constructing entry list"));
+    return;
+  }
+
   if (is_submitting_)
     return;
 
@@ -402,9 +412,12 @@ void HTMLFormElement::Submit(Event* event,
   }
 }
 
-void HTMLFormElement::ConstructFormDataSet(
-    HTMLFormControlElement* submit_button,
-    FormData& form_data) {
+bool HTMLFormElement::ConstructEntryList(HTMLFormControlElement* submit_button,
+                                         FormData& form_data) {
+  if (is_constructing_entry_list_) {
+    return false;
+  }
+  base::AutoReset<bool> entry_list_scope(&is_constructing_entry_list_, true);
   if (submit_button)
     submit_button->SetActivatedSubmit(true);
   for (ListedElement* control : ListedElements()) {
@@ -423,6 +436,7 @@ void HTMLFormElement::ConstructFormDataSet(
 
   if (submit_button)
     submit_button->SetActivatedSubmit(false);
+  return true;
 }
 
 void HTMLFormElement::ScheduleFormSubmission(FormSubmission* submission) {
@@ -612,6 +626,8 @@ void HTMLFormElement::CollectListedElements(
     ListedElement* listed_element = nullptr;
     if (element.IsFormControlElement())
       listed_element = ToHTMLFormControlElement(&element);
+    else if (element.IsFormAssociatedCustomElement())
+      listed_element = &element.EnsureElementInternals();
     else if (auto* object = ToHTMLObjectElementOrNull(element))
       listed_element = object;
     else

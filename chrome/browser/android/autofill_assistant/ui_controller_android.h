@@ -38,12 +38,16 @@ class UiControllerAndroid : public UiController,
   // Overrides UiController:
   void SetUiDelegate(UiDelegate* ui_delegate) override;
   void ShowStatusMessage(const std::string& message) override;
+  std::string GetStatusMessage() override;
   void ShowOverlay() override;
   void HideOverlay() override;
   void Shutdown() override;
   void ShutdownGracefully() override;
-  void CloseCustomTab() override;
+  void Close() override;
   void UpdateScripts(const std::vector<ScriptHandle>& scripts) override;
+  void Choose(const std::vector<UiController::Choice>& choices,
+              base::OnceCallback<void(const std::string&)> callback) override;
+  void ForceChoose(const std::string& result) override;
   void ChooseAddress(
       base::OnceCallback<void(const std::string&)> callback) override;
   void ChooseCard(
@@ -89,6 +93,9 @@ class UiControllerAndroid : public UiController,
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& jcaller,
       const base::android::JavaParamRef<jstring>& jscript_path);
+  void OnChoice(JNIEnv* env,
+                const base::android::JavaParamRef<jobject>& jcaller,
+                const base::android::JavaParamRef<jbyteArray>& jserver_payload);
   void OnAddressSelected(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& jcaller,
@@ -128,7 +135,7 @@ class UiControllerAndroid : public UiController,
   UiDelegate* ui_delegate_;
   content::BrowserContext* browser_context_;
 
-  base::OnceCallback<void(const std::string&)> address_or_card_callback_;
+  base::OnceCallback<void(const std::string&)> choice_callback_;
   base::OnceCallback<void(std::unique_ptr<PaymentInformation>)>
       get_payment_information_callback_;
   std::unique_ptr<AccessTokenFetcher> access_token_fetcher_;

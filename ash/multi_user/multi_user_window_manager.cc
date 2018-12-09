@@ -15,12 +15,13 @@
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "ash/ws/window_service_owner.h"
 #include "base/auto_reset.h"
 #include "base/macros.h"
-#include "ui/aura/client/aura_constants.h"
+#include "services/ws/window_service.h"
+#include "ui/aura/mus/window_mus.h"
+#include "ui/aura/mus/window_tree_client.h"
 #include "ui/aura/window.h"
-#include "ui/aura/window_event_dispatcher.h"
-#include "ui/aura/window_tree_host.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/events/event.h"
 #include "ui/views/mus/mus_client.h"
@@ -82,6 +83,35 @@ mojom::WallpaperUserInfoPtr WallpaperUserInfoForAccount(
   return wallpaper_user_info;
 }
 
+// If |window| has a remote client, this converts it to the remote window used
+// by the delegate. This effectively undoes the mapping that
+// MultiUserWindowManagerBridge does.
+// TODO: remove this and instead notify about changes to these windows over a
+// mojom. https://crbug.com/875111.
+aura::Window* MapWindowIfNecessary(aura::Window* window) {
+  if (!ws::WindowService::HasRemoteClient(window) ||
+      !views::MusClient::Exists()) {
+    return window;
+  }
+
+  const ws::Id window_id = Shell::Get()
+                               ->window_service_owner()
+                               ->window_service()
+                               ->GetTopLevelWindowId(window);
+  if (window_id == ws::kInvalidTransportId)
+    return window;
+
+  // children[0] is used to deal with DesktopNativeWidgetAura. In particular,
+  // client code generally expects to see the first child, which corresponds to
+  // Widget::GetNativeWindow(), when using DesktopNativeWidgetAura.
+  aura::WindowMus* window_mus =
+      views::MusClient::Get()->window_tree_client()->GetWindowByServerId(
+          window_id);
+  return window_mus && !window_mus->GetWindow()->children().empty()
+             ? window_mus->GetWindow()->children()[0]
+             : window;
+}
+
 }  // namespace
 
 // A class to temporarily change the animation properties for a window.
@@ -134,13 +164,12 @@ MultiUserWindowManager::~MultiUserWindowManager() {
     animation_->CancelAnimation();
 
   // Remove all window observers.
-  WindowToEntryMap::iterator window = window_to_entry_.begin();
-  while (window != window_to_entry_.end()) {
+  while (!window_to_entry_.empty()) {
     // Explicitly remove this from window observer list since OnWindowDestroyed
     // no longer does that.
-    window->first->RemoveObserver(this);
-    OnWindowDestroyed(window->first);
-    window = window_to_entry_.begin();
+    aura::Window* window = window_to_entry_.begin()->first;
+    window->RemoveObserver(this);
+    OnWindowDestroyed(window);
   }
 
   Shell::Get()->session_controller()->RemoveObserver(this);
@@ -154,7 +183,8 @@ MultiUserWindowManager* MultiUserWindowManager::Get() {
 }
 
 void MultiUserWindowManager::SetWindowOwner(aura::Window* window,
-                                            const AccountId& account_id) {
+                                            const AccountId& account_id,
+                                            bool show_for_current_user) {
   // Make sure the window is valid and there was no owner yet.
   DCHECK(window);
   DCHECK(account_id.is_valid());
@@ -162,10 +192,13 @@ void MultiUserWindowManager::SetWindowOwner(aura::Window* window,
   if (GetWindowOwner(window) == account_id)
     return;
   DCHECK(GetWindowOwner(window).empty());
-  window_to_entry_[window] = new WindowEntry(account_id);
+  std::unique_ptr<WindowEntry> window_entry_ptr =
+      std::make_unique<WindowEntry>(account_id);
+  WindowEntry* window_entry = window_entry_ptr.get();
+  window_to_entry_[window] = std::move(window_entry_ptr);
 
   // Remember the initial visibility of the window.
-  window_to_entry_[window]->set_show(window->IsVisible());
+  window_entry->set_show(window->IsVisible());
 
   // Add observers to track state changes.
   window->AddObserver(this);
@@ -173,8 +206,8 @@ void MultiUserWindowManager::SetWindowOwner(aura::Window* window,
 
   // Check if this window was created due to a user interaction. If it was,
   // transfer it to the current user.
-  if (window->GetProperty(aura::client::kCreatedByUserGesture))
-    window_to_entry_[window]->set_show_for_user(current_account_id_);
+  if (show_for_current_user)
+    window_entry->set_show_for_user(current_account_id_);
 
   // Add all transient children to our set of windows. Note that the function
   // will add the children but not the owner to the transient children map.
@@ -206,9 +239,8 @@ void MultiUserWindowManager::ShowWindowForUser(aura::Window* window,
 }
 
 bool MultiUserWindowManager::AreWindowsSharedAmongUsers() const {
-  WindowToEntryMap::const_iterator it = window_to_entry_.begin();
-  for (; it != window_to_entry_.end(); ++it) {
-    if (it->second->owner() != it->second->show_for_user())
+  for (auto& window_pair : window_to_entry_) {
+    if (window_pair.second->owner() != window_pair.second->show_for_user())
       return true;
   }
   return false;
@@ -269,8 +301,6 @@ void MultiUserWindowManager::OnWindowDestroyed(aura::Window* window) {
     return;
   }
   ::wm::TransientWindowManager::GetOrCreate(window)->RemoveObserver(this);
-  // Remove the window from the owners list.
-  delete window_to_entry_[window];
   window_to_entry_.erase(window);
 }
 
@@ -340,7 +370,7 @@ void MultiUserWindowManager::OnTransientChildRemoved(
 }
 
 void MultiUserWindowManager::OnTabletModeStarted() {
-  for (auto entry : window_to_entry_)
+  for (auto& entry : window_to_entry_)
     Shell::Get()->tablet_mode_controller()->AddWindow(entry.first);
 }
 
@@ -372,23 +402,25 @@ bool MultiUserWindowManager::ShowWindowForUserIntern(
   if (account_id != owner && minimized)
     return false;
 
-  WindowToEntryMap::iterator it = window_to_entry_.find(window);
-  it->second->set_show_for_user(account_id);
+  WindowEntry* window_entry = window_to_entry_[window].get();
+  window_entry->set_show_for_user(account_id);
 
   const bool teleported = !IsWindowOnDesktopOfUser(window, owner);
 
   // Show the window if the added user is the current one.
   if (account_id == current_account_id_) {
     // Only show the window if it should be shown according to its state.
-    if (it->second->show())
+    if (window_entry->show())
       SetWindowVisibility(window, true, kTeleportAnimationTime);
   } else {
     SetWindowVisibility(window, false, kTeleportAnimationTime);
   }
 
   // Notify entry change.
-  if (delegate_)
-    delegate_->OnOwnerEntryChanged(window, account_id, minimized, teleported);
+  if (delegate_) {
+    delegate_->OnOwnerEntryChanged(MapWindowIfNecessary(window), account_id,
+                                   minimized, teleported);
+  }
   return true;
 }
 

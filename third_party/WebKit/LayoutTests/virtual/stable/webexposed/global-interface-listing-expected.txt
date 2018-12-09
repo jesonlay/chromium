@@ -3722,12 +3722,6 @@ interface MediaCapabilities
     attribute @@toStringTag
     method constructor
     method decodingInfo
-interface MediaCapabilitiesInfo
-    attribute @@toStringTag
-    getter powerEfficient
-    getter smooth
-    getter supported
-    method constructor
 interface MediaDeviceInfo
     attribute @@toStringTag
     getter deviceId
@@ -4831,12 +4825,14 @@ interface RTCIceCandidate
 interface RTCPeerConnection : EventTarget
     static method generateCertificate
     attribute @@toStringTag
+    getter connectionState
     getter currentLocalDescription
     getter currentRemoteDescription
     getter iceConnectionState
     getter iceGatheringState
     getter localDescription
     getter onaddstream
+    getter onconnectionstatechange
     getter ondatachannel
     getter onicecandidate
     getter oniceconnectionstatechange
@@ -4872,6 +4868,7 @@ interface RTCPeerConnection : EventTarget
     method setLocalDescription
     method setRemoteDescription
     setter onaddstream
+    setter onconnectionstatechange
     setter ondatachannel
     setter onicecandidate
     setter oniceconnectionstatechange
@@ -5403,11 +5400,22 @@ interface SVGEllipseElement : SVGGeometryElement
     method constructor
 interface SVGFEBlendElement : SVGElement
     attribute @@toStringTag
+    attribute SVG_FEBLEND_MODE_COLOR
+    attribute SVG_FEBLEND_MODE_COLOR_BURN
+    attribute SVG_FEBLEND_MODE_COLOR_DODGE
     attribute SVG_FEBLEND_MODE_DARKEN
+    attribute SVG_FEBLEND_MODE_DIFFERENCE
+    attribute SVG_FEBLEND_MODE_EXCLUSION
+    attribute SVG_FEBLEND_MODE_HARD_LIGHT
+    attribute SVG_FEBLEND_MODE_HUE
     attribute SVG_FEBLEND_MODE_LIGHTEN
+    attribute SVG_FEBLEND_MODE_LUMINOSITY
     attribute SVG_FEBLEND_MODE_MULTIPLY
     attribute SVG_FEBLEND_MODE_NORMAL
+    attribute SVG_FEBLEND_MODE_OVERLAY
+    attribute SVG_FEBLEND_MODE_SATURATION
     attribute SVG_FEBLEND_MODE_SCREEN
+    attribute SVG_FEBLEND_MODE_SOFT_LIGHT
     attribute SVG_FEBLEND_MODE_UNKNOWN
     getter height
     getter in1
@@ -8395,12 +8403,14 @@ interface webkitMediaStream : EventTarget
 interface webkitRTCPeerConnection : EventTarget
     static method generateCertificate
     attribute @@toStringTag
+    getter connectionState
     getter currentLocalDescription
     getter currentRemoteDescription
     getter iceConnectionState
     getter iceGatheringState
     getter localDescription
     getter onaddstream
+    getter onconnectionstatechange
     getter ondatachannel
     getter onicecandidate
     getter oniceconnectionstatechange
@@ -8436,6 +8446,7 @@ interface webkitRTCPeerConnection : EventTarget
     method setLocalDescription
     method setRemoteDescription
     setter onaddstream
+    setter onconnectionstatechange
     setter ondatachannel
     setter onicecandidate
     setter oniceconnectionstatechange

@@ -171,14 +171,14 @@ test.util.sync.isWindowMaximized = function(contentWindow) {
 test.util.sync.queryAllElements = function(
     contentWindow, targetQuery, opt_styleNames) {
   return test.util.sync.deepQueryAllElements(
-      contentWindow, [targetQuery], opt_styleNames);
+      contentWindow, targetQuery, opt_styleNames);
 };
 
 /**
  * Queries elements inside shadow DOM.
  *
  * @param {!Window} contentWindow Window to be tested.
- * @param {!Array<string>} targetQuery Query to specify the element.
+ * @param {string|!Array<string>} targetQuery Query to specify the element.
  *   |targetQuery[0]| specifies the first element(s). |targetQuery[1]| specifies
  *   elements inside the shadow DOM of the first element, and so on.
  * @param {Array<string>=} opt_styleNames List of CSS property name to be
@@ -192,6 +192,8 @@ test.util.sync.deepQueryAllElements = function(
     contentWindow, targetQuery, opt_styleNames) {
   if (!contentWindow.document)
     return [];
+  if (typeof targetQuery === 'string')
+    targetQuery = [targetQuery];
 
   var elems =
       test.util.sync.deepQuerySelectorAll_(contentWindow.document, targetQuery);
@@ -675,6 +677,19 @@ test.util.sync.isFileManagerLoaded = function(contentWindow) {
     return contentWindow.fileManager.ui.element.hasAttribute('loaded');
 
   return false;
+};
+
+/**
+ * Returns all a11y messages announced by |FileManagerUI.speakA11yMessage|.
+ *
+ * @return {Array<string>}
+ */
+test.util.sync.getA11yAnnounces = function(contentWindow) {
+  if (contentWindow && contentWindow.fileManager &&
+      contentWindow.fileManager.ui)
+    return contentWindow.fileManager.ui.a11yAnnounces;
+
+  return null;
 };
 
 /**

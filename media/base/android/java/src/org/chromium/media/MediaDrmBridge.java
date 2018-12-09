@@ -68,17 +68,21 @@ public class MediaDrmBridge {
     private static final String ENABLE = "enable";
     private static final long INVALID_NATIVE_MEDIA_DRM_BRIDGE = 0;
 
-    // Error message returned by MediaDrm functions.
-    private static final String MEDIA_DRM_ERROR_LICENSE_RELEASED =
-            "android.media.MediaDrm.error_neg_2948";
-
     // Scheme UUID for Widevine. See http://dashif.org/identifiers/protection/
     private static final UUID WIDEVINE_UUID =
             UUID.fromString("edef8ba9-79d6-4ace-a3c8-27dcd51d21ed");
 
-    // On Android L and before, MediaDrm doesn't support KeyStatus. Use a dummy
-    // key ID to report key status info.
-    // See details: https://github.com/w3c/encrypted-media/issues/32
+    // On Android L and before, MediaDrm doesn't support KeyStatus at all. On later Android
+    // versions, key IDs are not available on sessions where getKeyRequest() has been called with
+    // KEY_TYPE_RELEASE. In these cases, the EME spec recommends to use a one-byte key ID 0:
+    // "Some older platforms may contain Key System implementations that do not expose key IDs,
+    // making it impossible to provide a compliant user agent implementation. To maximize
+    // interoperability, user agent implementations exposing such CDMs should implement this member
+    // as follows: Whenever a non-empty list is appropriate, such as when the key session
+    // represented by this object may contain key(s), populate the map with a single pair containing
+    // the one-byte key ID 0 and the MediaKeyStatus most appropriate for the aggregated status of
+    // this object."
+    // See details: https://www.w3.org/TR/encrypted-media/#dom-mediakeysession-keystatuses
     private static final byte[] DUMMY_KEY_ID = new byte[] {0};
 
     // Special provision response to remove the cert.
@@ -919,7 +923,26 @@ public class MediaDrmBridge {
 
             mSessionManager.setDrmId(sessionId, drmId);
             assert Arrays.equals(sessionId.drmId(), drmId);
-            assert mSessionManager.get(sessionId).keyType() == MediaDrm.KEY_TYPE_OFFLINE;
+
+            SessionInfo sessionInfo = mSessionManager.get(sessionId);
+
+            // If persistent license (KEY_TYPE_OFFLINE) is released but we don't receive the ack
+            // from the server, we should avoid restoring the keys. Report success to JS so that
+            // they can release it again.
+            if (sessionInfo.keyType() == MediaDrm.KEY_TYPE_RELEASE) {
+                Log.w(TAG, "Persistent license is waiting for release ack.");
+                onPromiseResolvedWithSession(promiseId, sessionId);
+
+                // Report keystatuseschange event to JS. Ideally we should report the event with
+                // list of known key IDs. However we can't get the key IDs from MediaDrm. Just
+                // report with dummy key IDs.
+                onSessionKeysChange(sessionId,
+                        getDummyKeysInfo(MediaDrm.KeyStatus.STATUS_EXPIRED).toArray(),
+                        false /* hasAdditionalUsableKey */, true /* isKeyRelease */);
+                return;
+            }
+
+            assert sessionInfo.keyType() == MediaDrm.KEY_TYPE_OFFLINE;
 
             // Defer event handlers until license is loaded.
             assert mSessionEventDeferrer == null;
@@ -928,44 +951,18 @@ public class MediaDrmBridge {
             assert sessionId.keySetId() != null;
             mMediaDrm.restoreKeys(sessionId.drmId(), sessionId.keySetId());
 
-            onPersistentLicenseLoaded(sessionId, promiseId);
+            onPromiseResolvedWithSession(promiseId, sessionId);
+
+            mSessionEventDeferrer.fire();
+            mSessionEventDeferrer = null;
         } catch (android.media.NotProvisionedException e) {
             // If device isn't provisioned, storage loading should fail.
             Log.w(TAG, "Persistent license load fail because origin isn't provisioned.");
             onPersistentLicenseLoadFail(sessionId, promiseId);
         } catch (java.lang.IllegalStateException e) {
             assert sessionId.drmId() != null;
-
-            // If persistent license (KEY_TYPE_OFFLINE) is released but we don't receive the ack
-            // from the server, loading the key again will fail. Report success to JS so that
-            // they can release it again.
-            if (e instanceof MediaDrm.MediaDrmStateException) {
-                MediaDrm.MediaDrmStateException stateException =
-                        (MediaDrm.MediaDrmStateException) e;
-                if (stateException.getDiagnosticInfo().equals(MEDIA_DRM_ERROR_LICENSE_RELEASED)) {
-                    Log.w(TAG, "Persistent license is waiting for release ack.");
-                    onPersistentLicenseLoaded(sessionId, promiseId);
-
-                    // Report keystatuseschange event to JS.
-                    onSessionKeysChange(sessionId,
-                            getDummyKeysInfo(MediaDrm.KeyStatus.STATUS_EXPIRED).toArray(),
-                            false /* hasAdditionalUsableKey */, false /* isKeyRelease */);
-                    return;
-                }
-            }
-
             onPersistentLicenseLoadFail(sessionId, promiseId);
         }
-    }
-
-    private void onPersistentLicenseLoaded(SessionId sessionId, long promiseId) {
-        assert Build.VERSION.SDK_INT >= Build.VERSION_CODES.M;
-
-        onPromiseResolvedWithSession(promiseId, sessionId);
-
-        assert mSessionEventDeferrer != null;
-        mSessionEventDeferrer.fire();
-        mSessionEventDeferrer = null;
     }
 
     private void onPersistentLicenseNoExist(long promiseId) {
@@ -996,7 +993,7 @@ public class MediaDrmBridge {
      * when the session is updated with a license release response.
      */
     @CalledByNative
-    private void removeSession(byte[] emeId, long promiseId) {
+    private void removeSession(byte[] emeId, final long promiseId) {
         Log.d(TAG, "removeSession()");
         SessionId sessionId = getSessionIdByEmeId(emeId);
 
@@ -1005,8 +1002,8 @@ public class MediaDrmBridge {
             return;
         }
 
-        SessionInfo sessionInfo = mSessionManager.get(sessionId);
-        if (sessionInfo.keyType() != MediaDrm.KEY_TYPE_OFFLINE) {
+        final SessionInfo sessionInfo = mSessionManager.get(sessionId);
+        if (sessionInfo.keyType() == MediaDrm.KEY_TYPE_STREAMING) {
             // TODO(yucliu): Support 'remove' of temporary session.
             onPromiseRejected(promiseId, "Removing temporary session isn't implemented");
             return;
@@ -1014,12 +1011,30 @@ public class MediaDrmBridge {
 
         assert sessionId.keySetId() != null;
 
-        mSessionManager.markKeyReleased(sessionId);
+        // Persist the key type before removing the keys completely.
+        // 1. If we fails to persist the key type, both the persistent storage and MediaDrm think
+        // the keys are alive. JS can just remove the session again.
+        // 2. If we are able to persist the key type but don't get the callback, persistent storage
+        // thinks keys are removed but MediaDrm thinks keys are alive. JS thinks keys are removed
+        // next time it loads the keys, which matches the expectation of this function.
+        mSessionManager.setKeyType(sessionId, MediaDrm.KEY_TYPE_RELEASE, new Callback<Boolean>() {
+            @Override
+            public void onResult(Boolean success) {
+                if (!success) {
+                    onPromiseRejected(promiseId, "Fail to update persistent storage");
+                    return;
+                }
 
+                doRemoveSession(sessionId, sessionInfo.mimeType(), promiseId);
+            }
+        });
+    }
+
+    private void doRemoveSession(SessionId sessionId, String mimeType, long promiseId) {
         try {
             // Get key release request.
-            MediaDrm.KeyRequest request = getKeyRequest(
-                    sessionId, null, sessionInfo.mimeType(), MediaDrm.KEY_TYPE_RELEASE, null);
+            MediaDrm.KeyRequest request =
+                    getKeyRequest(sessionId, null, mimeType, MediaDrm.KEY_TYPE_RELEASE, null);
 
             if (request == null) {
                 onPromiseRejected(promiseId, "Fail to generate key release request");

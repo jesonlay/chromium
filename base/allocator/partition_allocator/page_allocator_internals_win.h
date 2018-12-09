@@ -5,6 +5,7 @@
 #ifndef BASE_ALLOCATOR_PARTITION_ALLOCATOR_PAGE_ALLOCATOR_INTERNALS_WIN_H_
 #define BASE_ALLOCATOR_PARTITION_ALLOCATOR_PAGE_ALLOCATOR_INTERNALS_WIN_H_
 
+#include "base/allocator/partition_allocator/oom.h"
 #include "base/allocator/partition_allocator/page_allocator_internal.h"
 #include "base/logging.h"
 
@@ -80,10 +81,21 @@ void SetSystemPagesAccessInternal(
     size_t length,
     PageAccessibilityConfiguration accessibility) {
   if (accessibility == PageInaccessible) {
-    CHECK_NE(0, VirtualFree(address, length, MEM_DECOMMIT));
+    if (!VirtualFree(address, length, MEM_DECOMMIT)) {
+      // We check `GetLastError` for `ERROR_SUCCESS` here so that in a crash
+      // report we get the error number.
+      CHECK_EQ(static_cast<uint32_t>(ERROR_SUCCESS), GetLastError());
+    }
   } else {
-    CHECK_NE(nullptr, VirtualAlloc(address, length, MEM_COMMIT,
-                                   GetAccessFlags(accessibility)));
+    if (!VirtualAlloc(address, length, MEM_COMMIT,
+                      GetAccessFlags(accessibility))) {
+      int32_t error = GetLastError();
+      if (error == ERROR_COMMITMENT_LIMIT)
+        OOM_CRASH();
+      // We check `GetLastError` for `ERROR_SUCCESS` here so that in a crash
+      // report we get the error number.
+      CHECK_EQ(ERROR_SUCCESS, error);
+    }
   }
 }
 

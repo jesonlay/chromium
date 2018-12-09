@@ -15,6 +15,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/gaia_cookie_manager_service.h"
+#include "components/signin/core/browser/identity_utils.h"
 #include "components/signin/core/browser/signin_internals_util.h"
 #include "components/signin/core/browser/signin_metrics.h"
 #include "components/signin/core/browser/signin_pref_names.h"
@@ -99,7 +100,7 @@ void SigninManager::StartSignInWithRefreshToken(
     const std::string& gaia_id,
     const std::string& username,
     const std::string& password,
-    const OAuthTokenFetchedCallback& callback) {
+    OAuthTokenFetchedCallback callback) {
   DCHECK(!IsAuthenticated());
   SigninType signin_type = refresh_token.empty()
                                ? SIGNIN_TYPE_WITHOUT_REFRESH_TOKEN
@@ -113,7 +114,7 @@ void SigninManager::StartSignInWithRefreshToken(
 
   if (!callback.is_null()) {
     // Callback present, let the caller complete the pending sign-in.
-    callback.Run(temp_refresh_token_);
+    std::move(callback).Run(temp_refresh_token_);
   } else {
     // No callback, so just complete the pending signin.
     CompletePendingSignin();
@@ -258,7 +259,7 @@ void SigninManager::OnSignoutDecisionReached(
       break;
   }
 
-  FireGoogleSignedOut(account_id, account_info);
+  FireGoogleSignedOut(account_info);
 }
 
 void SigninManager::Initialize(PrefService* local_state) {
@@ -335,39 +336,6 @@ void SigninManager::OnSigninAllowedPrefChanged() {
 }
 
 // static
-bool SigninManager::IsUsernameAllowedByPolicy(const std::string& username,
-                                              const std::string& policy) {
-  if (policy.empty())
-    return true;
-
-  // Patterns like "*@foo.com" are not accepted by our regex engine (since they
-  // are not valid regular expressions - they should instead be ".*@foo.com").
-  // For convenience, detect these patterns and insert a "." character at the
-  // front.
-  base::string16 pattern = base::UTF8ToUTF16(policy);
-  if (pattern[0] == L'*')
-    pattern.insert(pattern.begin(), L'.');
-
-  // See if the username matches the policy-provided pattern.
-  UErrorCode status = U_ZERO_ERROR;
-  const icu::UnicodeString icu_pattern(FALSE, pattern.data(), pattern.length());
-  icu::RegexMatcher matcher(icu_pattern, UREGEX_CASE_INSENSITIVE, status);
-  if (!U_SUCCESS(status)) {
-    LOG(ERROR) << "Invalid login regex: " << pattern << ", status: " << status;
-    // If an invalid pattern is provided, then prohibit *all* logins (better to
-    // break signin than to quietly allow users to sign in).
-    return false;
-  }
-  // The default encoding is UTF-8 in Chromium's ICU.
-  icu::UnicodeString icu_input(username.data());
-  matcher.reset(icu_input);
-  status = U_ZERO_ERROR;
-  UBool match = matcher.matches(status);
-  DCHECK(U_SUCCESS(status));
-  return !!match;  // !! == convert from UBool to bool.
-}
-
-// static
 SigninManager* SigninManager::FromSigninManagerBase(
     SigninManagerBase* manager) {
   return static_cast<SigninManager*>(manager);
@@ -380,7 +348,7 @@ bool SigninManager::IsAllowedUsername(const std::string& username) const {
 
   std::string pattern =
       local_state->GetString(prefs::kGoogleServicesUsernamePattern);
-  return IsUsernameAllowedByPolicy(username, pattern);
+  return identity::IsUsernameAllowedByPattern(username, pattern);
 }
 
 bool SigninManager::AuthInProgress() const {
@@ -468,19 +436,15 @@ void SigninManager::OnSignedIn() {
 }
 
 void SigninManager::FireGoogleSigninSucceeded() {
-  std::string account_id = GetAuthenticatedAccountId();
-  std::string email = GetAuthenticatedAccountInfo().email;
+  const AccountInfo account_info = GetAuthenticatedAccountInfo();
   for (auto& observer : observer_list_) {
-    observer.GoogleSigninSucceeded(account_id, email);
-    observer.GoogleSigninSucceeded(GetAuthenticatedAccountInfo());
-    observer.GoogleSigninSucceededWithPassword(account_id, email, password_);
+    observer.GoogleSigninSucceeded(account_info);
+    observer.GoogleSigninSucceededWithPassword(account_info, password_);
   }
 }
 
-void SigninManager::FireGoogleSignedOut(const std::string& account_id,
-                                        const AccountInfo& account_info) {
+void SigninManager::FireGoogleSignedOut(const AccountInfo& account_info) {
   for (auto& observer : observer_list_) {
-    observer.GoogleSignedOut(account_id, account_info.email);
     observer.GoogleSignedOut(account_info);
   }
 }

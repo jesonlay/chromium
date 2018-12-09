@@ -19,6 +19,8 @@
 
 using content::RenderViewHostTester;
 
+namespace web_app {
+
 namespace {
 
 // Creates valid SkBitmaps of the dimensions found in |sizes| and pushes them
@@ -71,13 +73,12 @@ class TestWebAppIconDownloader : public WebAppIconDownloader {
 
   size_t pending_requests() const { return in_progress_requests_.size(); }
 
-  void DownloadsComplete(bool success,
-                         const WebAppIconDownloader::FaviconMap& map) {
+  void DownloadsComplete(bool success, const IconsMap& map) {
     downloads_succeeded_ = success;
     favicon_map_ = map;
   }
 
-  WebAppIconDownloader::FaviconMap favicon_map() const { return favicon_map_; }
+  IconsMap favicon_map() const { return favicon_map_; }
 
   void CompleteImageDownload(
       int id,
@@ -100,7 +101,7 @@ class TestWebAppIconDownloader : public WebAppIconDownloader {
 
  private:
   std::vector<content::FaviconURL> initial_favicon_urls_;
-  WebAppIconDownloader::FaviconMap favicon_map_;
+  IconsMap favicon_map_;
   int id_counter_;
   base::Optional<bool> downloads_succeeded_;
 
@@ -293,3 +294,5 @@ TEST_F(WebAppIconDownloaderTest, PageNavigatesSameDocument) {
   EXPECT_TRUE(downloader.downloads_succeeded());
   histogram_tester_.ExpectUniqueSample(kTestHistogramName, 2, 1);
 }
+
+}  // namespace web_app

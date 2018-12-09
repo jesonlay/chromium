@@ -96,7 +96,7 @@ class BASE_EXPORT SchedulerWorkerPoolImpl : public SchedulerWorkerPool {
   // SchedulerWorkerPool:
   void JoinForTesting() override;
   void ReEnqueueSequence(
-      std::unique_ptr<Sequence::Transaction> sequence_transaction) override;
+      SequenceAndTransaction sequence_and_transaction) override;
 
   const HistogramBase* num_tasks_before_detach_histogram() const {
     return num_tasks_before_detach_histogram_;
@@ -156,21 +156,15 @@ class BASE_EXPORT SchedulerWorkerPoolImpl : public SchedulerWorkerPool {
   friend class TaskSchedulerWorkerPoolBlockingTest;
   friend class TaskSchedulerWorkerPoolMayBlockTest;
 
-  // The period between calls to AdjustMaxTasks() when the pool is at capacity.
-  // This value was set unscientifically based on intuition and may be adjusted
-  // in the future.
-  static constexpr TimeDelta kBlockedWorkersPollPeriod =
-      TimeDelta::FromMilliseconds(50);
-
   // SchedulerWorkerPool:
   void OnCanScheduleSequence(scoped_refptr<Sequence> sequence) override;
   void OnCanScheduleSequence(
-      std::unique_ptr<Sequence::Transaction> sequence_transaction) override;
+      SequenceAndTransaction sequence_and_transaction) override;
 
-  // Pushes the Sequence locked by |sequence_transaction| to
+  // Pushes the Sequence in |sequence_and_transaction| to
   // |shared_priority_queue_|.
   void PushSequenceToPriorityQueue(
-      std::unique_ptr<Sequence::Transaction> sequence_transaction);
+      SequenceAndTransaction sequence_and_transaction);
 
   // Waits until at least |n| workers are idle. |lock_| must be held to call
   // this function.
@@ -328,9 +322,12 @@ class BASE_EXPORT SchedulerWorkerPoolImpl : public SchedulerWorkerPool {
   // incremented.
   std::unique_ptr<ConditionVariable> num_workers_cleaned_up_for_testing_cv_;
 
-  // Used for testing and makes MayBlockThreshold() return the maximum
-  // TimeDelta.
-  AtomicFlag maximum_blocked_threshold_for_testing_;
+  // Threshold after which the max tasks is increased to compensate for a
+  // worker that is within a MAY_BLOCK ScopedBlockingCall.
+  TimeDelta may_block_threshold_;
+
+  // The period between calls to AdjustMaxTasks() when the pool is at capacity.
+  TimeDelta blocked_workers_poll_period_;
 
 #if DCHECK_IS_ON()
   // Set at the start of JoinForTesting().

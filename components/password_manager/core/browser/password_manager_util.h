@@ -16,7 +16,6 @@
 
 namespace autofill {
 struct PasswordForm;
-class AutofillClient;
 }
 
 namespace network {
@@ -79,10 +78,6 @@ bool ManualPasswordGenerationEnabled(
 bool ShowAllSavedPasswordsContextMenuEnabled(
     password_manager::PasswordManagerDriver* driver);
 
-// Opens Password Manager setting page and records the metrics.
-void UserTriggeredShowAllSavedPasswordsFromContextMenu(
-    autofill::AutofillClient* autofill_client);
-
 // Triggers password generation flow and records the metrics.
 void UserTriggeredManualGenerationFromContextMenu(
     password_manager::PasswordManagerClient* password_manager_client);
@@ -110,7 +105,7 @@ void RemoveUselessCredentials(
 // what is before the web origin (with the protocol excluded as well). For
 // example if the signon_realm is "https://www.google.com/", after
 // excluding protocol it becomes "www.google.com/".
-// This assumes that the |form|'s origin is a substring of the signon_realm.
+// This assumes that the |form|'s host is a substring of the signon_realm.
 base::StringPiece GetSignonRealmWithProtocolExcluded(
     const autofill::PasswordForm& form);
 

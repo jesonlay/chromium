@@ -730,6 +730,14 @@ void AutofillMetrics::LogCreditCardFillingInfoBarMetric(InfoBarMetric metric) {
 }
 
 // static
+void AutofillMetrics::LogSaveCardRequestExpirationDateReasonMetric(
+    SaveCardRequestExpirationDateReasonMetric reason) {
+  DCHECK_LE(reason, SaveCardRequestExpirationDateReasonMetric::kMaxValue);
+  UMA_HISTOGRAM_ENUMERATION("Autofill.SaveCardRequestExpirationDateReason",
+                            reason);
+}
+
+// static
 void AutofillMetrics::LogSaveCardPromptMetric(
     SaveCardPromptMetric metric,
     bool is_uploading,
@@ -1851,10 +1859,6 @@ void AutofillMetrics::FormEventLogger::OnFormSubmitted(
 
 void AutofillMetrics::FormEventLogger::SetBankNameAvailable() {
   has_logged_bank_name_available_ = true;
-}
-
-void AutofillMetrics::FormEventLogger::OnDidSeeDynamicForm() {
-  Log(AutofillMetrics::FORM_EVENT_DID_SEE_DYNAMIC_FORM);
 }
 
 void AutofillMetrics::FormEventLogger::OnDidSeeFillableDynamicForm() {

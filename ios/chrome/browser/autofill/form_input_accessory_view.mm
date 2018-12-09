@@ -9,7 +9,7 @@
 #include "base/i18n/rtl.h"
 #include "base/logging.h"
 #include "components/autofill/core/common/autofill_features.h"
-#import "ios/chrome/browser/autofill/form_input_accessory_view_delegate.h"
+#import "ios/chrome/browser/autofill/form_input_navigator.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/uicolor_manualfill.h"
 #import "ios/chrome/browser/ui/image_util/image_util.h"
 #include "ios/chrome/browser/ui/util/ui_util.h"
@@ -57,30 +57,15 @@ constexpr CGFloat ManualFillSeparatorHeight = 0.5;
 
 @interface FormInputAccessoryView ()
 
-// Returns a view that shows navigation buttons.
-- (UIView*)viewForNavigationButtonsUsingDelegate:
-    (id<FormInputAccessoryViewDelegate>)delegate;
+// The navigation delegate if any.
+@property(nonatomic, nullable, weak) id<FormInputAccessoryViewDelegate>
+    delegate;
 
-// Adds a navigation button for Autofill in |view| that has |normalImage| for
-// state UIControlStateNormal, a |pressedImage| for states
-// UIControlStateSelected and UIControlStateHighlighted, and an optional
-// |disabledImage| for UIControlStateDisabled.
-- (UIButton*)addKeyboardNavButtonWithNormalImage:(UIImage*)normalImage
-                                    pressedImage:(UIImage*)pressedImage
-                                   disabledImage:(UIImage*)disabledImage
-                                          target:(id)target
-                                          action:(SEL)action
-                                         enabled:(BOOL)enabled
-                                          inView:(UIView*)view;
+@property(nonatomic, weak) UIButton* previousButton;
 
-// Adds a background image to |view|. The supplied image is stretched to fit the
-// space by stretching the content its horizontal and vertical centers.
-+ (void)addBackgroundImageInView:(UIView*)view
-                   withImageName:(NSString*)imageName;
+@property(nonatomic, weak) UIButton* nextButton;
 
-// Adds an image view in |view| with an image named |imageName|.
-+ (UIView*)createImageViewWithImageName:(NSString*)imageName
-                                 inView:(UIView*)view;
+@property(nonatomic, weak) UIView* leadingView;
 
 @end
 
@@ -110,6 +95,18 @@ constexpr CGFloat ManualFillSeparatorHeight = 0.5;
 
 #pragma mark - Private Methods
 
+- (void)closeButtonTapped {
+  [self.delegate formInputAccessoryViewDidTapCloseButton:self];
+}
+
+- (void)nextButtonTapped {
+  [self.delegate formInputAccessoryViewDidTapNextButton:self];
+}
+
+- (void)previousButtonTapped {
+  [self.delegate formInputAccessoryViewDidTapPreviousButton:self];
+}
+
 // Sets up the view with the given |leadingView|. If |delegate| is not nil,
 // navigation controls are shown on the right and use |delegate| for actions.
 // Else navigation controls are replaced with |customTrailingView|. If none of
@@ -118,7 +115,10 @@ constexpr CGFloat ManualFillSeparatorHeight = 0.5;
 - (void)setUpWithLeadingView:(UIView*)leadingView
           customTrailingView:(UIView*)customTrailingView
           navigationDelegate:(id<FormInputAccessoryViewDelegate>)delegate {
+  DCHECK(!self.subviews.count);  // This should only be called once.
   DCHECK(leadingView);
+  self.leadingView = leadingView;
+
   if (!autofill::features::IsPasswordManualFallbackEnabled()) {
     [[self class] addBackgroundImageInView:self
                              withImageName:@"autofill_keyboard_background"];
@@ -127,7 +127,8 @@ constexpr CGFloat ManualFillSeparatorHeight = 0.5;
 
   UIView* trailingView;
   if (delegate) {
-    trailingView = [self viewForNavigationButtonsUsingDelegate:delegate];
+    self.delegate = delegate;
+    trailingView = [self viewForNavigationButtons];
   } else {
     trailingView = customTrailingView;
   }
@@ -152,17 +153,15 @@ constexpr CGFloat ManualFillSeparatorHeight = 0.5;
 
   id<LayoutGuideProvider> layoutGuide = self.safeAreaLayoutGuide;
   [NSLayoutConstraint activateConstraints:@[
-    [leadingViewContainer.topAnchor
-        constraintEqualToAnchor:layoutGuide.topAnchor],
+    [leadingViewContainer.topAnchor constraintEqualToAnchor:self.topAnchor],
     [leadingViewContainer.bottomAnchor
-        constraintEqualToAnchor:layoutGuide.bottomAnchor],
+        constraintEqualToAnchor:self.bottomAnchor],
     [leadingViewContainer.leadingAnchor
         constraintEqualToAnchor:layoutGuide.leadingAnchor],
     [trailingView.trailingAnchor
         constraintEqualToAnchor:layoutGuide.trailingAnchor],
-    [trailingView.topAnchor constraintEqualToAnchor:layoutGuide.topAnchor],
-    [trailingView.bottomAnchor
-        constraintEqualToAnchor:layoutGuide.bottomAnchor],
+    [trailingView.topAnchor constraintEqualToAnchor:self.topAnchor],
+    [trailingView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
   ]];
 
   if (autofill::features::IsPasswordManualFallbackEnabled()) {
@@ -174,6 +173,9 @@ constexpr CGFloat ManualFillSeparatorHeight = 0.5;
     UIImageView* gradientView =
         [[UIImageView alloc] initWithImage:gradientImage];
     gradientView.translatesAutoresizingMaskIntoConstraints = NO;
+    if (base::i18n::IsRTL()) {
+      gradientView.transform = CGAffineTransformMakeRotation(M_PI);
+    }
     [self insertSubview:gradientView belowSubview:trailingView];
 
     UIView* topGrayLine = [[UIView alloc] init];
@@ -225,15 +227,15 @@ UIImage* ButtonImage(NSString* name) {
   return StretchableImageFromUIImage(rawImage, 1, 0);
 }
 
-- (UIView*)viewForNavigationButtonsUsingDelegate:
-    (id<FormInputAccessoryViewDelegate>)delegate {
+// Returns a view that shows navigation buttons.
+- (UIView*)viewForNavigationButtons {
   if (autofill::features::IsPasswordManualFallbackEnabled()) {
     UIButton* previousButton = [UIButton buttonWithType:UIButtonTypeSystem];
     [previousButton setImage:[UIImage imageNamed:@"mf_arrow_up"]
                     forState:UIControlStateNormal];
     previousButton.tintColor = UIColor.cr_manualFillTintColor;
-    [previousButton addTarget:delegate
-                       action:@selector(selectPreviousElementWithButtonPress)
+    [previousButton addTarget:self
+                       action:@selector(previousButtonTapped)
              forControlEvents:UIControlEventTouchUpInside];
     previousButton.enabled = NO;
     NSString* previousButtonAccessibilityLabel =
@@ -244,8 +246,8 @@ UIImage* ButtonImage(NSString* name) {
     [nextButton setImage:[UIImage imageNamed:@"mf_arrow_down"]
                 forState:UIControlStateNormal];
     nextButton.tintColor = UIColor.cr_manualFillTintColor;
-    [nextButton addTarget:delegate
-                   action:@selector(selectNextElementWithButtonPress)
+    [nextButton addTarget:self
+                   action:@selector(nextButtonTapped)
          forControlEvents:UIControlEventTouchUpInside];
     nextButton.enabled = NO;
     NSString* nextButtonAccessibilityLabel =
@@ -256,8 +258,8 @@ UIImage* ButtonImage(NSString* name) {
     NSString* title = l10n_util::GetNSString(IDS_IOS_AUTOFILL_INPUT_BAR_DONE);
     [closeButton setTitle:title forState:UIControlStateNormal];
     closeButton.tintColor = UIColor.cr_manualFillTintColor;
-    [closeButton addTarget:delegate
-                    action:@selector(closeKeyboardWithButtonPress)
+    [closeButton addTarget:self
+                    action:@selector(closeButtonTapped)
           forControlEvents:UIControlEventTouchUpInside];
     closeButton.contentEdgeInsets = UIEdgeInsetsMake(
         0, ManualFillCloseButtonLeftInset, 0, ManualFillCloseButtonRightInset);
@@ -265,11 +267,8 @@ UIImage* ButtonImage(NSString* name) {
         l10n_util::GetNSString(IDS_IOS_AUTOFILL_ACCNAME_HIDE_KEYBOARD);
     [closeButton setAccessibilityLabel:closeButtonAccessibilityLabel];
 
-    [delegate fetchPreviousAndNextElementsPresenceWithCompletionHandler:^(
-                  BOOL hasPreviousElement, BOOL hasNextElement) {
-      previousButton.enabled = hasPreviousElement;
-      nextButton.enabled = hasNextElement;
-    }];
+    self.nextButton = nextButton;
+    self.previousButton = previousButton;
 
     UIStackView* navigationView = [[UIStackView alloc]
         initWithArrangedSubviews:@[ previousButton, nextButton, closeButton ]];
@@ -288,9 +287,8 @@ UIImage* ButtonImage(NSString* name) {
       addKeyboardNavButtonWithNormalImage:ButtonImage(@"autofill_prev")
                              pressedImage:ButtonImage(@"autofill_prev_pressed")
                             disabledImage:ButtonImage(@"autofill_prev_inactive")
-                                   target:delegate
-                                   action:@selector
-                                   (selectPreviousElementWithButtonPress)
+                                   target:self
+                                   action:@selector(previousButtonTapped)
                                   enabled:NO
                                    inView:navView];
   [previousButton
@@ -306,19 +304,12 @@ UIImage* ButtonImage(NSString* name) {
       addKeyboardNavButtonWithNormalImage:ButtonImage(@"autofill_next")
                              pressedImage:ButtonImage(@"autofill_next_pressed")
                             disabledImage:ButtonImage(@"autofill_next_inactive")
-                                   target:delegate
-                                   action:@selector
-                                   (selectNextElementWithButtonPress)
+                                   target:self
+                                   action:@selector(nextButtonTapped)
                                   enabled:NO
                                    inView:navView];
   [nextButton setAccessibilityLabel:l10n_util::GetNSString(
                                         IDS_IOS_AUTOFILL_ACCNAME_NEXT_FIELD)];
-
-  [delegate fetchPreviousAndNextElementsPresenceWithCompletionHandler:^(
-                BOOL hasPreviousElement, BOOL hasNextElement) {
-    previousButton.enabled = hasPreviousElement;
-    nextButton.enabled = hasNextElement;
-  }];
 
   // Add internal separator.
   UIView* internalSeparator2 =
@@ -329,9 +320,8 @@ UIImage* ButtonImage(NSString* name) {
       addKeyboardNavButtonWithNormalImage:ButtonImage(@"autofill_close")
                              pressedImage:ButtonImage(@"autofill_close_pressed")
                             disabledImage:nil
-                                   target:delegate
-                                   action:@selector
-                                   (closeKeyboardWithButtonPress)
+                                   target:self
+                                   action:@selector(closeButtonTapped)
                                   enabled:YES
                                    inView:navView];
   [closeButton
@@ -365,9 +355,15 @@ UIImage* ButtonImage(NSString* name) {
         @"topPadding" : @(1)
       });
 
+  self.nextButton = nextButton;
+  self.previousButton = previousButton;
   return navView;
 }
 
+// Adds a button in |view| that has |normalImage| for  state
+// UIControlStateNormal, a |pressedImage| for states UIControlStateSelected and
+// UIControlStateHighlighted, and an optional |disabledImage| for
+// UIControlStateDisabled.
 - (UIButton*)addKeyboardNavButtonWithNormalImage:(UIImage*)normalImage
                                     pressedImage:(UIImage*)pressedImage
                                    disabledImage:(UIImage*)disabledImage
@@ -396,6 +392,8 @@ UIImage* ButtonImage(NSString* name) {
   return button;
 }
 
+// Adds a background image to |view|. The supplied image is stretched to fit the
+// space by stretching the content its horizontal and vertical centers.
 + (void)addBackgroundImageInView:(UIView*)view
                    withImageName:(NSString*)imageName {
   UIImage* backgroundImage = StretchableImageNamed(imageName);
@@ -409,6 +407,7 @@ UIImage* ButtonImage(NSString* name) {
   AddSameConstraints(view, backgroundImageView);
 }
 
+// Adds an image view in |view| with an image named |imageName|.
 + (UIView*)createImageViewWithImageName:(NSString*)imageName
                                  inView:(UIView*)view {
   UIImage* image =

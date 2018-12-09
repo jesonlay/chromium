@@ -662,7 +662,8 @@ void RenderWidget::OnClose() {
   DCHECK(content::RenderThread::Get());
   if (closing_)
     return;
-  NotifyOnClose();
+  for (auto& observer : render_frames_)
+    observer.WidgetWillClose();
   closing_ = true;
 
   // Browser correspondence is no longer needed at this point.
@@ -806,9 +807,10 @@ void RenderWidget::OnWasHidden() {
 void RenderWidget::OnWasShown(base::TimeTicks show_request_timestamp,
                               bool was_evicted) {
   TRACE_EVENT0("renderer", "RenderWidget::OnWasShown");
-  // TODO(crbug.com/896836): CHECK to try track down why we make a frame sink
-  // for a RenderWidget without a main frame.
-  CHECK(!is_frozen_);
+  // TODO(danakj): Nothing should happen ideally if the RenderWidget is frozen!
+  // It's not visible! However.. the RenderView needs to see it as visible in
+  // order to make the Page visible /o\ so this is hard. We need to detangle
+  // page visibility from the main widget. https://crbug.com/419087
 
   was_shown_time_ = base::TimeTicks::Now();
   // See OnWasHidden
@@ -1049,11 +1051,20 @@ void RenderWidget::RequestScheduleAnimation() {
   ScheduleAnimation();
 }
 
-void RenderWidget::UpdateVisualState() {
+void RenderWidget::UpdateVisualState(bool record_main_frame_metrics) {
   if (!GetWebWidget())
     return;
 
-  GetWebWidget()->UpdateLifecycle(WebWidget::LifecycleUpdate::kAll);
+  // When recording main frame metrics set the lifecycle reason to
+  // kBeginMainFrame, because this is the calller of UpdateLifecycle
+  // for the main frame. Otherwise, set the reason to kTests, which is
+  // the oinly other reason this method is called.
+  WebWidget::LifecycleUpdateReason lifecycle_reason =
+      record_main_frame_metrics
+          ? WebWidget::LifecycleUpdateReason::kBeginMainFrame
+          : WebWidget::LifecycleUpdateReason::kTest;
+  GetWebWidget()->UpdateLifecycle(WebWidget::LifecycleUpdate::kAll,
+                                  lifecycle_reason);
   GetWebWidget()->SetSuppressFrameRequestsWorkaroundFor704763Only(false);
 
   if (first_update_visual_state_after_hidden_) {
@@ -1603,15 +1614,7 @@ void RenderWidget::SetIsFrozen(bool is_frozen) {
 }
 
 void RenderWidget::DoDeferredClose() {
-  // Prevent compositor from setting up new IPC channels, since we know a
-  // WidgetMsg_Close is coming.
-  host_will_close_this_ = true;
   Send(new WidgetHostMsg_Close(routing_id_));
-}
-
-void RenderWidget::NotifyOnClose() {
-  for (auto& observer : render_frames_)
-    observer.WidgetWillClose();
 }
 
 void RenderWidget::CloseWidgetSoon() {
@@ -1624,9 +1627,17 @@ void RenderWidget::CloseWidgetSoon() {
     return;
   }
 
+  // Prevent compositor from setting up new IPC channels, since we know a
+  // WidgetMsg_Close is coming. We do this immediately, not in DoDeferredClose,
+  // as the caller (eg WebPagePopupImpl) may start tearing down things after
+  // calling this method, including detaching the frame from this RenderWidget.
+  // Then trying to make a LayerTreeFrameSink would crash.
+  // https://crbug.com/906340
+  host_will_close_this_ = true;
+
   // If a page calls window.close() twice, we'll end up here twice, but that's
   // OK.  It is safe to send multiple Close messages.
-
+  //
   // Ask the RenderWidgetHost to initiate close.  We could be called from deep
   // in Javascript.  If we ask the RendwerWidgetHost to close now, the window
   // could be closed before the JS finishes executing.  So instead, post a
@@ -2260,7 +2271,15 @@ void RenderWidget::SetHidden(bool hidden) {
   if (render_widget_scheduling_state_)
     render_widget_scheduling_state_->SetHidden(hidden);
 
-  layer_tree_view_->SetVisible(!is_hidden_);
+  // When the RenderWidget is frozen, visibility of the compositor is overridden
+  // to always be hidden to prevent it from using resources that are not needed.
+  // Unfortunately the main RenderWidget for a RenderView must be marked visible
+  // even if the RenderView has a proxy main frame (and the RenderWidget is
+  // frozen), in order for the RenderView to use the visibility signal from the
+  // RenderWidget. This is bad. But we don't need to show the compositor to
+  // satisfy that requirement.
+  if (!is_frozen_)
+    layer_tree_view_->SetVisible(!is_hidden_);
 }
 
 void RenderWidget::DidToggleFullscreen() {

@@ -2,17 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-window.loadTimeData = {
-  getBoolean: function(key) {
-    return false;
-  }
-};
-
 window.metrics = {
   recordEnum: function() {}
 };
 
 function setUp() {
+  window.loadTimeData.getBoolean = key => false;
+  window.loadTimeData.getString = id => id;
+
   // Behavior of window.chrome depends on each test case. window.chrome should
   // be initialized properly inside each test function.
   window.chrome = {
@@ -80,15 +77,15 @@ function testExecuteEntryTask(callback) {
       {
         taskMenuButton: document.createElement('button'),
         shareMenuButton: {menu: document.createElement('div')},
-        fileContextMenu:
-            {defaultActionMenuItem: document.createElement('div')}
+        fileContextMenu: {defaultActionMenuItem: document.createElement('div')},
+        speakA11yMessage: text => {},
       },
       new MockMetadataModel({}), {
         getCurrentRootType: function() {
           return null;
         }
       },
-      new cr.EventTarget(), null, createCrostini());
+      new cr.EventTarget(), null, null, createCrostini());
 
   controller.executeEntryTask(fileSystem.entries['/test.png']);
   reportPromise(new Promise(function(fulfill) {
@@ -149,15 +146,14 @@ function createTaskController(selectionHandler) {
       {
         taskMenuButton: document.createElement('button'),
         shareMenuButton: {menu: document.createElement('div')},
-        fileContextMenu:
-            {defaultActionMenuItem: document.createElement('div')}
+        fileContextMenu: {defaultActionMenuItem: document.createElement('div')}
       },
       new MockMetadataModel({}), {
         getCurrentRootType: function() {
           return null;
         }
       },
-      selectionHandler, null, createCrostini());
+      selectionHandler, null, null, createCrostini());
 }
 
 // TaskController.getFileTasks should not call fileManagerPrivate.getFileTasks

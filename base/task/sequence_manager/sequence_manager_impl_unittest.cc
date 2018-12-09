@@ -28,6 +28,7 @@
 #include "base/task/sequence_manager/thread_controller_with_message_pump_impl.h"
 #include "base/task/sequence_manager/work_queue.h"
 #include "base/task/sequence_manager/work_queue_sets.h"
+#include "base/test/bind_test_util.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/test/test_simple_task_runner.h"
@@ -44,6 +45,8 @@ using testing::ElementsAre;
 using testing::ElementsAreArray;
 using testing::Mock;
 using testing::Not;
+using testing::Return;
+using testing::StrictMock;
 using testing::UnorderedElementsAre;
 using testing::_;
 using base::sequence_manager::internal::EnqueueOrder;
@@ -70,7 +73,7 @@ class SequenceManagerTestBase : public testing::TestWithParam<TestType> {
 
   scoped_refptr<TestTaskQueue> CreateTaskQueue(
       TaskQueue::Spec spec = TaskQueue::Spec("test")) {
-    return manager_->CreateTaskQueue<TestTaskQueue>(spec);
+    return manager_->CreateTaskQueueWithType<TestTaskQueue>(spec);
   }
 
   void CreateTaskQueues(size_t num_queues) {
@@ -186,8 +189,43 @@ class SequenceManagerTestWithMessageLoop : public SequenceManagerTestBase {
             std::make_unique<MessagePumpDefault>(), &mock_clock_));
     // ThreadControllerWithMessagePumpImpl doesn't provide
     // a default task runner.
-    default_task_queue_ =
-        manager_->CreateTaskQueue<TestTaskQueue>(TaskQueue::Spec("default"));
+    default_task_queue_ = manager_->CreateTaskQueueWithType<TestTaskQueue>(
+        TaskQueue::Spec("default"));
+    manager_->SetDefaultTaskRunner(default_task_queue_->task_runner());
+  }
+
+  const TickClock* GetTickClock() { return &mock_clock_; }
+
+  scoped_refptr<TestTaskQueue> default_task_queue_;
+  std::unique_ptr<MessageLoop> message_loop_;
+  SimpleTestTickClock mock_clock_;
+};
+
+class SequenceManagerTestWithMessagePump : public SequenceManagerTestBase {
+ protected:
+  void SetUp() override { SetUpWithMessagePump(); }
+
+  void SetUpWithMessageLoop() {
+    message_loop_.reset(new MessageLoop());
+    // A null clock triggers some assertions.
+    mock_clock_.Advance(TimeDelta::FromMilliseconds(1));
+    start_time_ = mock_clock_.NowTicks();
+
+    manager_ = SequenceManagerForTest::Create(
+        message_loop_->GetMessageLoopBase(), ThreadTaskRunnerHandle::Get(),
+        &mock_clock_);
+  }
+
+  void SetUpWithMessagePump() {
+    mock_clock_.Advance(TimeDelta::FromMilliseconds(1));
+    start_time_ = mock_clock_.NowTicks();
+    manager_ = SequenceManagerForTest::Create(
+        std::make_unique<ThreadControllerWithMessagePumpImpl>(
+            std::make_unique<MessagePumpDefault>(), &mock_clock_));
+    // ThreadControllerWithMessagePumpImpl doesn't provide
+    // a default task runner.
+    default_task_queue_ = manager_->CreateTaskQueueWithType<TestTaskQueue>(
+        TaskQueue::Spec("default"));
     manager_->SetDefaultTaskRunner(default_task_queue_->task_runner());
   }
 
@@ -212,6 +250,10 @@ INSTANTIATE_TEST_CASE_P(,
                         SequenceManagerTestWithMessageLoop,
                         testing::Values(TestType::kUseMessageLoop,
                                         TestType::kUseMessagePump));
+
+INSTANTIATE_TEST_CASE_P(,
+                        SequenceManagerTestWithMessagePump,
+                        testing::Values(TestType::kUseMessagePump));
 
 INSTANTIATE_TEST_CASE_P(,
                         SequenceManagerTestWithCustomInitialization,
@@ -3535,7 +3577,8 @@ TEST_P(SequenceManagerTestWithCustomInitialization,
   EXPECT_TRUE(static_cast<SequenceManagerImpl*>(manager.get())
                   ->IsBoundToCurrentThread());
   scoped_refptr<TaskQueue> default_task_queue =
-      manager->CreateTaskQueue<TestTaskQueue>(TaskQueue::Spec("default"));
+      manager->CreateTaskQueueWithType<TestTaskQueue>(
+          TaskQueue::Spec("default"));
   EXPECT_THAT(default_task_queue.get(), testing::NotNull());
 
   std::unique_ptr<MessageLoop> message_loop(new MessageLoop());
@@ -3847,7 +3890,7 @@ class SMDestructionObserver : public MessageLoopCurrent::DestructionObserver {
 
 }  // namespace
 
-TEST_P(SequenceManagerTestWithMessageLoop, DestructionObserverTest) {
+TEST_P(SequenceManagerTestWithMessagePump, DestructionObserverTest) {
   CreateTaskQueues(1u);
 
   // Verify that the destruction observer gets called at the very end (after
@@ -3885,10 +3928,80 @@ TEST_P(SequenceManagerTestWithMessageLoop, GetMessagePump) {
   }
 }
 
+namespace {
+
+class MockTimeDomain : public TimeDomain {
+ public:
+  MockTimeDomain() {}
+  ~MockTimeDomain() override = default;
+
+  LazyNow CreateLazyNow() const override { return LazyNow(now_); }
+  TimeTicks Now() const override { return now_; }
+
+  Optional<TimeDelta> DelayTillNextTask(LazyNow* lazy_now) override {
+    return Optional<TimeDelta>();
+  }
+
+  MOCK_METHOD1(MaybeFastForwardToNextTask, bool(bool quit_when_idle_requested));
+
+  void AsValueIntoInternal(trace_event::TracedValue* state) const override {}
+
+  const char* GetName() const override { return "Test"; }
+
+  void SetNextDelayedDoWork(LazyNow* lazy_now, TimeTicks run_time) override {}
+
+ private:
+  TimeTicks now_;
+
+  DISALLOW_COPY_AND_ASSIGN(MockTimeDomain);
+};
+
+}  // namespace
+
+TEST_P(SequenceManagerTestWithMessageLoop, OnSystemIdleTimeDomainNotification) {
+  if (GetParam() != TestType::kUseMessagePump)
+    return;
+
+  CreateTaskQueues(1u);
+
+  // If we call OnSystemIdle, we expect registered TimeDomains to receive a call
+  // to MaybeFastForwardToNextTask.  If no run loop has requested quit on idle,
+  // the parameter passed in should be false.
+  StrictMock<MockTimeDomain> mock_time_domain;
+  manager_->RegisterTimeDomain(&mock_time_domain);
+  EXPECT_CALL(mock_time_domain, MaybeFastForwardToNextTask(false))
+      .WillOnce(Return(false));
+  manager_->OnSystemIdle();
+  manager_->UnregisterTimeDomain(&mock_time_domain);
+  Mock::VerifyAndClearExpectations(&mock_time_domain);
+
+  // However if RunUntilIdle is called it should be true.
+  queues_[0]->task_runner()->PostTask(
+      FROM_HERE, BindLambdaForTesting([&]() {
+        StrictMock<MockTimeDomain> mock_time_domain;
+        EXPECT_CALL(mock_time_domain, MaybeFastForwardToNextTask(true))
+            .WillOnce(Return(false));
+        manager_->RegisterTimeDomain(&mock_time_domain);
+        manager_->OnSystemIdle();
+        manager_->UnregisterTimeDomain(&mock_time_domain);
+      }));
+
+  RunLoop().RunUntilIdle();
+}
+
 TEST_P(SequenceManagerTest, ThreadName) {
   std::string kThreadName1("foo");
   PlatformThread::SetName(kThreadName1);
   EXPECT_EQ(kThreadName1, manager_->GetThreadName());
+}
+
+TEST_P(SequenceManagerTest, CreateTaskQueue) {
+  scoped_refptr<TaskQueue> task_queue =
+      manager_->CreateTaskQueue(TaskQueue::Spec("test"));
+  EXPECT_THAT(task_queue.get(), testing::NotNull());
+
+  task_queue->task_runner()->PostTask(FROM_HERE, BindOnce(&NopTask));
+  EXPECT_EQ(1u, manager_->GetPendingTaskCountForTesting());
 }
 
 TEST_P(SequenceManagerTest, GetPendingTaskCountForTesting) {
@@ -3929,6 +4042,33 @@ TEST_P(SequenceManagerTest, GetPendingTaskCountForTesting) {
   test_task_runner_->AdvanceMockTickClock(TimeDelta::FromMilliseconds(10));
   RunLoop().RunUntilIdle();
   EXPECT_EQ(0u, manager_->GetPendingTaskCountForTesting());
+}
+
+TEST_P(SequenceManagerTest, PostDelayedTaskFromOtherThread) {
+  scoped_refptr<TestTaskQueue> main_tq = CreateTaskQueue();
+  scoped_refptr<TaskRunner> task_runner =
+      main_tq->CreateTaskRunner(kTaskTypeNone);
+  manager_->SetAddQueueTimeToTasks(true);
+
+  Thread thread("test thread");
+  thread.StartAndWaitForTesting();
+
+  WaitableEvent task_posted(WaitableEvent::ResetPolicy::MANUAL,
+                            WaitableEvent::InitialState::NOT_SIGNALED);
+  thread.task_runner()->PostTask(
+      FROM_HERE, BindOnce(
+                     [](scoped_refptr<TaskRunner> task_runner,
+                        WaitableEvent* task_posted) {
+                       task_runner->PostDelayedTask(
+                           FROM_HERE, BindOnce(&NopTask),
+                           base::TimeDelta::FromMilliseconds(10));
+                       task_posted->Signal();
+                     },
+                     std::move(task_runner), &task_posted));
+  task_posted.Wait();
+  test_task_runner_->FastForwardUntilNoTasksRemain();
+  RunLoop().RunUntilIdle();
+  thread.Stop();
 }
 
 }  // namespace sequence_manager_impl_unittest

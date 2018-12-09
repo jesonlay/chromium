@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "base/strings/stringprintf.h"
-#include "base/system/sys_info.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/file_manager/open_with_browser.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
@@ -166,8 +165,6 @@ void AddStringsForDrive(base::DictionaryValue* dict) {
   SET_STRING("DRIVE_WELCOME_TITLE", IDS_FILE_BROWSER_DRIVE_WELCOME_TITLE);
   SET_STRING("DRIVE_WELCOME_TITLE_ALTERNATIVE",
              IDS_FILE_BROWSER_DRIVE_WELCOME_TITLE_ALTERNATIVE);
-  SET_STRING("DRIVE_WELCOME_TITLE_ALTERNATIVE_1TB",
-             IDS_FILE_BROWSER_DRIVE_WELCOME_TITLE_ALTERNATIVE_1TB);
   SET_STRING("SYNC_DELETE_WITHOUT_PERMISSION_ERROR",
              IDS_FILE_BROWSER_SYNC_DELETE_WITHOUT_PERMISSION_ERROR);
   SET_STRING("SYNC_FILE_NAME", IDS_FILE_BROWSER_SYNC_FILE_NAME);
@@ -730,6 +727,7 @@ ExtensionFunction::ResponseAction FileManagerPrivateGetStringsFunction::Run() {
   SET_STRING("SEARCH_NO_MATCHING_FILES_HTML",
              IDS_FILE_BROWSER_SEARCH_NO_MATCHING_FILES_HTML);
   SET_STRING("SEARCH_TEXT_LABEL", IDS_FILE_BROWSER_SEARCH_TEXT_LABEL);
+  SET_STRING("SEARCH_CLEAR_LABEL", IDS_FILE_BROWSER_SEARCH_CLEAR_LABEL);
   SET_STRING("SELECT_ALL_COMMAND_LABEL",
              IDS_FILE_BROWSER_SELECT_ALL_COMMAND_LABEL);
   SET_STRING("TASKS_BUTTON_LABEL", IDS_FILE_BROWSER_TASKS_BUTTON_LABEL);
@@ -831,6 +829,10 @@ ExtensionFunction::ResponseAction FileManagerPrivateGetStringsFunction::Run() {
              IDS_FILE_BROWSER_ZIP_TARGET_EXISTS_ERROR);
   SET_STRING("ZIP_UNEXPECTED_ERROR", IDS_FILE_BROWSER_ZIP_UNEXPECTED_ERROR);
   SET_STRING("SEE_MENU_FOR_ACTIONS", IDS_FILE_BROWSER_SEE_MENU_FOR_ACTIONS);
+  SET_STRING("OPEN_A11Y", IDS_FILE_BROWSER_OPEN_A11Y);
+  SET_STRING("OPEN_A11Y_PLURAL", IDS_FILE_BROWSER_OPEN_A11Y_PLURAL);
+  SET_STRING("A11Y_VOLUME_EJECT", IDS_FILE_BROWSER_A11Y_VOLUME_EJECT);
+  SET_STRING("FILEMANAGER_APP_NAME", IDS_FILEMANAGER_APP_NAME);
 #undef SET_STRING
 
   dict->SetBoolean("PDF_VIEW_ENABLED",
@@ -852,8 +854,6 @@ ExtensionFunction::ResponseAction FileManagerPrivateGetStringsFunction::Run() {
   dict->SetBoolean(
       "MY_FILES_VOLUME_ENABLED",
       base::FeatureList::IsEnabled(chromeos::features::kMyFilesVolume));
-  dict->SetString("CHROMEOS_RELEASE_BOARD",
-                  base::SysInfo::GetLsbReleaseBoard());
   dict->SetString(
       "DOWNLOADS_LOW_SPACE_WARNING_HELP_URL",
       base::StringPrintf(kHelpURLFormat, kDownloadsLowSpaceWarningHelpNumber));

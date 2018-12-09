@@ -45,7 +45,6 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/browsing_data/core/browsing_data_utils.h"
-#include "components/browsing_data/core/features.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/account_reconcilor.h"
@@ -284,8 +283,7 @@ class BrowsingDataRemoverBrowserTest : public InProcessBrowserTest {
  public:
   BrowsingDataRemoverBrowserTest() {
     feature_list_.InitWithFeatures(
-        {browsing_data::features::kRemoveNavigationHistory,
-         leveldb::kLevelDBRewriteFeature,
+        {leveldb::kLevelDBRewriteFeature,
          // Ensure that kOnionSoupDOMStorage is enabled because the old
          // SessionStorage implementation causes flaky tests.
          blink::features::kOnionSoupDOMStorage},
@@ -1103,7 +1101,6 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest, StorageRemovedFromDisk) {
     // TODO(crbug.com/823071): LevelDB logs are not deleted immediately.
     "File System/Origins/[0-9]*.log",
     "Service Worker/Database/[0-9]*.log",
-    "Session Storage/[0-9]*.log",
 
 #if defined(OS_CHROMEOS)
     // TODO(crbug.com/846297): Many leveldb files remain on ChromeOS. I couldn't

@@ -4,6 +4,7 @@
 
 import("//build/config/android/chrome_version.gni")
 import("//build/config/android/config.gni")
+import("//build/config/android/linker_version_script.gni")
 import("//build/config/android/rules.gni")
 import("//build/util/process_version.gni")
 import("//chrome/android/chrome_public_apk_tmpl.gni")
@@ -270,6 +271,7 @@ android_library("chrome_java") {
     "//components/module_installer/android:module_installer_java",
     "//components/navigation_interception/android:navigation_interception_java",
     "//components/offline_items_collection/core:core_java",
+    "//components/omnibox/browser:browser_java",
     "//components/payments/content/android:java",
     "//components/payments/mojom:mojom_java",
     "//components/policy/android:policy_java",
@@ -367,8 +369,6 @@ android_library("chrome_java") {
     "//components/ntp_snippets:ntp_snippets_java_enums_srcjar",
     "//components/ntp_tiles:ntp_tiles_enums_java",
     "//components/offline_pages/core:offline_page_model_enums_java",
-    "//components/omnibox/browser:autocomplete_match_javagen",
-    "//components/omnibox/browser:autocomplete_match_type_javagen",
     "//components/search_engines:search_engine_type_java",
     "//components/security_state/core:security_state_enums_java",
     "//components/signin/core/browser:investigated_scenario_java",
@@ -434,12 +434,12 @@ java_cpp_enum("chrome_android_java_enums_srcjar") {
     "//chrome/browser/android/webapk/webapk_install_service.h",
     "//chrome/browser/android/webapk/webapk_installer.h",
     "//chrome/browser/android/webapk/webapk_types.h",
+    "//chrome/browser/autofill/manual_filling_view_interface.h",
     "//chrome/browser/banners/app_banner_settings_helper.h",
     "//chrome/browser/notifications/notification_channels_provider_android.h",
     "//chrome/browser/notifications/notification_platform_bridge_android.cc",
     "//chrome/browser/ntp_snippets/ntp_snippets_metrics.h",
     "//chrome/browser/password_manager/password_accessory_metrics_util.h",
-    "//chrome/browser/password_manager/password_accessory_view_interface.h",
     "//chrome/browser/profiles/profile_metrics.h",
     "//chrome/browser/translate/android/translate_utils.h",
     "//chrome/browser/ui/android/infobars/infobar_android.h",
@@ -530,6 +530,7 @@ junit_binary("chrome_junit_tests") {
     "//components/bookmarks/common/android:bookmarks_java",
     "//components/invalidation/impl:java",
     "//components/minidump_uploader:minidump_uploader_java",
+    "//components/module_installer/android:module_installer_stub_java",
     "//components/offline_items_collection/core:core_java",
     "//components/payments/content/android:java",
     "//components/payments/mojom:mojom_java",
@@ -663,6 +664,7 @@ android_library("chrome_test_java") {
     "//components/navigation_interception/android:navigation_interception_java",
     "//components/offline_items_collection/core:core_java",
     "//components/offline_pages/core/prefetch:offline_prefetch_proto_java",
+    "//components/omnibox/browser:browser_java",
     "//components/payments/content/android:java",
     "//components/payments/mojom:mojom_java",
     "//components/policy/android:policy_java",
@@ -743,6 +745,7 @@ android_library("chrome_test_java") {
     "//chrome/test/data/translate/",
     "//chrome/test/media_router/resources/",
     "//components/test/data/payments/",
+    "//content/test/data/browsing_data/",
     "//content/test/data/android/authenticator.html",
     "//content/test/data/android/geolocation.html",
     "//content/test/data/android/installedapp.html",
@@ -772,6 +775,7 @@ if (enable_vr || (enable_arcore && package_arcore)) {
     "//base:base_java",
     "//base:base_java_test_support",
     "//chrome/android:app_hooks_java",
+    "//components/module_installer/android:module_installer_stub_java",
     "//chrome/android:chrome_java",
     "//chrome/browser/android/vr:java",
     "//chrome/test/android:chrome_java_test_support",
@@ -975,35 +979,53 @@ jinja_template_resources("chrome_test_apk_template_resources") {
 # Variables:
 #    export_java_symbols: Optional. If true, export Java_* native library
 #      symbols required for lazy JNI registration.
+#    export_symbol_whitelist: Optional. If set, a pre-determined list of additional
+#      methods are exposed by the resulting library.
 #    enable_compressed_relocations: Optional. If true, enable compressed
 #      ELF relocations to reduce native library size.
 #    use_gnu_hash_style: If true, the final library will include only GNU hash
 #      tables, rather than both SysV and GNU types (the default).
-#    enable_relr_relocations: Optional flag. If true, and if |enable_compressed_relocations|
-#      is true, then reduce the size of the native library by enabling RELR relocations.
-#      Note that these are only supported by the Chromium linker, and Android P+.
 template("chrome_common_shared_library") {
+  _export_java_symbols =
+      defined(invoker.export_java_symbols) && invoker.export_java_symbols
+  _linker_script = "$target_gen_dir/${target_name}_linker_script.txt"
+  _linker_script_target = "${target_name}_linker_script"
+
+  # Create a custom linker script based on JNI and feature module requirements.
+  generate_linker_version_script(_linker_script_target) {
+    linker_script = _linker_script
+    export_java_symbols = _export_java_symbols
+    if (defined(invoker.export_symbol_whitelist)) {
+      export_symbol_whitelist_file =
+          "//chrome/android/feature_module_exports.lst"
+    }
+  }
+
   shared_library(target_name) {
     forward_variables_from(invoker,
                            "*",
                            [
                              "enable_compressed_relocations",
-                             "enable_relr_relocations",
                              "export_java_symbols",
+                             "export_symbol_whitelist",
                              "use_gnu_hash_style",
                            ])
-    _export_java_symbols =
-        defined(invoker.export_java_symbols) && invoker.export_java_symbols
-
     deps += [ "//chrome:chrome_android_core" ]
 
     public_configs = extra_chrome_shared_library_configs
     deps += extra_chrome_shared_library_deps
 
-    if (_export_java_symbols) {
-      configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
-      configs += [ "//build/config/android:hide_all_but_jni" ]
+    # Use a dynamically-generated linker script.
+    configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
+    deps += [ ":$_linker_script_target" ]
+    inputs = [
+      "$_linker_script",
+    ]
+    if (!defined(ldflags)) {
+      ldflags = []
     }
+    ldflags += [ "-Wl,--version-script=" +
+                 rebase_path(_linker_script, root_build_dir) ]
 
     # Handle VR JNI regisration and dependencies.
     if (enable_vr) {
@@ -1022,12 +1044,7 @@ template("chrome_common_shared_library") {
     # Compress relocations if needed.
     if (defined(invoker.enable_compressed_relocations) &&
         invoker.enable_compressed_relocations) {
-      if (defined(invoker.enable_relr_relocations) &&
-          invoker.enable_relr_relocations) {
-        configs += [ "//build/config/android:lld_pack_relocations_with_relr" ]
-      } else {
-        configs += [ "//build/config/android:lld_pack_relocations" ]
-      }
+      configs += [ "//build/config/android:lld_pack_relocations" ]
     }
 
     if (invoker.use_gnu_hash_style && target_cpu != "mipsel" &&
@@ -1038,9 +1055,6 @@ template("chrome_common_shared_library") {
       # never compiled in the final library (http://crbug.com/742525#c28). GNU
       # hash support was added in Android M. Also not supported on MIPS
       # architecture (http://crbug.com/811306).
-      if (!defined(ldflags)) {
-        ldflags = []
-      }
       ldflags += [ "-Wl,--hash-style=gnu" ]
     }
   }
@@ -1060,7 +1074,6 @@ template("chrome_shared_library") {
     }
 
     enable_compressed_relocations = chromium_linker_supported && use_lld
-    enable_relr_relocations = enable_compressed_relocations
     use_gnu_hash_style = chromium_linker_supported
   }
 }
@@ -1567,9 +1580,6 @@ template("monochrome_public_apk_or_module_tmpl") {
     add_unwind_tables_in_apk =
         _add_unwind_tables_in_chrome_public_apk &&
         (!defined(use_trichrome_library) || !use_trichrome_library)
-    if (add_unwind_tables_in_apk && can_unwind_with_cfi_table) {
-      shared_library_for_unwind_asset = "monochrome"
-    }
 
     version_name = chrome_version_name
     if (experimental_r8_path == "") {
@@ -1874,7 +1884,12 @@ android_app_bundle("chrome_public_bundle") {
 android_app_bundle("chrome_modern_public_bundle") {
   bundle_name = "ChromeModernPublic"
   base_module_target = ":chrome_modern_public_base_module"
-  proguard_enabled = !is_java_debug
+  if (!is_java_debug) {
+    proguard_enabled = true
+    if (experimental_r8_path == "") {
+      enable_multidex = true
+    }
+  }
   enable_language_splits = enable_chrome_language_splits
   if (modularize_vr) {
     extra_modules = [

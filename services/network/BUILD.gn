@@ -193,6 +193,8 @@ jumbo_component("network_service") {
       "cert_verifier_with_trust_anchors.h",
       "cert_verify_proc_chromeos.cc",
       "cert_verify_proc_chromeos.h",
+      "nss_temp_certs_cache_chromeos.cc",
+      "nss_temp_certs_cache_chromeos.h",
     ]
   }
 
@@ -269,6 +271,7 @@ source_set("tests") {
     "chunked_data_pipe_upload_data_stream_unittest.cc",
     "cookie_manager_unittest.cc",
     "cookie_settings_unittest.cc",
+    "cors/cors_url_loader_factory_unittest.cc",
     "cors/cors_url_loader_unittest.cc",
     "cors/preflight_controller_unittest.cc",
     "cross_origin_read_blocking_unittest.cc",
@@ -338,6 +341,7 @@ source_set("tests") {
     sources += [
       "cert_verifier_with_trust_anchors_unittest.cc",
       "cert_verify_proc_chromeos_unittest.cc",
+      "nss_temp_certs_cache_chromeos_unittest.cc",
     ]
   }
 

@@ -7,7 +7,7 @@
 #include "third_party/blink/public/platform/web_url_loader_mock_factory.h"
 #include "third_party/blink/renderer/core/html/html_image_element.h"
 #include "third_party/blink/renderer/core/html/media/html_video_element.h"
-#include "third_party/blink/renderer/core/paint/paint_tracker.h"
+#include "third_party/blink/renderer/core/paint/paint_timing_detector.h"
 #include "third_party/blink/renderer/core/svg/svg_image_element.h"
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
@@ -39,7 +39,7 @@ class ImagePaintTimingDetectorTest
 
   void SetUp() override {
     PageTestBase::SetUp();
-    GetPaintTracker()
+    GetPaintTimingDetector()
         .GetImagePaintTimingDetector()
         .notify_swap_time_override_for_testing_ =
         base::BindRepeating(&ImagePaintTimingDetectorTest::FakeNotifySwapTime,
@@ -48,31 +48,37 @@ class ImagePaintTimingDetectorTest
 
  protected:
   LocalFrameView& GetFrameView() { return *GetFrame().View(); }
-  PaintTracker& GetPaintTracker() { return GetFrameView().GetPaintTracker(); }
+  PaintTimingDetector& GetPaintTimingDetector() {
+    return GetFrameView().GetPaintTimingDetector();
+  }
   ImageRecord* FindLargestPaintCandidate() {
-    return GetPaintTracker()
+    return GetPaintTimingDetector()
         .GetImagePaintTimingDetector()
         .FindLargestPaintCandidate();
   }
 
   ImageRecord* FindLastPaintCandidate() {
-    return GetPaintTracker()
+    return GetPaintTimingDetector()
         .GetImagePaintTimingDetector()
         .FindLastPaintCandidate();
   }
 
   unsigned CountRecords() {
-    return GetPaintTracker()
+    return GetPaintTimingDetector()
         .GetImagePaintTimingDetector()
         .id_record_map_.size();
   }
 
   TimeTicks LargestPaintStoredResult() {
-    return GetPaintTracker().GetImagePaintTimingDetector().largest_image_paint_;
+    return GetPaintTimingDetector()
+        .GetImagePaintTimingDetector()
+        .largest_image_paint_;
   }
 
   TimeTicks LastPaintStoredResult() {
-    return GetPaintTracker().GetImagePaintTimingDetector().last_image_paint_;
+    return GetPaintTimingDetector()
+        .GetImagePaintTimingDetector()
+        .last_image_paint_;
   }
 
   void UpdateAllLifecyclePhasesAndInvokeCallbackIfAny() {
@@ -157,6 +163,20 @@ TEST_F(ImagePaintTimingDetectorTest, LargestImagePaint_OneImage) {
   EXPECT_TRUE(record->loaded);
 }
 
+TEST_F(ImagePaintTimingDetectorTest,
+       IgnoreImageUntilInvalidatedRectSizeNonZero) {
+  SetBodyInnerHTML(R"HTML(
+    <img id="target"></img>
+  )HTML");
+  UpdateAllLifecyclePhasesAndInvokeCallbackIfAny();
+  EXPECT_EQ(CountRecords(), 0u);
+  SetImageAndPaint("target", 5, 5);
+  UpdateAllLifecyclePhasesAndInvokeCallbackIfAny();
+  ImageRecord* record = FindLargestPaintCandidate();
+  EXPECT_TRUE(record);
+  EXPECT_EQ(CountRecords(), 1u);
+}
+
 TEST_F(ImagePaintTimingDetectorTest, LargestImagePaint_Largest) {
   SetBodyInnerHTML(R"HTML(
     <img id="smaller"></img>
@@ -229,6 +249,52 @@ TEST_F(ImagePaintTimingDetectorTest, LargestImagePaint_IgnoreTheRemoved) {
   record = FindLargestPaintCandidate();
   EXPECT_FALSE(record);
   EXPECT_EQ(LargestPaintStoredResult(), base::TimeTicks());
+}
+
+TEST_F(ImagePaintTimingDetectorTest,
+       LargestImagePaint_NodeRemovedBetweenRegistrationAndInvocation) {
+  SetBodyInnerHTML(R"HTML(
+    <div id="parent">
+      <img id="target"></img>
+    </div>
+  )HTML");
+  SetImageAndPaint("target", 5, 5);
+  UpdateAllLifecyclePhasesForTest();
+
+  GetDocument().getElementById("parent")->RemoveChild(
+      GetDocument().getElementById("target"));
+
+  InvokeCallback();
+
+  ImageRecord* record;
+  record = FindLargestPaintCandidate();
+  EXPECT_FALSE(record);
+}
+
+TEST_F(ImagePaintTimingDetectorTest, LargestImagePaint_IgnoreReAttached) {
+  SetBodyInnerHTML(R"HTML(
+    <div id="parent">
+    </div>
+  )HTML");
+  HTMLImageElement* image = HTMLImageElement::Create(GetDocument());
+  image->setAttribute("id", "target");
+  GetDocument().getElementById("parent")->AppendChild(image);
+  SetImageAndPaint("target", 5, 5);
+  UpdateAllLifecyclePhasesAndInvokeCallbackIfAny();
+  ImageRecord* record;
+  record = FindLargestPaintCandidate();
+  EXPECT_TRUE(record);
+
+  GetDocument().getElementById("parent")->RemoveChild(image);
+  UpdateAllLifecyclePhasesAndInvokeCallbackIfAny();
+  record = FindLargestPaintCandidate();
+  EXPECT_FALSE(record);
+
+  GetDocument().getElementById("parent")->AppendChild(image);
+  SetImageAndPaint("target", 5, 5);
+  UpdateAllLifecyclePhasesAndInvokeCallbackIfAny();
+  record = FindLargestPaintCandidate();
+  EXPECT_TRUE(record);
 }
 
 // This test dipicts a situation when a smaller image has loaded, but a larger

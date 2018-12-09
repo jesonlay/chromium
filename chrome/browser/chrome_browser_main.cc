@@ -610,33 +610,6 @@ bool IsSiteIsolationEnterprisePolicyApplicable() {
 #endif
 }
 
-bool WaitUntilMachineLevelUserCloudPolicyEnrollmentFinished(
-    policy::ChromeBrowserPolicyConnector* connector) {
-#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
-  using RegisterResult =
-      policy::MachineLevelUserCloudPolicyController::RegisterResult;
-  switch (connector->machine_level_user_cloud_policy_controller()
-              ->WaitUntilPolicyEnrollmentFinished()) {
-    case RegisterResult::kNoEnrollmentNeeded:
-    case RegisterResult::kEnrollmentSuccessBeforeDialogDisplayed:
-      return true;
-    case RegisterResult::kEnrollmentSuccess:
-#if defined(OS_MACOSX)
-      app_controller_mac::EnterpriseStartupDialogClosed();
-#endif
-      return true;
-    case RegisterResult::kRestartDueToFailure:
-      chrome::AttemptRestart();
-      return false;
-    case RegisterResult::kQuitDueToFailure:
-      chrome::AttemptExit();
-      return false;
-  }
-#else
-  return true;
-#endif
-}
-
 // Sets up the ThreadProfiler for the browser process, runs it, and returns the
 // profiler.
 std::unique_ptr<ThreadProfiler> CreateAndStartBrowserMainThreadProfiler() {
@@ -905,7 +878,9 @@ int ChromeBrowserMainParts::PreCreateThreads() {
   if (result_code_ == service_manager::RESULT_CODE_NORMAL_EXIT) {
 #if !defined(OS_ANDROID)
     // These members must be initialized before exiting this function normally.
+#if !defined(OS_CHROMEOS)
     DCHECK(master_prefs_.get());
+#endif  // !defined(OS_CHROMEOS)
     DCHECK(browser_creator_.get());
 #endif  // !defined(OS_ANDROID)
     for (size_t i = 0; i < chrome_extra_parts_.size(); ++i)
@@ -939,16 +914,17 @@ int ChromeBrowserMainParts::OnLocalStateLoaded(
   }
 #endif  // defined(OS_WIN)
 
-#if !defined(OS_ANDROID)
-  master_prefs_ = std::make_unique<first_run::MasterPrefs>();
-#endif
-
   if (browser_process_->actual_locale().empty()) {
     *failed_to_load_resource_bundle = true;
     return chrome::RESULT_CODE_MISSING_DATA;
   }
 
-  const int apply_first_run_result = ApplyFirstRunPrefs();
+#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+  master_prefs_ = chrome_feature_list_creator_->TakeMasterPrefs();
+#endif
+
+  const int apply_first_run_result =
+      chrome_feature_list_creator_->master_prefs_apply_result();
   if (apply_first_run_result != service_manager::RESULT_CODE_NORMAL_EXIT)
     return apply_first_run_result;
 
@@ -959,59 +935,6 @@ int ChromeBrowserMainParts::OnLocalStateLoaded(
   metrics::EnableExpiryChecker(chrome_metrics::kExpiredHistogramsHashes,
                                chrome_metrics::kNumExpiredHistograms);
 
-  return service_manager::RESULT_CODE_NORMAL_EXIT;
-}
-
-int ChromeBrowserMainParts::ApplyFirstRunPrefs() {
-// Android does first run in Java instead of native.
-// Chrome OS has its own out-of-box-experience code.
-#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
-  // On first run, we need to process the predictor preferences before the
-  // browser's profile_manager object is created, but after ResourceBundle
-  // is initialized.
-  if (!first_run::IsChromeFirstRun())
-    return service_manager::RESULT_CODE_NORMAL_EXIT;
-
-  first_run::ProcessMasterPreferencesResult pmp_result =
-      first_run::ProcessMasterPreferences(user_data_dir_, master_prefs_.get());
-  if (pmp_result == first_run::EULA_EXIT_NOW)
-    return chrome::RESULT_CODE_EULA_REFUSED;
-
-  // TODO(macourteau): refactor preferences that are copied from
-  // master_preferences into local_state, as a "local_state" section in
-  // master preferences. If possible, a generic solution would be preferred
-  // over a copy one-by-one of specific preferences. Also see related TODO
-  // in first_run.h.
-
-  PrefService* local_state = g_browser_process->local_state();
-  // Store the initial VariationsService seed in local state, if it exists
-  // in master prefs.
-  if (!master_prefs_->compressed_variations_seed.empty()) {
-    local_state->SetString(variations::prefs::kVariationsCompressedSeed,
-                           master_prefs_->compressed_variations_seed);
-    if (!master_prefs_->variations_seed_signature.empty()) {
-      local_state->SetString(variations::prefs::kVariationsSeedSignature,
-                             master_prefs_->variations_seed_signature);
-    }
-    // Set the variation seed date to the current system time. If the user's
-    // clock is incorrect, this may cause some field trial expiry checks to
-    // not do the right thing until the next seed update from the server,
-    // when this value will be updated.
-    local_state->SetInt64(variations::prefs::kVariationsSeedDate,
-                          base::Time::Now().ToInternalValue());
-  }
-
-  if (!master_prefs_->suppress_default_browser_prompt_for_version.empty()) {
-    local_state->SetString(
-        prefs::kBrowserSuppressDefaultBrowserPrompt,
-        master_prefs_->suppress_default_browser_prompt_for_version);
-  }
-
-#if defined(OS_WIN)
-  if (!master_prefs_->welcome_page_on_os_upgrade_enabled)
-    local_state->SetBoolean(prefs::kWelcomePageOnOSUpgradeEnabled, false);
-#endif
-#endif  // !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
   return service_manager::RESULT_CODE_NORMAL_EXIT;
 }
 
@@ -1373,13 +1296,16 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   // running.
   browser_process_->PreMainMessageLoopRun();
 
+#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
   // Wait for the result of machine level user cloud policy enrollment after
   // we start the enrollment process in browser_porcess_->PreMainMessageLoopRun.
   // Abort the launch process if the enrollment is failed.
-  if (!WaitUntilMachineLevelUserCloudPolicyEnrollmentFinished(
-          browser_process_->browser_policy_connector())) {
+  if (!browser_process_->browser_policy_connector()
+           ->machine_level_user_cloud_policy_controller()
+           ->WaitUntilPolicyEnrollmentFinished()) {
     return chrome::RESULT_CODE_CLOUD_POLICY_ENROLLMENT_FAILED;
   }
+#endif
 
   // Record last shutdown time into a histogram.
   browser_shutdown::ReadLastShutdownInfo();

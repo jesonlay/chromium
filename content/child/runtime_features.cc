@@ -413,6 +413,9 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   WebRuntimeFeatures::EnableScheduledScriptStreaming(
       base::FeatureList::IsEnabled(features::kScheduledScriptStreaming));
 
+  WebRuntimeFeatures::EnableScriptStreamingOnPreload(
+      base::FeatureList::IsEnabled(features::kScriptStreamingOnPreload));
+
   WebRuntimeFeatures::EnableMergeBlockingNonBlockingPools(
       base::FeatureList::IsEnabled(base::kMergeBlockingNonBlockingPools));
 
@@ -436,6 +439,8 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
 
   WebRuntimeFeatures::EnableIsolatedCodeCache(
       base::FeatureList::IsEnabled(net::features::kIsolatedCodeCache));
+  WebRuntimeFeatures::EnableWasmCodeCache(
+      base::FeatureList::IsEnabled(blink::features::kWasmCodeCache));
 
   if (base::FeatureList::IsEnabled(features::kSignedHTTPExchange)) {
     WebRuntimeFeatures::EnableSignedHTTPExchange(true);
@@ -519,6 +524,9 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
 
   WebRuntimeFeatures::EnableNoHoverDuringScroll(
       base::FeatureList::IsEnabled(features::kNoHoverDuringScroll));
+
+  WebRuntimeFeatures::EnableGetDisplayMedia(
+      base::FeatureList::IsEnabled(blink::features::kRTCGetDisplayMedia));
 }
 
 }  // namespace content

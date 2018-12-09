@@ -147,6 +147,9 @@ using unified_consent::prefs::kUnifiedConsentGiven;
 // Tests that "Activity and Interactions" switch should be disabled when the
 // "History" sync is off.
 - (void)testActivityAndInteractionsDisabledWithHistoryDisabled {
+  // TODO(crbug.com/906680): Re-enable this test when it's fixed.
+  EARL_GREY_TEST_DISABLED(@"Test disabled on devices and simulators.");
+
   [SigninEarlGreyUI signinWithIdentity:[SigninEarlGreyUtils fakeIdentity1]];
   [self resetUnifiedConsent];
   [self openGoogleServicesSettings];

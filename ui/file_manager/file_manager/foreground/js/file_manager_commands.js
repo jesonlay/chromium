@@ -530,7 +530,10 @@ CommandHandler.COMMANDS_['unmount'] = /** @type {Command} */ ({
       return;
     }
 
-    fileManager.volumeManager.unmount(volumeInfo, function() {
+    const label = volumeInfo.label || '';
+    fileManager.volumeManager.unmount(volumeInfo, () => {
+      const msg = strf('A11Y_VOLUME_EJECT', label);
+      fileManager.ui.speakA11yMessage(msg);
     }, errorCallback.bind(null, volumeInfo.volumeType));
   },
   /**
@@ -624,7 +627,14 @@ CommandHandler.COMMANDS_['new-folder'] = (function() {
    * @constructor
    * @struct
    */
-  var NewFolderCommand = function() {};
+  var NewFolderCommand = function() {
+    /**
+     * Whether a new-folder is in progress.
+     * @type {boolean}
+     * @private
+     */
+    this.busy_ = false;
+  };
 
   /**
    * @param {!Event} event Command event.
@@ -648,14 +658,15 @@ CommandHandler.COMMANDS_['new-folder'] = (function() {
     var directoryModel = fileManager.directoryModel;
     var directoryTree = fileManager.ui.directoryTree;
     var listContainer = fileManager.ui.listContainer;
+    this.busy_ = true;
 
-    this.generateNewDirectoryName_(targetDirectory).then(function(newName) {
+    this.generateNewDirectoryName_(targetDirectory).then((newName) => {
       if (!executedFromDirectoryTree)
         listContainer.startBatchUpdates();
 
       return new Promise(targetDirectory.getDirectory.bind(targetDirectory,
           newName,
-          {create: true, exclusive: true})).then(function(newDirectory) {
+          {create: true, exclusive: true})).then((newDirectory) => {
             metrics.recordUserAction('CreateNewFolder');
 
             // Select new directory and start rename operation.
@@ -665,18 +676,23 @@ CommandHandler.COMMANDS_['new-folder'] = (function() {
               fileManager.directoryTreeNamingController.attachAndStart(
                   assert(fileManager.ui.directoryTree.selectedItem), false,
                   null);
+              this.busy_ = false;
             } else {
               directoryModel.updateAndSelectNewDirectory(
-                  newDirectory).then(function() {
+                  newDirectory).then(() => {
                 listContainer.endBatchUpdates();
                 fileManager.namingController.initiateRename();
-              }, function() {
+                this.busy_ = false;
+              }, () => {
                 listContainer.endBatchUpdates();
+                this.busy_ = false;
               });
             }
-          }, function(error) {
+          }, (error) => {
             if (!executedFromDirectoryTree)
               listContainer.endBatchUpdates();
+
+            this.busy_ = false;
 
             fileManager.ui.alertDialog.show(
                 strf('ERROR_CREATING_FOLDER',
@@ -727,16 +743,18 @@ CommandHandler.COMMANDS_['new-folder'] = (function() {
       var locationInfo = fileManager.volumeManager.getLocationInfo(entry);
       event.canExecute = locationInfo && !locationInfo.isReadOnly &&
           CommandUtil.hasCapability([entry], 'canAddChildren');
-      event.command.setHidden(
-          CommandUtil.isRootEntry(fileManager.volumeManager, entry));
+      event.command.setHidden(false);
     } else {
       var directoryModel = fileManager.directoryModel;
       var directoryEntry = fileManager.getCurrentDirectoryEntry();
       event.canExecute = !fileManager.directoryModel.isReadOnly() &&
           !fileManager.namingController.isRenamingInProgress() &&
-          !directoryModel.isSearching() && !directoryModel.isScanning() &&
+          !directoryModel.isSearching() &&
           CommandUtil.hasCapability([directoryEntry], 'canAddChildren');
       event.command.setHidden(false);
+    }
+    if (this.busy_) {
+      event.canExecute = false;
     }
   };
 
@@ -775,6 +793,7 @@ CommandHandler.COMMANDS_['select-all'] = /** @type {Command} */ ({
    * @param {!CommandHandlerDeps} fileManager CommandHandlerDeps to use.
    */
   execute: function(event, fileManager) {
+    fileManager.directoryModel.getFileListSelection().setCheckSelectMode(true);
     fileManager.directoryModel.getFileListSelection().selectAll();
   },
   /**
@@ -1504,7 +1523,7 @@ CommandHandler.COMMANDS_['toggle-pinned'] = /** @type {Command} */ ({
     // flickering.
     if (actionsModel) {
       event.command.setHidden(actionsModel && !action);
-      event.command.checked = !!offlineNotNeededAction;
+      event.command.checked = !!offlineNotNeededAction && !saveForOfflineAction;
     }
   }
 });

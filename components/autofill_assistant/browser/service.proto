@@ -84,6 +84,10 @@ message SupportedScriptProto {
     // When set to true this script can be run in 'autostart mode'. Script won't
     // be shown.
     optional bool autostart = 8;
+
+    // When set to true this script will be run from WaitForDom actions with
+    // allow_interrupt=true.
+    optional bool interrupt = 9;
   }
   optional PresentationProto presentation = 2;
 }
@@ -219,6 +223,7 @@ message ActionProto {
     SetFormFieldValueProto set_form_value = 6;
     SelectOptionProto select_option = 7;
     NavigateProto navigate = 9;
+    PromptProto prompt = 10;
     TellProto tell = 11;
     FocusElementProto focus_element = 12;
     WaitForDomProto wait_for_dom = 19;
@@ -254,6 +259,7 @@ message ProcessedActionProto {
   optional ProcessedActionStatusProto status = 2;
 
   oneof result_data {
+    PromptProto.Choice prompt_choice = 5;
     string html_source = 12;
     // Should be set as a result of GetPaymentInformationAction.
     PaymentDetails payment_details = 15;
@@ -388,7 +394,12 @@ message WaitForDomProto {
   optional int32 timeout_ms = 1;
 
   // The element to wait for.
+  // TODO(crbug.com/806868): Use ElementReferenceProto instead.
   repeated string selectors = 2;
+
+  // If true, run scripts flagged with 'interrupt=true' as soon as their
+  // preconditions match.
+  optional bool allow_interrupt = 3;
 }
 
 // Volatile upload of a portion of the dom for backend analysis, does not store
@@ -422,6 +433,36 @@ message HighlightElementProto {
 // Load the given URL in the current tab.
 message NavigateProto {
   optional string url = 1;
+}
+
+// Allow choosing one or more possibility. If FocusElement was called just
+// before, allow interaction with the touchable element area, otherwise don't
+// allow any interactions.
+message PromptProto {
+  // Display this message to the user.
+  optional string message = 1;
+
+  // A choice that is made either directly by clicking on a chip or button, or
+  // implicitly by making a change on the website that is then detected by
+  // looking for the existence of an element.
+  //
+  // One of these protos must is transmitted as-is back to the server as part of
+  // ProcessedActionProto.
+  message Choice {
+    // Localized text message to display. Not required if element_exists is set.
+    optional string name = 2;
+
+    // If set, the choice should be highlighted. Ignored unless name is set.
+    optional bool highlight = 3;
+
+    // Optionally auto-select this choice if the given element exist.
+    optional ElementReferenceProto element_exists = 4;
+
+    // Server payload originally sent by the server. This should
+    // be transmitted as-is by the client without interpreting.
+    optional bytes server_payload = 5;
+  }
+  repeated Choice choices = 4;
 }
 
 message ContactDetailsProto {
@@ -495,6 +536,10 @@ message DetailsProto {
   optional DateTimeProto datetime = 3;
 
   optional string description = 4;
+
+  // Mid that comes from Knowledge Graph. Uniquely identify the object that this
+  // proto describes.
+  optional string m_id = 5;
 }
 
 // Show contextual information.
@@ -505,7 +550,12 @@ message ShowDetailsProto {
 // Set the value of an form element.
 message SetFormFieldValueProto {
   message KeyPress {
-    oneof keypress { string text = 1; }
+    oneof keypress {
+      string text = 1;
+      // A single key with this exact keycode (KeyboardEvent.keyCode) e.g. 8 for
+      // Backspace.
+      int32 keycode = 2;
+    }
   }
 
   // A reference to the form element whose value should be set.

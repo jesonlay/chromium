@@ -461,9 +461,12 @@ class DCLayerTree::SwapChainPresenter {
   bool UploadVideoImages(gl::GLImageMemory* y_image_memory,
                          gl::GLImageMemory* uv_image_memory);
 
+  // Releases resources that might hold indirect references to the swap chain.
+  void ReleaseSwapChainResources();
+
   // Recreate swap chain using given size.  Use preferred YUV format if |yuv| is
-  // true, or BGRA otherwise.  Set |protected_video_type|. Returns true on
-  // success.
+  // true, or BGRA otherwise.  Sets flags based on |protected_video_type|.
+  // Returns true on success.
   bool ReallocateSwapChain(const gfx::Size& swap_chain_size,
                            bool use_yuv_swap_chain,
                            ui::ProtectedVideoType protected_video_type);
@@ -560,6 +563,10 @@ class DCLayerTree::SwapChainPresenter {
   // Handle returned by DCompositionCreateSurfaceHandle() used to create swap
   // chain that can be used for direct composition.
   base::win::ScopedHandle swap_chain_handle_;
+
+  // Video processor output view created from swap chain back buffer.  Must be
+  // cached for performance reasons.
+  Microsoft::WRL::ComPtr<ID3D11VideoProcessorOutputView> output_view_;
 
   DISALLOW_COPY_AND_ASSIGN(SwapChainPresenter);
 };
@@ -672,6 +679,9 @@ bool DCLayerTree::SwapChainPresenter::ShouldUseYUVSwapChain() {
   // swap chain is composited by DWM.
   if (IsProtectedVideo(protected_video_type_))
     return true;
+
+  if (failed_to_create_yuv_swapchain_)
+    return false;
 
   // Start out as YUV.
   if (!presentation_history_.valid())
@@ -960,13 +970,11 @@ bool DCLayerTree::SwapChainPresenter::PresentToSwapChain(
   }
 
   gfx::Size swap_chain_size = CalculateSwapChainSize(params);
-  bool swap_chain_resized = swap_chain_size_ != swap_chain_size;
   // Do not create a swap chain if swap chain size will be empty.
   if (swap_chain_size.IsEmpty()) {
-    if (swap_chain_resized) {
-      swap_chain_size_ = swap_chain_size;
-      swap_chain_handle_.Close();
-      swap_chain_.Reset();
+    swap_chain_size_ = swap_chain_size;
+    if (swap_chain_) {
+      ReleaseSwapChainResources();
       content_visual_->SetContent(nullptr);
       *needs_commit = true;
     }
@@ -976,13 +984,14 @@ bool DCLayerTree::SwapChainPresenter::PresentToSwapChain(
   if (UpdateVisuals(params, swap_chain_size))
     *needs_commit = true;
 
+  bool swap_chain_resized = swap_chain_size_ != swap_chain_size;
   bool use_yuv_swap_chain = ShouldUseYUVSwapChain();
-  bool toggle_yuv_swapchain = (use_yuv_swap_chain != is_yuv_swapchain_) &&
-                              !failed_to_create_yuv_swapchain_;
+  bool toggle_yuv_swapchain = use_yuv_swap_chain != is_yuv_swapchain_;
   bool toggle_protected_video =
       protected_video_type_ != params.protected_video_type;
 
   bool first_present = false;
+
   if (!swap_chain_ || swap_chain_resized || toggle_yuv_swapchain ||
       toggle_protected_video) {
     if (!ReallocateSwapChain(swap_chain_size, use_yuv_swap_chain,
@@ -1172,14 +1181,14 @@ bool DCLayerTree::SwapChainPresenter::VideoProcessorBlt(
     Microsoft::WRL::ComPtr<ID3D11VideoProcessorEnumerator>
         video_processor_enumerator = layer_tree_->video_processor_enumerator();
 
-    D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC in_desc = {};
-    in_desc.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
-    in_desc.Texture2D.ArraySlice = input_level;
+    D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC input_desc = {};
+    input_desc.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
+    input_desc.Texture2D.ArraySlice = input_level;
 
-    Microsoft::WRL::ComPtr<ID3D11VideoProcessorInputView> in_view;
+    Microsoft::WRL::ComPtr<ID3D11VideoProcessorInputView> input_view;
     HRESULT hr = video_device->CreateVideoProcessorInputView(
-        input_texture.Get(), video_processor_enumerator.Get(), &in_desc,
-        in_view.GetAddressOf());
+        input_texture.Get(), video_processor_enumerator.Get(), &input_desc,
+        input_view.GetAddressOf());
     if (FAILED(hr)) {
       DLOG(ERROR) << "CreateVideoProcessorInputView failed with error 0x"
                   << std::hex << hr;
@@ -1192,7 +1201,7 @@ bool DCLayerTree::SwapChainPresenter::VideoProcessorBlt(
     stream.InputFrameOrField = 0;
     stream.PastFrames = 0;
     stream.FutureFrames = 0;
-    stream.pInputSurface = in_view.Get();
+    stream.pInputSurface = input_view.Get();
     RECT dest_rect = gfx::Rect(swap_chain_size_).ToRECT();
     video_context->VideoProcessorSetOutputTargetRect(video_processor.Get(),
                                                      TRUE, &dest_rect);
@@ -1202,24 +1211,27 @@ bool DCLayerTree::SwapChainPresenter::VideoProcessorBlt(
     video_context->VideoProcessorSetStreamSourceRect(video_processor.Get(), 0,
                                                      TRUE, &source_rect);
 
-    Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
-    swap_chain_->GetBuffer(0, IID_PPV_ARGS(texture.GetAddressOf()));
-    D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC out_desc = {};
-    out_desc.ViewDimension = D3D11_VPOV_DIMENSION_TEXTURE2D;
-    out_desc.Texture2D.MipSlice = 0;
+    if (!output_view_) {
+      Microsoft::WRL::ComPtr<ID3D11Texture2D> swap_chain_buffer;
+      swap_chain_->GetBuffer(0, IID_PPV_ARGS(swap_chain_buffer.GetAddressOf()));
 
-    Microsoft::WRL::ComPtr<ID3D11VideoProcessorOutputView> out_view;
-    hr = video_device->CreateVideoProcessorOutputView(
-        texture.Get(), video_processor_enumerator.Get(), &out_desc,
-        out_view.GetAddressOf());
-    if (FAILED(hr)) {
-      DLOG(ERROR) << "CreateVideoProcessorOutputView failed with error 0x"
-                  << std::hex << hr;
-      return false;
+      D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC output_desc = {};
+      output_desc.ViewDimension = D3D11_VPOV_DIMENSION_TEXTURE2D;
+      output_desc.Texture2D.MipSlice = 0;
+
+      hr = video_device->CreateVideoProcessorOutputView(
+          swap_chain_buffer.Get(), video_processor_enumerator.Get(),
+          &output_desc, output_view_.GetAddressOf());
+      if (FAILED(hr)) {
+        DLOG(ERROR) << "CreateVideoProcessorOutputView failed with error 0x"
+                    << std::hex << hr;
+        return false;
+      }
+      DCHECK(output_view_);
     }
 
-    hr = video_context->VideoProcessorBlt(video_processor.Get(), out_view.Get(),
-                                          0, 1, &stream);
+    hr = video_context->VideoProcessorBlt(video_processor.Get(),
+                                          output_view_.Get(), 0, 1, &stream);
     if (FAILED(hr)) {
       DLOG(ERROR) << "VideoProcessorBlt failed with error 0x" << std::hex << hr;
       return false;
@@ -1229,15 +1241,31 @@ bool DCLayerTree::SwapChainPresenter::VideoProcessorBlt(
   return true;
 }
 
+void DCLayerTree::SwapChainPresenter::ReleaseSwapChainResources() {
+  output_view_.Reset();
+  swap_chain_.Reset();
+  swap_chain_handle_.Close();
+}
+
 bool DCLayerTree::SwapChainPresenter::ReallocateSwapChain(
     const gfx::Size& swap_chain_size,
     bool use_yuv_swap_chain,
     ui::ProtectedVideoType protected_video_type) {
   TRACE_EVENT0("gpu", "DCLayerTree::SwapChainPresenter::ReallocateSwapChain");
-  swap_chain_size_ = swap_chain_size;
 
-  swap_chain_.Reset();
-  swap_chain_handle_.Close();
+  // TODO(sunnyps): Remove after debugging NV12 create swap chain failure.
+  bool swap_chain_resized =
+      swap_chain_ && (swap_chain_size_ != swap_chain_size);
+  bool swap_chain_toggled_yuv =
+      swap_chain_ && (is_yuv_swapchain_ != use_yuv_swap_chain);
+  base::debug::Alias(&swap_chain_resized);
+  base::debug::Alias(&swap_chain_toggled_yuv);
+
+  ReleaseSwapChainResources();
+
+  DCHECK(!swap_chain_size.IsEmpty());
+  swap_chain_size_ = swap_chain_size;
+  protected_video_type_ = protected_video_type;
 
   Microsoft::WRL::ComPtr<IDXGIDevice> dxgi_device;
   d3d11_device_.CopyTo(dxgi_device.GetAddressOf());
@@ -1250,7 +1278,6 @@ bool DCLayerTree::SwapChainPresenter::ReallocateSwapChain(
   DCHECK(media_factory);
 
   DXGI_SWAP_CHAIN_DESC1 desc = {};
-  DCHECK(!swap_chain_size_.IsEmpty());
   desc.Width = swap_chain_size_.width();
   desc.Height = swap_chain_size_.height();
   desc.Format = g_overlay_dxgi_format_used;
@@ -1268,10 +1295,11 @@ bool DCLayerTree::SwapChainPresenter::ReallocateSwapChain(
   if (protected_video_type == ui::ProtectedVideoType::kHardwareProtected)
     desc.Flags |= DXGI_SWAP_CHAIN_FLAG_HW_PROTECTED;
 
+  // The composition surface handle is only used to create YUV swap chains since
+  // CreateSwapChainForComposition can't do that.
   HANDLE handle;
   if (!CreateSurfaceHandleHelper(&handle))
     return false;
-
   swap_chain_handle_.Set(handle);
 
   if (is_yuv_swapchain_ != use_yuv_swap_chain) {
@@ -1285,10 +1313,15 @@ bool DCLayerTree::SwapChainPresenter::ReallocateSwapChain(
   const std::string kSwapChainCreationResultUmaPrefix =
       "GPU.DirectComposition.SwapChainCreationResult.";
   is_yuv_swapchain_ = false;
-  // The composition surface handle isn't actually used, but
-  // CreateSwapChainForComposition can't create YUV swapchains.
+
+  // TODO(sunnyps): Remove after debugging NV12 create swap chain failure.
+  HRESULT hr = S_OK;
+  VisualInfo visual_info = visual_info_;
+  base::debug::Alias(&hr);
+  base::debug::Alias(&desc);
+  base::debug::Alias(&visual_info);
   if (use_yuv_swap_chain) {
-    HRESULT hr = media_factory->CreateSwapChainForCompositionSurfaceHandle(
+    hr = media_factory->CreateSwapChainForCompositionSurfaceHandle(
         d3d11_device_.Get(), swap_chain_handle_.Get(), &desc, nullptr,
         swap_chain_.GetAddressOf());
     is_yuv_swapchain_ = SUCCEEDED(hr);
@@ -1298,13 +1331,6 @@ bool DCLayerTree::SwapChainPresenter::ReallocateSwapChain(
                               SUCCEEDED(hr));
     if (FAILED(hr)) {
       // TODO(sunnyps): Remove after debugging NV12 create swap chain failure.
-      OverlayFormat format = g_overlay_format_used;
-      DXGI_FORMAT dxgi_format = g_overlay_dxgi_format_used;
-      base::debug::Alias(&format);
-      base::debug::Alias(&dxgi_format);
-      base::debug::Alias(&hr);
-      base::debug::Alias(&swap_chain_size);
-      base::debug::Alias(&protected_video_type);
       base::debug::DumpWithoutCrashing();
 
       DLOG(ERROR) << "Failed to create "
@@ -1335,7 +1361,6 @@ bool DCLayerTree::SwapChainPresenter::ReallocateSwapChain(
       return false;
     }
   }
-  protected_video_type_ = protected_video_type;
   return true;
 }
 

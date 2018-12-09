@@ -14,7 +14,7 @@
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
-#include "third_party/blink/renderer/core/paint/paint_tracker.h"
+#include "third_party/blink/renderer/core/paint/paint_timing_detector.h"
 #include "third_party/blink/renderer/core/style/style_fetched_image.h"
 #include "third_party/blink/renderer/platform/geometry/layout_rect.h"
 #include "third_party/blink/renderer/platform/graphics/paint/geometry_mapper.h"
@@ -134,33 +134,6 @@ void ImagePaintTimingDetector::PopulateTraceValue(
                   IdentifiersFactory::FrameId(&frame_view_->GetFrame()));
 }
 
-IntRect ImagePaintTimingDetector::CalculateTransformedRect(
-    LayoutRect& invalidated_rect,
-    const PaintLayer& painting_layer) const {
-  const auto* local_transform = painting_layer.GetLayoutObject()
-                                    .FirstFragment()
-                                    .LocalBorderBoxProperties()
-                                    .Transform();
-  const auto* ancestor_transform = painting_layer.GetLayoutObject()
-                                       .View()
-                                       ->FirstFragment()
-                                       .LocalBorderBoxProperties()
-                                       .Transform();
-  FloatRect invalidated_rect_abs = FloatRect(invalidated_rect);
-  if (invalidated_rect_abs.IsEmpty() || invalidated_rect_abs.IsZero())
-    return IntRect();
-  DCHECK(local_transform);
-  DCHECK(ancestor_transform);
-  GeometryMapper::SourceToDestinationRect(local_transform, ancestor_transform,
-                                          invalidated_rect_abs);
-  IntRect invalidated_rect_in_viewport = RoundedIntRect(invalidated_rect_abs);
-  ScrollableArea* scrollable_area = frame_view_->GetScrollableArea();
-  DCHECK(scrollable_area);
-  IntRect viewport = scrollable_area->VisibleContentRect();
-  invalidated_rect_in_viewport.Intersect(viewport);
-  return invalidated_rect_in_viewport;
-}
-
 void ImagePaintTimingDetector::OnLargestImagePaintDetected(
     const ImageRecord& largest_image_record) {
   largest_image_paint_ = largest_image_record.first_paint_time_after_loaded;
@@ -171,7 +144,7 @@ void ImagePaintTimingDetector::OnLargestImagePaintDetected(
       "loading", "LargestImagePaint::Candidate", TRACE_EVENT_SCOPE_THREAD,
       largest_image_record.first_paint_time_after_loaded, "data",
       std::move(value));
-  frame_view_->GetPaintTracker().DidChangePerformanceTiming();
+  frame_view_->GetPaintTimingDetector().DidChangePerformanceTiming();
 }
 
 void ImagePaintTimingDetector::OnLastImagePaintDetected(
@@ -184,7 +157,7 @@ void ImagePaintTimingDetector::OnLastImagePaintDetected(
       "loading", "LastImagePaint::Candidate", TRACE_EVENT_SCOPE_THREAD,
       last_image_record.first_paint_time_after_loaded, "data",
       std::move(value));
-  frame_view_->GetPaintTracker().DidChangePerformanceTiming();
+  frame_view_->GetPaintTimingDetector().DidChangePerformanceTiming();
 }
 
 void ImagePaintTimingDetector::Analyze() {
@@ -210,8 +183,9 @@ void ImagePaintTimingDetector::Analyze() {
     new_candidate_detected = true;
     OnLastImagePaintDetected(*last_image_record);
   }
-  if (new_candidate_detected)
-    frame_view_->GetPaintTracker().DidChangePerformanceTiming();
+  if (new_candidate_detected) {
+    frame_view_->GetPaintTimingDetector().DidChangePerformanceTiming();
+  }
 }
 
 void ImagePaintTimingDetector::OnPrePaintFinished() {
@@ -249,8 +223,9 @@ void ImagePaintTimingDetector::NotifyNodeRemoved(DOMNodeId node_id) {
         largest_image_paint_ = base::TimeTicks();
       if (last_image_paint_invalidated)
         last_image_paint_ = base::TimeTicks();
-      if (largest_image_paint_invalidated || last_image_paint_invalidated)
-        frame_view_->GetPaintTracker().DidChangePerformanceTiming();
+      if (largest_image_paint_invalidated || last_image_paint_invalidated) {
+        frame_view_->GetPaintTimingDetector().DidChangePerformanceTiming();
+      }
     }
   }
 }
@@ -282,8 +257,8 @@ void ImagePaintTimingDetector::ReportSwapTime(
     base::TimeTicks timestamp) {
   // The callback is safe from race-condition only when running on main-thread.
   DCHECK(ThreadState::Current()->IsMainThread());
-  // Not guranteed to be non-empty, because record can be removed before the
-  // callback.
+  // Not guranteed to be non-empty, because records can be removed between
+  // callback registration and invocation.
   while (records_pending_timing_.size() > 0) {
     DOMNodeId node_id = records_pending_timing_.front();
     if (!id_record_map_.Contains(node_id)) {
@@ -355,14 +330,14 @@ void ImagePaintTimingDetector::RecordImage(const LayoutObject& object,
     recorded_node_count_++;
     if (recorded_node_count_ < kImageNodeNumberLimit) {
       LayoutRect invalidated_rect = object.FirstFragment().VisualRect();
-      // Do not record first size until invalidated_rect's size becomes
+      // Before the image resource is loaded, <img> has size 0, so we do not
+      // record the first size until the invalidated rect's size becomes
       // non-empty.
       if (invalidated_rect.IsEmpty())
         return;
-      IntRect invalidated_rect_in_viewport =
-          CalculateTransformedRect(invalidated_rect, painting_layer);
-      int rect_size = invalidated_rect_in_viewport.Height() *
-                      invalidated_rect_in_viewport.Width();
+      unsigned rect_size =
+          frame_view_->GetPaintTimingDetector().CalculateVisualSize(
+              invalidated_rect, painting_layer);
       if (rect_size == 0) {
         // When rect_size == 0, it either means the image is size 0 or the image
         // is out of viewport. Either way, we don't track this image anymore, to

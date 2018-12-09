@@ -48,12 +48,12 @@ namespace ios_web_view {
 
 namespace {
 syncer::ModelTypeSet GetDisabledTypes() {
-  // Only want autofill and passwords.
+  // Only want credit card autofill for now.
+  // TODO(crbug.com/906910): Remove syncer::AUTOFILL_PROFILE and
+  // syncer::PASSWORDS as well once they are ready.
   syncer::ModelTypeSet disabled_types = syncer::UserTypes();
-  disabled_types.Remove(syncer::AUTOFILL_PROFILE);
   disabled_types.Remove(syncer::AUTOFILL_WALLET_DATA);
   disabled_types.Remove(syncer::AUTOFILL_WALLET_METADATA);
-  disabled_types.Remove(syncer::PASSWORDS);
   return disabled_types;
 }
 }  // namespace
@@ -140,11 +140,10 @@ base::RepeatingClosure WebViewSyncClient::GetPasswordStateChangedCallback() {
 }
 
 syncer::DataTypeController::TypeVector
-WebViewSyncClient::CreateDataTypeControllers(
-    syncer::LocalDeviceInfoProvider* local_device_info_provider) {
+WebViewSyncClient::CreateDataTypeControllers() {
   // The iOS port does not have any platform-specific datatypes.
   return component_factory_->CreateCommonDataTypeControllers(
-      GetDisabledTypes(), local_device_info_provider);
+      GetDisabledTypes());
 }
 
 BookmarkUndoService* WebViewSyncClient::GetBookmarkUndoServiceIfExists() {
@@ -197,17 +196,9 @@ WebViewSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
 
 base::WeakPtr<syncer::ModelTypeControllerDelegate>
 WebViewSyncClient::GetControllerDelegateForModelType(syncer::ModelType type) {
-  switch (type) {
-    case syncer::DEVICE_INFO:
-      // TODO(crbug.com/872420): Distinguish ios/web_view from ios/chrome.
-      return WebViewProfileSyncServiceFactory::GetForBrowserState(
-                 browser_state_)
-          ->GetDeviceInfoSyncControllerDelegate();
-    default:
-      NOTREACHED();
-      // TODO(crbug.com/873790): Figure out if USER_CONSENTS need to be enabled.
-      return base::WeakPtr<syncer::ModelTypeControllerDelegate>();
-  }
+  NOTREACHED();
+  // TODO(crbug.com/873790): Figure out if USER_CONSENTS need to be enabled.
+  return base::WeakPtr<syncer::ModelTypeControllerDelegate>();
 }
 
 scoped_refptr<syncer::ModelSafeWorker>

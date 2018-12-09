@@ -46,7 +46,6 @@ ScenicWindow::ScenicWindow(ScenicWindowManager* window_manager,
   parent_node_.BindAsRequest(&parent_export_token);
 
   // Setup entity node for the window.
-  parent_node_.AddChild(node_);
   node_.AddChild(shape_node_);
   shape_node_.SetMaterial(material_);
 
@@ -106,15 +105,16 @@ void ScenicWindow::SetTitle(const base::string16& title) {
 }
 
 void ScenicWindow::Show() {
-  NOTIMPLEMENTED();
+  parent_node_.AddChild(node_);
 }
 
 void ScenicWindow::Hide() {
-  NOTIMPLEMENTED();
+  node_.Detach();
 }
 
 void ScenicWindow::Close() {
-  NOTIMPLEMENTED();
+  Hide();
+  delegate_->OnClosed();
 }
 
 void ScenicWindow::PrepareForShutdown() {
@@ -191,14 +191,16 @@ void ScenicWindow::UpdateSize() {
     screen->OnWindowBoundsChanged(window_id_, size_rect);
 
   // Set node shape to rectangle that matches size of the view.
-  scenic::Rectangle rect(&scenic_session_, size_dips_.width(),
-                         size_dips_.height());
+  scenic::Rectangle rect(&scenic_session_, 1.f, 1.f);
   shape_node_.SetShape(rect);
 
   // Translate the node by half of the view dimensions to put it in the center
   // of the view.
-  shape_node_.SetTranslation(size_dips_.width() / 2.0,
-                             size_dips_.height() / 2.0, 0.f);
+  node_.SetTranslation(size_dips_.width() / 2.0, size_dips_.height() / 2.0,
+                       0.f);
+
+  // Scale the node so that surface rect can always be 1x1.
+  node_.SetScale(size_dips_.width(), size_dips_.height(), 1.f);
 
   // This is necessary when using vulkan because ImagePipes are presented
   // separately and we need to make sure our sizes change is committed.

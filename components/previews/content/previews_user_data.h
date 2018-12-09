@@ -6,8 +6,10 @@
 #define COMPONENTS_PREVIEWS_CONTENT_PREVIEWS_USER_DATA_H_
 
 #include <stdint.h>
+#include <memory>
 
 #include "base/macros.h"
+#include "base/time/time.h"
 #include "components/previews/core/previews_experiments.h"
 #include "content/public/common/previews_state.h"
 
@@ -18,9 +20,16 @@ namespace previews {
 class PreviewsUserData {
  public:
   explicit PreviewsUserData(uint64_t page_id);
+
+  struct ServerLitePageInfo {
+    // The start time of the original navigation, that is, the one started by
+    // the user.
+    base::TimeTicks original_navigation_start = base::TimeTicks();
+  };
+
   ~PreviewsUserData();
 
-  PreviewsUserData(const PreviewsUserData& previews_user_data);
+  PreviewsUserData(const PreviewsUserData& other);
 
   // A session unique ID related to this navigation.
   uint64_t page_id() const { return page_id_; }
@@ -32,6 +41,10 @@ class PreviewsUserData {
   void set_navigation_ect(net::EffectiveConnectionType navigation_ect) {
     navigation_ect_ = navigation_ect;
   }
+
+  // Whether the navigation was redirected from the original URL.
+  bool is_redirect() const { return is_redirect_; }
+  void set_is_redirect(bool is_redirect) { is_redirect_ = is_redirect; }
 
   // Returns the data savings inflation percent to use for this navigation
   // instead of the default if it is not 0.
@@ -105,6 +118,14 @@ class PreviewsUserData {
     committed_previews_state_ = committed_previews_state;
   }
 
+  // Metadata for an attempted or committed Lite Page Redirect preview.
+  ServerLitePageInfo* server_lite_page_info() {
+    return server_lite_page_info_.get();
+  }
+  void set_server_lite_page_info(std::unique_ptr<ServerLitePageInfo> info) {
+    server_lite_page_info_ = std::move(info);
+  }
+
  private:
   // A session unique ID related to this navigation.
   const uint64_t page_id_;
@@ -113,6 +134,9 @@ class PreviewsUserData {
   // to compare to the preview's triggering ect threshold.
   net::EffectiveConnectionType navigation_ect_ =
       net::EFFECTIVE_CONNECTION_TYPE_UNKNOWN;
+
+  // The navigation was redirected from the original URL.
+  bool is_redirect_ = false;
 
   // A previews data savings inflation percent for the navigation if not 0.
   int data_savings_inflation_percent_ = 0;
@@ -136,6 +160,10 @@ class PreviewsUserData {
 
   // The PreviewsState that was committed for the navigation.
   content::PreviewsState committed_previews_state_ = content::PREVIEWS_OFF;
+
+  // Metadata for an attempted or committed Lite Page Redirect preview. See
+  // struct comments for more detail.
+  std::unique_ptr<ServerLitePageInfo> server_lite_page_info_;
 
   DISALLOW_ASSIGN(PreviewsUserData);
 };

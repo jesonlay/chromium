@@ -583,7 +583,6 @@
 <translation id="4895877746940133817"><ph name="TYPE_1" />, <ph name="TYPE_2" /> и <ph name="TYPE_3" /></translation>
 <translation id="4914479371620770914">{URL_count,plural, =1{и ещё 1 веб-страница}one{и ещё # веб-страница}few{и ещё # веб-страницы}many{и ещё # веб-страниц}other{и ещё # веб-страницы}}</translation>
 <translation id="4916962322362512664"><ph name="DEVICE_NAME" /></translation>
-<translation id="4919958102839282947">Введите CVC-код карты <ph name="CREDIT_CARD" />. После этого ее реквизиты из платежного аккаунта Google будут переданы сайту.</translation>
 <translation id="4923417429809017348">Эта страница была автоматически переведена с неизвестного языка на <ph name="LANGUAGE_LANGUAGE" /></translation>
 <translation id="4923459931733593730">Платеж</translation>
 <translation id="4926049483395192435">Укажите значение.</translation>
@@ -615,7 +614,6 @@
 <translation id="5095208057601539847">Провинция</translation>
 <translation id="5098332213681597508">Имя из вашего аккаунта Google.</translation>
 <translation id="5115563688576182185">(64 бит)</translation>
-<translation id="5121084798328133320">После подтверждения реквизиты карты из платежного аккаунта Google будут переданы этому сайту.</translation>
 <translation id="5128122789703661928">Невозможно удалить сеанс с таким названием.</translation>
 <translation id="5135404736266831032">Управление адресами…</translation>
 <translation id="5141240743006678641">Шифровать синхронизированные пароли с помощью учетных данных Google</translation>
@@ -637,6 +635,7 @@
 <translation id="5287240709317226393">Показать файлы сookie</translation>
 <translation id="5288108484102287882">При проверке значений политик обнаружены некритичные ошибки</translation>
 <translation id="5299298092464848405">Не удалось выполнить анализ политики</translation>
+<translation id="5300589172476337783">Показать</translation>
 <translation id="5308380583665731573">Подключение</translation>
 <translation id="5308689395849655368">Отчеты о сбоях отключены.</translation>
 <translation id="5317780077021120954">Сохранить</translation>
@@ -872,6 +871,7 @@
 <translation id="7079718277001814089">Этот сайт содержит вредоносное ПО</translation>
 <translation id="7087282848513945231">Графство</translation>
 <translation id="7090678807593890770">Выполните поиск по запросу <ph name="LINK" /> в Google</translation>
+<translation id="7108338896283013870">Скрыть</translation>
 <translation id="7108819624672055576">Разрешено расширением</translation>
 <translation id="7111012039238467737">(действительный)</translation>
 <translation id="7119414471315195487">Закройте другие вкладки и программы.</translation>
@@ -1146,7 +1146,6 @@
 <translation id="8932102934695377596">Часы отстают</translation>
 <translation id="893332455753468063">Добавьте имя</translation>
 <translation id="8938939909778640821">Кредитные карты и карты предоплаты, которые принимаются к оплате</translation>
-<translation id="8952525071319348207">Введите срок окончания действия и CVC-код карты <ph name="CREDIT_CARD" />. После этого ее реквизиты из платежного аккаунта Google будут переданы сайту.</translation>
 <translation id="8957210676456822347">Авторизация через адаптивный портал</translation>
 <translation id="8971063699422889582">Сертификат сервера устарел.</translation>
 <translation id="8975012916872825179">В том числе телефонные номера, адреса электронной почты и адреса доставки.</translation>

@@ -176,12 +176,6 @@ CHAR-LIMIT guidelines:
       <message name="IDS_TEXT_OFF" desc="Text indicating that an option is turned off. [CHAR-LIMIT=20]">
         Off
       </message>
-      <message name="IDS_SHOW" desc="Generic label to show content for a feature. [CHAR-LIMIT=20]">
-        Show
-      </message>
-      <message name="IDS_HIDE" desc="Generic label to hide content for a feature. [CHAR-LIMIT=20]">
-        Hide
-      </message>
       <message name="IDS_LEARN_MORE" desc="Generic label for menu item to learn more about a feature. [CHAR-LIMIT=32]">
         Learn more
       </message>
@@ -1155,6 +1149,12 @@ Your Google account may have other forms of browsing history like searches and a
       <message name="IDS_ANDROID_PERMISSION_OFF" desc="Text at the top of the Website list, explaining to the user that a permission, such as the location service, is turned off. Contains a link to the settings menu to change it.">
         Turn on permission for Chrome in <ph name="BEGIN_LINK">&lt;link&gt;</ph>Android Settings<ph name="END_LINK">&lt;/link&gt;</ph>.
       </message>
+      <message name="IDS_ANDROID_PERMISSION_ALSO_OFF" desc="The message to show when a permission needs to be turned on not just in Chrome, but also in Android settings.">
+        You also need to turn this permission on for Chrome. See <ph name="BEGIN_LINK">&lt;link&gt;</ph>Android Settings<ph name="END_LINK">&lt;/link&gt;</ph> for details.
+      </message>
+      <message name="IDS_ANDROID_PERMISSION_ALSO_OFF_PLURAL" desc="The message to show when a permission needs to be turned on not just in Chrome, but also in Android settings.">
+        You also need to turn these permissions on for Chrome. See <ph name="BEGIN_LINK">&lt;link&gt;</ph>Android Settings<ph name="END_LINK">&lt;/link&gt;</ph> for details.
+      </message>
       <message name="IDS_ANDROID_LOCATION_OFF_GLOBALLY" desc="The message to show when Location has been turned off globally in Android. Contains a link to the settings menu to enable location.">
         Location access is off for this device. Turn it on in <ph name="BEGIN_LINK">&lt;link&gt;</ph>Android Settings<ph name="END_LINK">&lt;/link&gt;</ph>.
       </message>
@@ -1409,6 +1409,30 @@ Your Google account may have other forms of browsing history like searches and a
       <message name="IDS_PREFS_TRACING_ACTIVE_SUMMARY" translateable="false" desc="The summary of a text preference shown when a Chrome trace is being recorded.">
         A trace is being recorded. Use the notification to stop and share the result.
       </message>
+      <message name="IDS_PREFS_TRACING_DEFAULT_CATEGORIES_TITLE" translateable="false" desc="Title of a preference for selecting the enabled default tracing categories.">
+        Default categories
+      </message>
+      <message name="IDS_PREFS_TRACING_NON_DEFAULT_CATEGORIES_TITLE" translateable="false" desc="Title of a preference for selecting the enabled disabled-by-default tracing categories.">
+        Disabled-by-default categories
+      </message>
+      <message name="IDS_PREFS_TRACING_CATEGORIES_SUMMARY" translateable="false" desc="The summary of a preference for selecting the enabled categories.">
+        <ph name="NUM_ENABLED_CATEGORIES">%1$d<ex>3</ex></ph> out of <ph name="NUM_TOTAL_CATEGORIES">%2$d<ex>20</ex></ph> enabled
+      </message>
+      <message name="IDS_PREFS_TRACING_CATEGORY_SELECTION_TITLE" translateable="false" desc="Title for the trace category selection preferences page. [CHAR-LIMIT=32]">
+        Select categories
+      </message>
+      <message name="IDS_PREFS_TRACING_MODE_TITLE" translateable="false" desc="Title of a preference for changing the tracing mode.">
+        Tracing mode
+      </message>
+      <message name="IDS_PREFS_TRACING_MODE_RECORD_UNTIL_FULL" translateable="false" desc="Title for the tracing mode entry that records data until the buffer is full.">
+        Record until full
+      </message>
+      <message name="IDS_PREFS_TRACING_MODE_RECORD_AS_MUCH_AS_POSSIBLE" translateable="false" desc="Title for the tracing mode entry that records as much data as possible.">
+        Record until full (large buffer)
+      </message>
+      <message name="IDS_PREFS_TRACING_MODE_RECORD_CONTINUOUSLY" translateable="false" desc="Title for the tracing mode entry that records data continuously into a ring buffer.">
+        Record continuously
+      </message>
 
       <!-- Tracing notifications (not translated, since part of developer preferences) -->
       <message name="IDS_TRACING_NOTIFICATIONS_DISABLED" translateable="false" desc="Message of a toast shown when tracing could not be started because the Chrome app's notifications are disabled.">
@@ -1434,6 +1458,9 @@ Your Google account may have other forms of browsing history like searches and a
       </message>
       <message name="IDS_TRACING_STOP" translateable="false" desc="Caption of a button that stops recording a trace.">
         Stop recording
+      </message>
+      <message name="IDS_TRACING_SHARE" translateable="false" desc="Caption of a button that shares a recorded trace.">
+        Share trace
       </message>
       <message name="IDS_TRACING_ERROR_TOAST" translateable="false" desc="Message of a toast shown when there was an error during tracing.">
         Error occurred while recording Chrome trace, see log for details.
@@ -2078,6 +2105,9 @@ To change this setting, <ph name="BEGIN_LINK">&lt;resetlink&gt;</ph>reset sync<p
       <message name="IDS_CONTEXTMENU_OPEN_IMAGE_IN_NEW_TAB" desc="Context sensitive menu item for opening/viewing the selected image in a new tab. [CHAR-LIMIT=30]">
         Open image in new tab
       </message>
+      <message name="IDS_CONTEXTMENU_OPEN_IMAGE_IN_EPHEMERAL_TAB" desc="Context-sensitive menu item to open a quick preview of the selected image.  In English we're currently calling this 'Sneak peek' which implies that it's a quick preview without commitment (to making a new Tab).  The selected link will open in an overlay panel on top of the current tab which will go away easily too. [CHAR-LIMIT=30]">
+        Sneak peek
+      </message>
       <message name="IDS_CONTEXTMENU_LOAD_ORIGINAL_IMAGE" desc="Context sensitive menu item for Data Saver low fidelity placeholder images that loads the original version in place. [CHAR-LIMIT=30]">
         Load image
       </message>
@@ -2147,9 +2177,6 @@ To change this setting, <ph name="BEGIN_LINK">&lt;resetlink&gt;</ph>reset sync<p
       </message>
 
       <!-- App banner strings -->
-      <message name="IDS_APP_BANNER_INSTALLING" desc="Button text indicating that an application is being installed. [CHAR-LIMIT=25]">
-        Installing…
-      </message>
       <message name="IDS_APP_BANNER_OPEN" desc="Text that indicates that clicking on the button will launch an application. [CHAR-LIMIT=25]">
         Open
       </message>

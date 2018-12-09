@@ -59,6 +59,7 @@ class DOMTokenList;
 class Document;
 class DisplayLockContext;
 class ElementAnimations;
+class ElementInternals;
 class ElementIntersectionObserverData;
 class ElementRareData;
 class ExceptionState;
@@ -155,6 +156,8 @@ class CORE_EXPORT Element : public ContainerNode {
 
  public:
   static Element* Create(const QualifiedName&, Document*);
+
+  Element(const QualifiedName& tag_name, Document*, ConstructionType);
   ~Element() override;
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(beforecopy, kBeforecopy);
@@ -808,6 +811,9 @@ class CORE_EXPORT Element : public ContainerNode {
   // https://dom.spec.whatwg.org/#concept-element-is-value
   void SetIsValue(const AtomicString&);
   const AtomicString& IsValue() const;
+  void SetDidAttachInternals();
+  bool DidAttachInternals() const;
+  ElementInternals& EnsureElementInternals();
 
   bool ContainsFullScreenElement() const {
     return HasElementFlag(ElementFlags::kContainsFullScreenElement);
@@ -890,9 +896,9 @@ class CORE_EXPORT Element : public ContainerNode {
   ScriptPromise acquireDisplayLock(ScriptState*, V8DisplayLockCallback*);
   DisplayLockContext* GetDisplayLockContext() const;
 
- protected:
-  Element(const QualifiedName& tag_name, Document*, ConstructionType);
+  bool StyleRecalcBlockedByDisplayLock() const;
 
+ protected:
   const ElementData* GetElementData() const { return element_data_.Get(); }
   UniqueElementData& EnsureUniqueElementData();
 
@@ -1099,6 +1105,8 @@ class CORE_EXPORT Element : public ContainerNode {
   void DetachAllAttrNodesFromElement();
   void DetachAttrNodeFromElementWithValue(Attr*, const AtomicString& value);
   void DetachAttrNodeAtIndex(Attr*, wtf_size_t index);
+
+  void NotifyDisplayLockDidRecalcStyle();
 
   Member<ElementData> element_data_;
 };

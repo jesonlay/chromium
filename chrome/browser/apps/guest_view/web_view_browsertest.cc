@@ -1113,16 +1113,15 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, AutoplayPolicy) {
 }
 
 // This test exercises the webview spatial navigation API
-// This test is disabled due to being flaky. http://crbug.com/884306
-IN_PROC_BROWSER_TEST_F(WebViewTest, DISABLED_SpatialNavigationJavascriptAPI) {
+IN_PROC_BROWSER_TEST_F(WebViewTest, SpatialNavigationJavascriptAPI) {
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       switches::kEnableSpatialNavigation);
 
-  LoadAndLaunchPlatformApp("web_view/spatial_navigation_state_api",
-                           "WebViewTest.LAUNCHED");
-
   ExtensionTestMessageListener next_step_listener("TEST_STEP_PASSED", false);
   next_step_listener.set_failure_message("TEST_STEP_FAILED");
+
+  LoadAndLaunchPlatformApp("web_view/spatial_navigation_state_api",
+                           "WebViewTest.LAUNCHED");
 
   // Check that spatial navigation is initialized in the beginning
   ASSERT_TRUE(next_step_listener.WaitUntilSatisfied());
@@ -1923,28 +1922,26 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, MAYBE_InterstitialPageRouteEvents) {
 #else
 #define MAYBE_InterstitialPageFocusedWidget InterstitialPageFocusedWidget
 #endif
-
 IN_PROC_BROWSER_TEST_F(WebViewTest, MAYBE_InterstitialPageFocusedWidget) {
+  // The purpose of this test is to ensure that the InterstitialPageImpl was
+  // properly attached to the guest which happens in
+  // WebContentsImpl::AttachInterstitialPage. With committed interstitials this
+  // is no longer necessary.
+  // TODO(carlosil): Remove this test once commited interstitials ships.
+  // https://crbug.com/755632.
+  if (AreCommittedInterstitialsEnabled())
+    return;
+
   // This test tests that a inner WebContents' InterstitialPage is properly
   // connected to an outer WebContents through a CrossProcessFrameConnector.
-
   InterstitialTestHelper();
 
   content::WebContents* outer_web_contents = GetFirstAppWindowWebContents();
   content::WebContents* guest_web_contents =
       GetGuestViewManager()->WaitForSingleGuestCreated();
 
-  content::RenderFrameHost* interstitial_main_frame;
-
-  if (AreCommittedInterstitialsEnabled()) {
-    // With committed interstitials, interstitials are no longer a special case
-    // so we can just use the main frame from the WebContents.
-    interstitial_main_frame = guest_web_contents->GetMainFrame();
-  } else {
-    interstitial_main_frame =
-        guest_web_contents->GetInterstitialPage()->GetMainFrame();
-  }
-
+  content::RenderFrameHost* interstitial_main_frame =
+      guest_web_contents->GetInterstitialPage()->GetMainFrame();
   content::RenderWidgetHost* interstitial_widget =
       interstitial_main_frame->GetRenderViewHost()->GetWidget();
 

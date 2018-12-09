@@ -138,11 +138,6 @@ function FileManager() {
    */
   this.ui_ = null;
 
-  /**
-   * @private {analytics.Tracker}
-   */
-  this.tracker_ = null;
-
   // --------------------------------------------------------------------------
   // Parameters determining the type of file manager.
 
@@ -517,12 +512,6 @@ FileManager.prototype = /** @struct */ {
    */
   get ui() {
     return this.ui_;
-  },
-  /**
-   * @return {analytics.Tracker}
-   */
-  get tracker() {
-    return this.tracker_;
   }
 };
 
@@ -870,12 +859,6 @@ FileManager.prototype = /** @struct */ {
 
     // Initialize the member variables that depend this.launchParams_.
     this.dialogType = this.launchParams_.type;
-
-    // We used to share the tracker with background, but due to
-    // its use of instanceof checks for some functionality
-    // we really can't do this (as instanceof checks fail across
-    // different script contexts).
-    this.tracker_ = metrics.getTracker();
   };
 
   /**
@@ -1100,12 +1083,8 @@ FileManager.prototype = /** @struct */ {
     assert(this.fileOperationManager_);
     assert(this.metadataModel_);
     this.directoryModel_ = new DirectoryModel(
-        singleSelection,
-        this.fileFilter_,
-        this.metadataModel_,
-        this.volumeManager_,
-        this.fileOperationManager_,
-        assert(this.tracker_));
+        singleSelection, this.fileFilter_, this.metadataModel_,
+        this.volumeManager_, this.fileOperationManager_);
 
     this.folderShortcutsModel_ = new FolderShortcutsDataModel(
         this.volumeManager_);
@@ -1147,11 +1126,18 @@ FileManager.prototype = /** @struct */ {
         this.metadataModel_,
         this.fileMetadataFormatter_);
 
+    // Create naming controller.
+    this.namingController_ = new NamingController(
+        this.ui_.listContainer, assert(this.ui_.alertDialog),
+        assert(this.ui_.confirmDialog), this.directoryModel_,
+        assert(this.fileFilter_), this.selectionHandler_);
+
     // Create task controller.
     this.taskController_ = new TaskController(
         this.dialogType, this.volumeManager_, this.ui_, this.metadataModel_,
         this.directoryModel_, this.selectionHandler_,
-        this.metadataUpdateController_, assert(this.crostini_));
+        this.metadataUpdateController_, this.namingController_,
+        assert(this.crostini_));
 
     // Create search controller.
     this.searchController_ = new SearchController(
@@ -1160,18 +1146,6 @@ FileManager.prototype = /** @struct */ {
         this.directoryModel_,
         this.volumeManager_,
         assert(this.taskController_));
-
-    // Create naming controller.
-    assert(this.ui_.alertDialog);
-    assert(this.ui_.confirmDialog);
-    assert(this.fileFilter_);
-    this.namingController_ = new NamingController(
-        this.ui_.listContainer,
-        this.ui_.alertDialog,
-        this.ui_.confirmDialog,
-        this.directoryModel_,
-        this.fileFilter_,
-        this.selectionHandler_);
 
     // Create directory tree naming controller.
     this.directoryTreeNamingController_ = new DirectoryTreeNamingController(
@@ -1444,7 +1418,7 @@ FileManager.prototype = /** @struct */ {
 
     // If there is no target select MyFiles by default.
     queue.run((callback) => {
-      if (!nextCurrentDirEntry)
+      if (!nextCurrentDirEntry && this.directoryTree.dataModel.myFilesModel_)
         nextCurrentDirEntry = this.directoryTree.dataModel.myFilesModel_.entry;
 
       callback();

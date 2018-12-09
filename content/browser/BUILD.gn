@@ -559,6 +559,8 @@ jumbo_source_set("browser") {
     "cache_storage/cache_storage_blob_to_disk_cache.h",
     "cache_storage/cache_storage_cache.cc",
     "cache_storage/cache_storage_cache.h",
+    "cache_storage/cache_storage_cache_entry_handler.cc",
+    "cache_storage/cache_storage_cache_entry_handler.h",
     "cache_storage/cache_storage_cache_handle.h",
     "cache_storage/cache_storage_cache_observer.h",
     "cache_storage/cache_storage_context_impl.cc",
@@ -991,6 +993,7 @@ jumbo_source_set("browser") {
     "indexed_db/indexed_db_quota_client.h",
     "indexed_db/indexed_db_reporting.cc",
     "indexed_db/indexed_db_reporting.h",
+    "indexed_db/indexed_db_return_value.cc",
     "indexed_db/indexed_db_return_value.h",
     "indexed_db/indexed_db_tombstone_sweeper.cc",
     "indexed_db/indexed_db_tombstone_sweeper.h",
@@ -1939,6 +1942,8 @@ jumbo_source_set("browser") {
     sources += [
       "gpu/ca_transaction_gpu_coordinator.cc",
       "gpu/ca_transaction_gpu_coordinator.h",
+      "sandbox_support_mac_impl.h",
+      "sandbox_support_mac_impl.mm",
       "web_contents/web_contents_ns_view_bridge.h",
       "web_contents/web_contents_ns_view_bridge.mm",
     ]
@@ -2375,7 +2380,6 @@ jumbo_source_set("browser") {
       "renderer_host/render_widget_host_ns_view_bridge_local.h",
       "renderer_host/render_widget_host_ns_view_bridge_local.mm",
       "renderer_host/render_widget_host_ns_view_client_helper.h",
-      "renderer_host/render_widget_host_ns_view_client_helper.mm",
       "renderer_host/render_widget_host_view_cocoa.h",
       "renderer_host/render_widget_host_view_cocoa.mm",
     ]

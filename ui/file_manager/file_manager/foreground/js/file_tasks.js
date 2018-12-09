@@ -15,13 +15,14 @@
  * @param {!Array<!chrome.fileManagerPrivate.FileTask>} tasks
  * @param {chrome.fileManagerPrivate.FileTask} defaultTask
  * @param {!TaskHistory} taskHistory
+ * @param {!NamingController} namingController
  * @param {!Crostini} crostini
  * @constructor
  * @struct
  */
 function FileTasks(
     volumeManager, metadataModel, directoryModel, ui, entries, mimeTypes, tasks,
-    defaultTask, taskHistory, crostini) {
+    defaultTask, taskHistory, namingController, crostini) {
   /**
    * @private {!VolumeManager}
    * @const
@@ -75,6 +76,12 @@ function FileTasks(
    * @const
    */
   this.taskHistory_ = taskHistory;
+
+  /**
+   * @private {!NamingController}
+   * @const
+   */
+  this.namingController_ = namingController;
 
   /**
    * @private {!Crostini}
@@ -162,12 +169,13 @@ FileTasks.TaskPickerType = {
  * @param {!Array<!Entry>} entries
  * @param {!Array<?string>} mimeTypes
  * @param {!TaskHistory} taskHistory
+ * @param {!NamingController} namingController
  * @param {!Crostini} crostini
  * @return {!Promise<!FileTasks>}
  */
 FileTasks.create = function(
     volumeManager, metadataModel, directoryModel, ui, entries, mimeTypes,
-    taskHistory, crostini) {
+    taskHistory, namingController, crostini) {
   var tasksPromise = new Promise(function(fulfill) {
     // getFileTasks supports only native entries.
     entries = entries.filter(util.isNativeEntry);
@@ -220,7 +228,7 @@ FileTasks.create = function(
   return Promise.all([tasksPromise, defaultTaskPromise]).then(function(args) {
     return new FileTasks(
         volumeManager, metadataModel, directoryModel, ui, entries, mimeTypes,
-        args[0], args[1], taskHistory, crostini);
+        args[0], args[1], taskHistory, namingController, crostini);
   });
 };
 
@@ -347,34 +355,68 @@ FileTasks.UMA_ZIP_HANDLER_TASK_IDS_ = Object.freeze([
 ]);
 
 /**
+ * Returns whether the system is currently offline.
+ *
+ * @param {!VolumeManager} volumeManager
+ * @return {boolean} True if the network status is offline.
+ * @private
+ */
+FileTasks.isOffline_ = function(volumeManager) {
+  var connection = volumeManager.getDriveConnectionState();
+  return connection.type == VolumeManagerCommon.DriveConnectionType.OFFLINE &&
+      connection.reason == VolumeManagerCommon.DriveConnectionReason.NO_NETWORK;
+};
+
+/**
+ * Records a metric, as well as recording online and offline versions of it.
+ *
+ * @param {!VolumeManager} volumeManager
+ * @param {string} name Metric name.
+ * @param {!*} value Enum value.
+ * @param {!Array<*>} values Array of valid values.
+ */
+FileTasks.recordEnumWithOnlineAndOffline_ = function(
+    volumeManager, name, value, values) {
+  metrics.recordEnum(name, value, values);
+  if (FileTasks.isOffline_(volumeManager))
+    metrics.recordEnum(name + '.Offline', value, values);
+  else
+    metrics.recordEnum(name + '.Online', value, values);
+};
+
+/**
  * Records trial of opening file grouped by extensions.
  *
+ * @param {!VolumeManager} volumeManager
  * @param {Array<!Entry>} entries The entries to be opened.
  * @private
  */
-FileTasks.recordViewingFileTypeUMA_ = function(entries) {
+FileTasks.recordViewingFileTypeUMA_ = function(volumeManager, entries) {
   for (var i = 0; i < entries.length; i++) {
     var entry = entries[i];
     var extension = FileType.getExtension(entry).toLowerCase();
     if (FileTasks.UMA_INDEX_KNOWN_EXTENSIONS.indexOf(extension) < 0) {
       extension = 'other';
     }
-    metrics.recordEnum(
-        'ViewingFileType', extension, FileTasks.UMA_INDEX_KNOWN_EXTENSIONS);
+    FileTasks.recordEnumWithOnlineAndOffline_(
+        volumeManager, 'ViewingFileType', extension,
+        FileTasks.UMA_INDEX_KNOWN_EXTENSIONS);
   }
 };
 
 /**
  * Records trial of opening file grouped by root types.
  *
+ * @param {!VolumeManager} volumeManager
  * @param {?VolumeManagerCommon.RootType} rootType The type of the root where
  *     entries are being opened.
  * @private
  */
-FileTasks.recordViewingRootTypeUMA_ = function(rootType) {
+FileTasks.recordViewingRootTypeUMA_ = function(volumeManager, rootType) {
   if (rootType !== null) {
-    metrics.recordEnum(
-        'ViewingRootType', rootType, VolumeManagerCommon.RootTypesForUMA);
+    FileTasks.recordEnumWithOnlineAndOffline_(
+        volumeManager, 'ViewingRootType', rootType,
+        VolumeManagerCommon.RootTypesForUMA);
   }
 };
 
@@ -654,9 +696,9 @@ FileTasks.prototype.maybeShareWithCrostiniOrShowDialog_ = function(
  *     default task is executed, or the error is occurred.
  */
 FileTasks.prototype.executeDefault = function(opt_callback) {
-  FileTasks.recordViewingFileTypeUMA_(this.entries_);
+  FileTasks.recordViewingFileTypeUMA_(this.volumeManager_, this.entries_);
   FileTasks.recordViewingRootTypeUMA_(
-      this.directoryModel_.getCurrentRootType());
+      this.volumeManager_, this.directoryModel_.getCurrentRootType());
   this.executeDefaultInternal_(opt_callback);
 };
 
@@ -739,7 +781,8 @@ FileTasks.prototype.executeDefaultInternal_ = function(opt_callback) {
               .create(
                   this.volumeManager_, this.metadataModel_,
                   this.directoryModel_, this.ui_, this.entries_,
-                  this.mimeTypes_, this.taskHistory_, this.crostini_)
+                  this.mimeTypes_, this.taskHistory_, this.namingController_,
+                  this.crostini_)
               .then(
                   function(tasks) {
                     tasks.executeDefault();
@@ -789,9 +832,9 @@ FileTasks.prototype.executeDefaultInternal_ = function(opt_callback) {
  * @param {chrome.fileManagerPrivate.FileTask} task FileTask.
  */
 FileTasks.prototype.execute = function(task) {
-  FileTasks.recordViewingFileTypeUMA_(this.entries_);
+  FileTasks.recordViewingFileTypeUMA_(this.volumeManager_, this.entries_);
   FileTasks.recordViewingRootTypeUMA_(
-      this.directoryModel_.getCurrentRootType());
+      this.volumeManager_, this.directoryModel_.getCurrentRootType());
   this.executeInternal_(task);
 };
 
@@ -805,6 +848,13 @@ FileTasks.prototype.executeInternal_ = function(task) {
   this.checkAvailability_(() => {
     this.maybeShareWithCrostiniOrShowDialog_(task, () => {
       this.taskHistory_.recordTaskExecuted(task.taskId);
+      let msg;
+      if (this.entries.length === 1) {
+        msg = strf('OPEN_A11Y', this.entries_[0].name);
+      } else {
+        msg = strf('OPEN_A11Y_PLURAL', this.entries_.length);
+      }
+      this.ui_.speakA11yMessage(msg);
       if (FileTasks.isInternalTask_(task.taskId)) {
         this.executeInternalTask_(task.taskId);
       } else {
@@ -1071,7 +1121,9 @@ FileTasks.prototype.updateShareMenuButton_ = function(shareMenuButton, tasks) {
   var driveShareCommandSeparator =
       shareMenuButton.menu.querySelector('#drive-share-separator');
 
-  shareMenuButton.hidden = driveShareCommand.disabled && tasks.length == 0;
+  // Hide share icon for New Folder creation.  See https://crbug.com/571355.
+  shareMenuButton.hidden = (driveShareCommand.disabled && tasks.length == 0) ||
+      this.namingController_.isRenamingInProgress();
 
   // Show the separator if Drive share command is enabled and there is at least
   // one other share actions.

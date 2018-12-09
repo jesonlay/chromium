@@ -229,6 +229,10 @@
       status: "experimental",
     },
     {
+      name: "ContactsManager",
+      status: "experimental",
+    },
+    {
       name: "ContextMenu",
       status: "experimental",
     },
@@ -399,6 +403,7 @@
     {
       // http://crbug.com/905922
       name: "ElementInternals",
+      implied_by: ["FormAssociatedCustomElements"],
     },
     {
       // https://crbug.com/879270
@@ -513,6 +518,10 @@
     },
     {
       name: "ForceTallerSelectPopup",
+    },
+    {
+      name: "FormAssociatedCustomElements",
+      status: "test",
     },
     {
       name: "FormDataEvent",
@@ -638,12 +647,17 @@
       // Tracks "jank" from layout objects changing their visual location
       // between animation frames (see crbug.com/581518).
       name: "JankTracking",
-      implied_by: ["LayoutJankAPI"],
+      implied_by: ["LayoutJankAPI", "JankTrackingSweepLine"],
       status: "experimental",
     },
     {
+      // Modifies JankTracking to use O(n log n) sweep line algorithm for
+      // computing the area of the jank region.
+      name: "JankTrackingSweepLine",
+    },
+    {
       name: "KeyboardFocusableScrollers",
-      status: "stable",
+      status: "experimental",
     },
     {
       name: "LangAttributeAwareFormControlUI",
@@ -706,11 +720,6 @@
     {
       name:"ManualSlotting",
       status:"experimental",
-    },
-    {
-      name: "MediaCapabilities",
-      origin_trial_feature_name: "MediaCapabilities",
-      status: "stable",
     },
     {
       name: "MediaCapabilitiesEncodingInfo",
@@ -799,6 +808,9 @@
     {
       name: "MojoJSTest",
       status: "test",
+    },
+    {
+      name: "MovementXYInBlink",
     },
     {
       name: "NavigatorContentUtils",
@@ -1047,6 +1059,11 @@
       origin_trial_feature_name: "RtcAudioJitterBufferMaxPackets",
       status: "experimental",
     },
+    // Enables the use of the RTCDtlsTransport object.
+    {
+      name: "RTCDtlsTransport",
+      status: "test",
+    },
     // Enables the use of the RTCIceTransport with extensions.
     {
       name: "RTCIceTransportExtension",
@@ -1089,6 +1106,9 @@
     {
       name: "ScriptedSpeechSynthesis",
       status: "stable",
+    },
+    {
+      name: "ScriptStreamingOnPreload",
     },
     // Serialize and restore scroll anchors.
     {
@@ -1171,6 +1191,11 @@
       name: "SmoothScrollJSIntervention",
       status: "stable",
     },
+    // When this is enabled (and Spatial Navigation is enabled), overrides of box shadow and outline
+    // on focused elements will be ignored.
+    {
+      name: "SpatialNavigationForcesOutline",
+    },
     // Used as argument in attribute of stable-release functions/interfaces
     // where a runtime-enabled feature name is required for correct IDL syntax.
     // This is a global flag; do not change its status.
@@ -1208,12 +1233,6 @@
       name: "TouchEventFeatureDetection",
       origin_trial_feature_name: "ForceTouchEventFeatureDetectionForInspector",
       status: "stable",
-    },
-    // This is set conditionally in SetRuntimeFeaturesDefaultsAndUpdateFromArgs
-    // and will eventually go away when the touchpad/wheel scroll latching is
-    // enabled on all platforms (http://crbug.com/526463).
-    {
-      name: "TouchpadAndWheelScrollLatching",
     },
     // When enabled, tracks the number of times each LayoutBlock
     // goes through layout. For testing purposes only.
@@ -1275,6 +1294,10 @@
     },
     {
       name: "WakeLockNavigator",
+      status: "experimental",
+    },
+    {
+      name: "WasmCodeCache",
       status: "experimental",
     },
     {

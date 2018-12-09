@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/feature_list.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -40,6 +41,7 @@
 #include "net/http/http_util.h"
 #include "net/url_request/redirect_info.h"
 #include "services/network/public/cpp/cors/cors_error_status.h"
+#include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/mojom/cors.mojom-shared.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
@@ -102,6 +104,12 @@ bool ShouldFailRequestDueToCors(const network::ResourceRequest& request) {
     return false;
   }
 
+  // Currently the following logic does not work with extensions. Until it's
+  // fixed let's rely on the renderer-side check. See https://crbug.com/895999.
+  if (!base::FeatureList::IsEnabled(network::features::kOutOfBlinkCors)) {
+    return false;
+  }
+
   const auto mode = request.fetch_request_mode;
   if (mode == network::mojom::FetchRequestMode::kNavigate ||
       mode == network::mojom::FetchRequestMode::kNoCors) {
@@ -136,10 +144,11 @@ class FileURLDirectoryLoader
   }
 
   // network::mojom::URLLoader:
-  void FollowRedirect(const base::Optional<std::vector<std::string>>&
-                          to_be_removed_request_headers,
-                      const base::Optional<net::HttpRequestHeaders>&
-                          modified_request_headers) override {}
+  void FollowRedirect(
+      const base::Optional<std::vector<std::string>>&
+          to_be_removed_request_headers,
+      const base::Optional<net::HttpRequestHeaders>& modified_request_headers,
+      const base::Optional<GURL>& new_url) override {}
   void ProceedWithResponse() override { NOTREACHED(); }
   void SetPriority(net::RequestPriority priority,
                    int32_t intra_priority_value) override {}
@@ -347,10 +356,11 @@ class FileURLLoader : public network::mojom::URLLoader {
   }
 
   // network::mojom::URLLoader:
-  void FollowRedirect(const base::Optional<std::vector<std::string>>&
-                          to_be_removed_request_headers,
-                      const base::Optional<net::HttpRequestHeaders>&
-                          modified_request_headers) override {
+  void FollowRedirect(
+      const base::Optional<std::vector<std::string>>&
+          to_be_removed_request_headers,
+      const base::Optional<net::HttpRequestHeaders>& modified_request_headers,
+      const base::Optional<GURL>& new_url) override {
     std::unique_ptr<RedirectData> redirect_data = std::move(redirect_data_);
     if (redirect_data->is_directory) {
       FileURLDirectoryLoader::CreateAndStart(

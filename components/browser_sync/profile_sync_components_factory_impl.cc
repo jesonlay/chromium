@@ -48,7 +48,6 @@
 #include "components/sync_bookmarks/bookmark_data_type_controller.h"
 #include "components/sync_bookmarks/bookmark_model_associator.h"
 #include "components/sync_bookmarks/bookmark_sync_service.h"
-#include "components/sync_sessions/session_data_type_controller.h"
 #include "components/sync_sessions/session_model_type_controller.h"
 #include "components/sync_sessions/session_sync_service.h"
 
@@ -57,7 +56,6 @@ using bookmarks::BookmarkModel;
 using sync_bookmarks::BookmarkChangeProcessor;
 using sync_bookmarks::BookmarkDataTypeController;
 using sync_bookmarks::BookmarkModelAssociator;
-using sync_sessions::SessionDataTypeController;
 using syncer::AsyncDirectoryTypeController;
 using syncer::DataTypeController;
 using syncer::DataTypeManager;
@@ -138,17 +136,11 @@ ProfileSyncComponentsFactoryImpl::~ProfileSyncComponentsFactoryImpl() {}
 
 syncer::DataTypeController::TypeVector
 ProfileSyncComponentsFactoryImpl::CreateCommonDataTypeControllers(
-    syncer::ModelTypeSet disabled_types,
-    syncer::LocalDeviceInfoProvider* local_device_info_provider) {
+    syncer::ModelTypeSet disabled_types) {
   syncer::DataTypeController::TypeVector controllers;
   const base::RepeatingClosure dump_stack =
       base::BindRepeating(&syncer::ReportUnrecoverableError, channel_);
 
-  // TODO(stanisc): can DEVICE_INFO be one of disabled datatypes?
-  // Use an error callback that always uploads a stacktrace if it can to help
-  // get USS as stable as possible.
-  controllers.push_back(
-      CreateModelTypeControllerForModelRunningOnUIThread(syncer::DEVICE_INFO));
   // These features are enabled only if there's a DB thread to post tasks to.
   if (db_thread_) {
     // Autocomplete sync is enabled by default.  Register unless explicitly
@@ -273,7 +265,6 @@ ProfileSyncComponentsFactoryImpl::CreateCommonDataTypeControllers(
           base::BindRepeating(
               &sync_sessions::SessionSyncService::ProxyTabsStateChanged,
               base::Unretained(sync_client_->GetSessionSyncService()))));
-      if (FeatureList::IsEnabled(switches::kSyncUSSSessions)) {
         controllers.push_back(
             std::make_unique<sync_sessions::SessionModelTypeController>(
                 sync_client_->GetPrefService(),
@@ -282,11 +273,6 @@ ProfileSyncComponentsFactoryImpl::CreateCommonDataTypeControllers(
                         ->GetControllerDelegate()
                         .get()),
                 history_disabled_pref_));
-      } else {
-        controllers.push_back(std::make_unique<SessionDataTypeController>(
-            dump_stack, sync_client_, local_device_info_provider,
-            history_disabled_pref_));
-      }
     }
 
     // Favicon sync is enabled by default. Register unless explicitly disabled.
@@ -401,27 +387,25 @@ ProfileSyncComponentsFactoryImpl::CreateCommonDataTypeControllers(
         syncer::USER_EVENTS));
   }
 
-  if (base::FeatureList::IsEnabled(switches::kSyncUserConsentSeparateType)) {
-    // Forward both on-disk and in-memory storage modes to the same delegate,
-    // since behavior for USER_CONSENTS does not differ (they are always
-    // persisted).
-    // TODO(crbug.com/867801): Replace the proxy delegates below with a simpler
-    // forwarding delegate that involves no posting of tasks.
-    controllers.push_back(std::make_unique<ModelTypeController>(
-        syncer::USER_CONSENTS,
-        /*delegate_on_disk=*/
-        std::make_unique<syncer::ProxyModelTypeControllerDelegate>(
-            ui_thread_,
-            base::BindRepeating(
-                &syncer::SyncClient::GetControllerDelegateForModelType,
-                base::Unretained(sync_client_), syncer::USER_CONSENTS)),
-        /*delegate_in_memory=*/
-        std::make_unique<syncer::ProxyModelTypeControllerDelegate>(
-            ui_thread_,
-            base::BindRepeating(
-                &syncer::SyncClient::GetControllerDelegateForModelType,
-                base::Unretained(sync_client_), syncer::USER_CONSENTS))));
-  }
+  // Forward both on-disk and in-memory storage modes to the same delegate,
+  // since behavior for USER_CONSENTS does not differ (they are always
+  // persisted).
+  // TODO(crbug.com/867801): Replace the proxy delegates below with a simpler
+  // forwarding delegate that involves no posting of tasks.
+  controllers.push_back(std::make_unique<ModelTypeController>(
+      syncer::USER_CONSENTS,
+      /*delegate_on_disk=*/
+      std::make_unique<syncer::ProxyModelTypeControllerDelegate>(
+          ui_thread_,
+          base::BindRepeating(
+              &syncer::SyncClient::GetControllerDelegateForModelType,
+              base::Unretained(sync_client_), syncer::USER_CONSENTS)),
+      /*delegate_in_memory=*/
+      std::make_unique<syncer::ProxyModelTypeControllerDelegate>(
+          ui_thread_,
+          base::BindRepeating(
+              &syncer::SyncClient::GetControllerDelegateForModelType,
+              base::Unretained(sync_client_), syncer::USER_CONSENTS))));
 
   return controllers;
 }

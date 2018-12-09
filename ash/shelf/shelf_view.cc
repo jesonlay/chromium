@@ -1807,14 +1807,6 @@ void ShelfView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
 }
 
 void ShelfView::OnGestureEvent(ui::GestureEvent* event) {
-  // Do not forward events to |shelf_| (which forwards events to the shelf
-  // layout manager) as we do not want gestures on the overflow to open the app
-  // list for example.
-  if (is_overflow_mode()) {
-    main_shelf_->overflow_bubble()->bubble_view()->ProcessGestureEvent(*event);
-    event->StopPropagation();
-    return;
-  }
 
   // Convert the event location from current view to screen, since swiping up on
   // the shelf can open the fullscreen app list. Updating the bounds of the app
@@ -1824,6 +1816,13 @@ void ShelfView::OnGestureEvent(ui::GestureEvent* event) {
   event->set_location(location_in_screen);
   if (shelf_->ProcessGestureEvent(*event))
     event->StopPropagation();
+  else if (is_overflow_mode()) {
+    // If the event hasn't been processed and the overflow shelf is showing,
+    // let the bubble process the event.
+    main_shelf_->overflow_bubble()->bubble_view()->ProcessGestureEvent(*event);
+    event->StopPropagation();
+    return;
+  }
 }
 
 bool ShelfView::OnMouseWheel(const ui::MouseWheelEvent& event) {
@@ -2130,8 +2129,12 @@ void ShelfView::OnMenuClosed(views::View* source) {
 
   shelf_menu_model_adapter_.reset();
 
-  // Auto-hide or alignment might have changed, but only for this shelf.
-  shelf_->UpdateVisibilityState();
+  const bool is_in_drag = item && ShelfButtonIsInDrag(item->type, source);
+  // Update the shelf visibility since auto-hide or alignment might have
+  // changes, but don't update if shelf item is being dragged. Since shelf
+  // should be kept as visible during shelf item drag even menu is closed.
+  if (!is_in_drag)
+    shelf_->UpdateVisibilityState();
 }
 
 void ShelfView::OnBoundsAnimatorProgressed(views::BoundsAnimator* animator) {

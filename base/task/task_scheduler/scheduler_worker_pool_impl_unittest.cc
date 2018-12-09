@@ -25,6 +25,7 @@
 #include "base/synchronization/condition_variable.h"
 #include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/task/task_features.h"
 #include "base/task/task_scheduler/delayed_task_manager.h"
 #include "base/task/task_scheduler/scheduler_task_runner_delegate.h"
 #include "base/task/task_scheduler/scheduler_worker_pool_params.h"
@@ -133,8 +134,8 @@ class TaskSchedulerWorkerPoolImplTestBase
  private:
   // SchedulerWorkerPool::Delegate:
   void ReEnqueueSequence(
-      std::unique_ptr<Sequence::Transaction> sequence_transaction) override {
-    worker_pool_->ReEnqueueSequence(std::move(sequence_transaction));
+      SequenceAndTransaction sequence_and_transaction) override {
+    worker_pool_->ReEnqueueSequence(std::move(sequence_and_transaction));
   }
 
   DISALLOW_COPY_AND_ASSIGN(TaskSchedulerWorkerPoolImplTestBase);
@@ -1064,7 +1065,8 @@ class TaskSchedulerWorkerPoolBlockingTest
   // Returns how long we can expect a change to |max_tasks_| to occur
   // after a task has become blocked.
   TimeDelta GetMaxTasksChangeSleepTime() {
-    return std::max(SchedulerWorkerPoolImpl::kBlockedWorkersPollPeriod,
+    return std::max(TimeDelta::FromMicroseconds(
+                        kBlockedWorkersPollMicrosecondsParam.Get()),
                     worker_pool_->MayBlockThreshold()) +
            TestTimeouts::tiny_timeout();
   }

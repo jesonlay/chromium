@@ -67,7 +67,7 @@ const base::Feature kAutofillDownstreamUseGooglePayBrandingOniOS{
 
 // Controls whether Autofill attemps to fill dynamically changing forms.
 const base::Feature kAutofillDynamicForms{"AutofillDynamicForms",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Controls whether the server credit cards are saved only in the ephemeral
 // account-based storage, instead of the persistent local storage.
@@ -118,6 +118,11 @@ const base::Feature kAutofillExpandedPopupViews{
 const base::Feature kAutofillGetPaymentsIdentityFromSync{
     "AutofillGetPaymentsIdentityFromSync", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// When enabled, autofill suggestions are displayed in the keyboard accessory
+// instead of the regular popup.
+const base::Feature kAutofillKeyboardAccessory{
+    "AutofillKeyboardAccessory", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // When enabled, the local card migration dialog will show the progress
 // and result of the migration after starting the migration. When disabled,
 // there is no feedback for the migration.
@@ -161,12 +166,25 @@ const base::Feature kAutofillRestrictUnownedFieldsToFormlessCheckout{
     "AutofillRestrictUnownedFieldsToFormlessCheckout",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
+// On Canary and Dev channels only, this feature flag instructs chrome to send
+// rich form/field metadata with queries. This will trigger the use of richer
+// field-type predictions model on the server, for testing/evaluation of those
+// models prior to a client-push.
+const base::Feature kAutofillRichMetadataQueries{
+    "AutofillRichMetadataQueries", base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kAutofillSaveOnProbablySubmitted{
     "AutofillSaveOnProbablySubmitted", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kAutofillSaveCardDialogUnlabeledExpirationDate{
     "AutofillSaveCardDialogUnlabeledExpirationDate",
     base::FEATURE_ENABLED_BY_DEFAULT};
+
+// When enabled, local and upload credit card save dialogs will be updated to
+// new M72 guidelines, including a [No thanks] cancel button and an extended
+// title string.
+const base::Feature kAutofillSaveCardImprovedUserConsent{
+    "AutofillSaveCardImprovedUserConsent", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // When enabled, a sign in promo will show up right after the user
 // saves a card locally. This also introduces a "Manage Cards" bubble.

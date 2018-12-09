@@ -371,10 +371,16 @@ URLLoader::URLLoader(
   url_request_->SetReferrer(ComputeReferrer(request.referrer));
   url_request_->set_referrer_policy(request.referrer_policy);
   url_request_->SetExtraRequestHeaders(request.headers);
-  if (!request.requested_with.empty()) {
-    // X-Requested-With header must be set here to avoid breaking CORS checks.
-    url_request_->SetExtraRequestHeaderByName("X-Requested-With",
-                                              request.requested_with, true);
+  // X-Requested-With and X-Client-Data header must be set here to avoid
+  // breaking CORS checks. They are non-empty when the values are given by the
+  // UA code, therefore they should be ignored by CORS checks.
+  if (!request.requested_with_header.empty()) {
+    url_request_->SetExtraRequestHeaderByName(
+        "X-Requested-With", request.requested_with_header, true);
+  }
+  if (!request.client_data_header.empty()) {
+    url_request_->SetExtraRequestHeaderByName("X-Client-Data",
+                                              request.client_data_header, true);
   }
   url_request_->set_upgrade_if_insecure(request.upgrade_if_insecure);
 
@@ -535,19 +541,29 @@ const void* const URLLoader::kUserDataKey = &URLLoader::kUserDataKey;
 void URLLoader::FollowRedirect(
     const base::Optional<std::vector<std::string>>&
         to_be_removed_request_headers,
-    const base::Optional<net::HttpRequestHeaders>& modified_request_headers) {
+    const base::Optional<net::HttpRequestHeaders>& modified_request_headers,
+    const base::Optional<GURL>& new_url) {
   if (!url_request_) {
     NotifyCompleted(net::ERR_UNEXPECTED);
     // |this| may have been deleted.
     return;
   }
 
-  if (!deferred_redirect_) {
+  if (!deferred_redirect_url_) {
     NOTREACHED();
     return;
   }
 
-  deferred_redirect_ = false;
+  if (new_url &&
+      (new_url->GetOrigin() != deferred_redirect_url_->GetOrigin())) {
+    NOTREACHED() << "Can only change the URL within the same origin.";
+    NotifyCompleted(net::ERR_UNEXPECTED);
+    // |this| may have been deleted.
+    return;
+  }
+
+  deferred_redirect_url_.reset();
+  new_redirect_url_ = new_url;
 
   if (to_be_removed_request_headers.has_value()) {
     for (const std::string& key : to_be_removed_request_headers.value())
@@ -555,6 +571,7 @@ void URLLoader::FollowRedirect(
   }
 
   url_request_->FollowDeferredRedirect(modified_request_headers);
+  new_redirect_url_.reset();
 }
 
 void URLLoader::ProceedWithResponse() {
@@ -614,8 +631,8 @@ void URLLoader::OnReceivedRedirect(net::URLRequest* url_request,
   DCHECK(url_request == url_request_.get());
   DCHECK(url_request->status().is_success());
 
-  DCHECK(!deferred_redirect_);
-  deferred_redirect_ = true;
+  DCHECK(!deferred_redirect_url_);
+  deferred_redirect_url_ = std::make_unique<GURL>(redirect_info.new_url);
 
   // Send the redirect response to the client, allowing them to inspect it and
   // optionally follow the redirect.
@@ -877,35 +894,40 @@ void URLLoader::DidRead(int num_bytes, bool completed_synchronously) {
 
   bool complete_read = true;
   if (consumer_handle_.is_valid()) {
-    // Limit sniffing to the first net::kMaxBytesToSniff.
-    size_t data_length = pending_write_buffer_offset_;
-    if (data_length > net::kMaxBytesToSniff)
-      data_length = net::kMaxBytesToSniff;
-    base::StringPiece data(pending_write_->buffer(), data_length);
+    // |pending_write_| may be null if the job self-aborts due to a suspend;
+    // this will have |consumer_handle_| valid when the loader is paused.
+    if (pending_write_) {
+      // Limit sniffing to the first net::kMaxBytesToSniff.
+      size_t data_length = pending_write_buffer_offset_;
+      if (data_length > net::kMaxBytesToSniff)
+        data_length = net::kMaxBytesToSniff;
 
-    if (is_more_mime_sniffing_needed_) {
-      const std::string& type_hint = response_->head.mime_type;
-      std::string new_type;
-      is_more_mime_sniffing_needed_ = !net::SniffMimeType(
-          data.data(), data.size(), url_request_->url(), type_hint,
-          net::ForceSniffFileUrlsForHtml::kDisabled, &new_type);
-      // SniffMimeType() returns false if there is not enough data to determine
-      // the mime type. However, even if it returns false, it returns a new type
-      // that is probably better than the current one.
-      response_->head.mime_type.assign(new_type);
-      response_->head.did_mime_sniff = true;
-    }
+      base::StringPiece data(pending_write_->buffer(), data_length);
 
-    if (is_more_corb_sniffing_needed_) {
-      corb_analyzer_->SniffResponseBody(data, new_data_offset);
-      if (corb_analyzer_->ShouldBlock()) {
-        corb_analyzer_->LogBlockedResponse();
-        is_more_corb_sniffing_needed_ = false;
-        if (BlockResponseForCorb() == kWillCancelRequest)
-          return;
-      } else if (corb_analyzer_->ShouldAllow()) {
-        corb_analyzer_->LogAllowedResponse();
-        is_more_corb_sniffing_needed_ = false;
+      if (is_more_mime_sniffing_needed_) {
+        const std::string& type_hint = response_->head.mime_type;
+        std::string new_type;
+        is_more_mime_sniffing_needed_ = !net::SniffMimeType(
+            data.data(), data.size(), url_request_->url(), type_hint,
+            net::ForceSniffFileUrlsForHtml::kDisabled, &new_type);
+        // SniffMimeType() returns false if there is not enough data to
+        // determine the mime type. However, even if it returns false, it
+        // returns a new type that is probably better than the current one.
+        response_->head.mime_type.assign(new_type);
+        response_->head.did_mime_sniff = true;
+      }
+
+      if (is_more_corb_sniffing_needed_) {
+        corb_analyzer_->SniffResponseBody(data, new_data_offset);
+        if (corb_analyzer_->ShouldBlock()) {
+          corb_analyzer_->LogBlockedResponse();
+          is_more_corb_sniffing_needed_ = false;
+          if (BlockResponseForCorb() == kWillCancelRequest)
+            return;
+        } else if (corb_analyzer_->ShouldAllow()) {
+          corb_analyzer_->LogAllowedResponse();
+          is_more_corb_sniffing_needed_ = false;
+        }
       }
     }
 

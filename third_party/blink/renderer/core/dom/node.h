@@ -51,6 +51,7 @@ class Element;
 class Event;
 class EventDispatchHandlingState;
 class ExceptionState;
+class FlatTreeNodeData;
 class GetRootNodeOptions;
 class HTMLQualifiedName;
 class HTMLSlotElement;
@@ -465,6 +466,9 @@ class CORE_EXPORT Node : public EventTarget {
   void SetNeedsStyleRecalc(StyleChangeType, const StyleChangeReasonForTracing&);
   void ClearNeedsStyleRecalc();
 
+  // Propagates a dirty bit breadcrumb for this element up the ancestor chain.
+  void MarkAncestorsWithChildNeedsStyleRecalc();
+
   bool NeedsReattachLayoutTree() const {
     return GetFlag(kNeedsReattachLayoutTree);
   }
@@ -776,6 +780,10 @@ class CORE_EXPORT Node : public EventTarget {
   NodeListsNodeData* NodeLists();
   void ClearNodeLists();
 
+  FlatTreeNodeData* GetFlatTreeNodeData() const;
+  FlatTreeNodeData& EnsureFlatTreeNodeData();
+  void ClearFlatTreeNodeData();
+
   virtual bool WillRespondToMouseMoveEvents();
   virtual bool WillRespondToMouseClickEvents();
   virtual bool WillRespondToTouchEvents();
@@ -998,7 +1006,6 @@ class CORE_EXPORT Node : public EventTarget {
 
   void SetTreeScope(TreeScope* scope) { tree_scope_ = scope; }
 
-  void MarkAncestorsWithChildNeedsStyleRecalc();
   static void MarkAncestorsWithChildNeedsStyleRecalc(Node* child) {
     child->MarkAncestorsWithChildNeedsStyleRecalc();
   }

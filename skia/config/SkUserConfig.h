@@ -130,13 +130,18 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 // until we update our call-sites (typically these are for API changes).
 //
 // Remove these as we update our sites.
-//
+
+#define SK_LEGACY_PLATFORM_MATRIX_PROCS
 
 // Workaround for poor anisotropic mipmap quality,
 // pending Skia ripmap support.
 // (https://bugs.chromium.org/p/skia/issues/detail?id=4863)
 #ifndef    SK_SUPPORT_LEGACY_ANISOTROPIC_MIPMAP_SCALE
 #   define SK_SUPPORT_LEGACY_ANISOTROPIC_MIPMAP_SCALE
+#endif
+
+#ifndef SK_SUPPORT_LEGACY_TEXTBLOBBUILD_WITH_PAINT
+#define SK_SUPPORT_LEGACY_TEXTBLOBBUILD_WITH_PAINT
 #endif
 
 // Remove this after we fixed all the issues related to the new SDF algorithm

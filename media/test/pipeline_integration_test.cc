@@ -42,8 +42,9 @@
 #include "media/mojo/clients/mojo_renderer.h"
 #include "media/mojo/interfaces/interface_factory.mojom.h"
 #include "media/mojo/interfaces/renderer.mojom.h"
-#include "services/service_manager/public/cpp/connect.h"
-#include "services/service_manager/public/cpp/service_test.h"
+#include "media/mojo/services/media_pipeline_integration_unittests_catalog_source.h"  // nogncheck
+#include "services/service_manager/public/cpp/test/test_service.h"  // nogncheck
+#include "services/service_manager/public/cpp/test/test_service_manager.h"  // nogncheck
 
 // TODO(dalecurtis): The mojo renderer is in another process, so we have no way
 // currently to get hashes for video and audio samples.  This also means that
@@ -411,15 +412,15 @@ class FailingVideoDecoder : public VideoDecoder {
 //               preferably by eliminating multiple inheritance here which is
 //               banned by Google C++ style.
 #if defined(MOJO_RENDERER) && defined(ENABLE_MOJO_PIPELINE_INTEGRATION_TEST)
-class PipelineIntegrationTest : public service_manager::test::ServiceTest,
+class PipelineIntegrationTest : public testing::Testing,
                                 public PipelineIntegrationTestBase {
  public:
   PipelineIntegrationTest()
-      : service_manager::test::ServiceTest(
-            "media_pipeline_integration_shelltests") {}
+      : test_service_manager_(test::CreatePipelineIntegrationTestCatalog()),
+        test_service_(test_service_manager_.RegisterTestInstance(
+            "media_pipeline_integration_shelltests")) {}
 
   void SetUp() override {
-    ServiceTest::SetUp();
     InitializeMediaLibrary();
   }
 
@@ -427,7 +428,8 @@ class PipelineIntegrationTest : public service_manager::test::ServiceTest,
   std::unique_ptr<Renderer> CreateRenderer(
       CreateVideoDecodersCB prepend_video_decoders_cb,
       CreateAudioDecodersCB prepend_audio_decoders_cb) override {
-    connector()->BindInterface("media", &media_interface_factory_);
+    test_service_.connector()->BindInterface("media",
+                                             &media_interface_factory_);
 
     mojom::RendererPtr mojo_renderer;
     media_interface_factory_->CreateRenderer(std::string(),
@@ -438,6 +440,8 @@ class PipelineIntegrationTest : public service_manager::test::ServiceTest,
   }
 
  private:
+  service_manager::TestServiceManager test_service_manager_;
+  service_manager::TestService test_service_;
   mojom::InterfaceFactoryPtr media_interface_factory_;
 };
 #else
@@ -638,13 +642,6 @@ class MSEChangeTypeTest
     // play-to-end) are verified.
     MSEPlaybackTestData file_one = std::get<0>(GetParam());
     MSEPlaybackTestData file_two = std::get<1>(GetParam());
-
-#if BUILDFLAG(ENABLE_AV1_DECODER)
-    // AV1 media is included in the some of these tests when the decoder is
-    // enabled.
-    base::test::ScopedFeatureList scoped_feature_list;
-    scoped_feature_list.InitAndEnableFeature(kAv1Decoder);
-#endif
 
     // Start in 'sequence' appendMode, because some test media begin near enough
     // to time 0, resulting in gaps across the changeType boundary in buffered
@@ -1486,9 +1483,6 @@ TEST_P(MSEPipelineIntegrationTest, BasicPlayback_Live) {
 
 #if BUILDFLAG(ENABLE_AV1_DECODER)
 TEST_P(MSEPipelineIntegrationTest, BasicPlayback_AV1_WebM) {
-  base::test::ScopedFeatureList scoped_feature_list_;
-  scoped_feature_list_.InitAndEnableFeature(kAv1Decoder);
-
   MockMediaSource source("bear-av1.webm", 18898);
   EXPECT_EQ(PIPELINE_OK, StartPipelineWithMediaSource(&source));
   source.EndOfStream();
@@ -1506,9 +1500,6 @@ TEST_P(MSEPipelineIntegrationTest, BasicPlayback_AV1_WebM) {
 }
 
 TEST_P(MSEPipelineIntegrationTest, BasicPlayback_AV1_10bit_WebM) {
-  base::test::ScopedFeatureList scoped_feature_list_;
-  scoped_feature_list_.InitAndEnableFeature(kAv1Decoder);
-
   MockMediaSource source("bear-av1-320x180-10bit.webm", 19076);
   EXPECT_EQ(PIPELINE_OK, StartPipelineWithMediaSource(&source));
   source.EndOfStream();
@@ -1873,8 +1864,6 @@ TEST_F(PipelineIntegrationTest, BasicPlaybackHi12PVP9) {
 
 #if BUILDFLAG(ENABLE_AV1_DECODER)
 TEST_P(MSEPipelineIntegrationTest, BasicPlayback_AV1_MP4) {
-  base::test::ScopedFeatureList scoped_feature_list_;
-  scoped_feature_list_.InitAndEnableFeature(kAv1Decoder);
   MockMediaSource source("bear-av1.mp4", 24355);
   EXPECT_EQ(PIPELINE_OK, StartPipelineWithMediaSource(&source));
   source.EndOfStream();
@@ -1892,8 +1881,6 @@ TEST_P(MSEPipelineIntegrationTest, BasicPlayback_AV1_MP4) {
 }
 
 TEST_P(MSEPipelineIntegrationTest, BasicPlayback_AV1_10bit_MP4) {
-  base::test::ScopedFeatureList scoped_feature_list_;
-  scoped_feature_list_.InitAndEnableFeature(kAv1Decoder);
   MockMediaSource source("bear-av1-320x180-10bit.mp4", 19658);
   EXPECT_EQ(PIPELINE_OK, StartPipelineWithMediaSource(&source));
   source.EndOfStream();
@@ -1949,8 +1936,6 @@ TEST_F(PipelineIntegrationTest, BasicPlaybackHashed_FlacInMp4) {
 
 #if BUILDFLAG(ENABLE_AV1_DECODER)
 TEST_F(PipelineIntegrationTest, BasicPlayback_VideoOnly_AV1_Mp4) {
-  base::test::ScopedFeatureList scoped_feature_list_;
-  scoped_feature_list_.InitAndEnableFeature(kAv1Decoder);
   ASSERT_EQ(PIPELINE_OK, Start("bear-av1.mp4"));
   Play();
   ASSERT_TRUE(WaitUntilOnEnded());
@@ -2873,8 +2858,6 @@ TEST_F(PipelineIntegrationTest, BasicPlayback_VideoOnly_VP9_WebM) {
 
 #if BUILDFLAG(ENABLE_AV1_DECODER)
 TEST_F(PipelineIntegrationTest, BasicPlayback_VideoOnly_AV1_WebM) {
-  base::test::ScopedFeatureList scoped_feature_list_;
-  scoped_feature_list_.InitAndEnableFeature(kAv1Decoder);
   ASSERT_EQ(PIPELINE_OK, Start("bear-av1.webm"));
   Play();
   ASSERT_TRUE(WaitUntilOnEnded());

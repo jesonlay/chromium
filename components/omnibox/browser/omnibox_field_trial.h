@@ -29,6 +29,7 @@ extern const base::Feature kHideFileUrlScheme;
 extern const base::Feature kHideSteadyStateUrlScheme;
 extern const base::Feature kHideSteadyStateUrlTrivialSubdomains;
 extern const base::Feature kHideSteadyStateUrlPathQueryAndRef;
+extern const base::Feature kOneClickUnelide;
 extern const base::Feature kSimplifyHttpsIndicator;
 extern const base::Feature kOmniboxRichEntitySuggestions;
 extern const base::Feature kOmniboxNewAnswerLayout;
@@ -43,10 +44,7 @@ extern const base::Feature kZeroSuggestRedirectToChrome;
 extern const base::Feature kZeroSuggestSwapTitleAndUrl;
 extern const base::Feature kDisplayTitleForCurrentUrl;
 extern const base::Feature kQueryInOmnibox;
-extern const base::Feature kUIExperimentElideSuggestionUrlAfterHost;
-extern const base::Feature kUIExperimentJogTextfieldOnPopup;
 extern const base::Feature kUIExperimentMaxAutocompleteMatches;
-extern const base::Feature kUIExperimentShowSuggestionFavicons;
 extern const base::Feature kUIExperimentSwapTitleAndUrl;
 extern const base::Feature kUIExperimentVerticalMargin;
 extern const base::Feature kSpeculativeServiceWorkerStartOnQueryInput;
@@ -447,9 +445,6 @@ class OmniboxFieldTrial {
   // Returns the #omnibox-pedal-suggestions feature's mode parameter as enum.
   static PedalSuggestionMode GetPedalSuggestionMode();
 
-  // Returns true if the jog textfield flag is enabled.
-  static bool IsJogTextfieldOnPopupEnabled();
-
   // Returns true if either the steady-state elision flag for scheme or the
   // #upcoming-ui-features flag is enabled.
   static bool IsHideSteadyStateUrlSchemeEnabled();
@@ -457,10 +452,6 @@ class OmniboxFieldTrial {
   // Returns true if either the steady-state elision flag for trivial
   // subdomains or the #upcoming-ui-features flag is enabled.
   static bool IsHideSteadyStateUrlTrivialSubdomainsEnabled();
-
-  // Returns true if either the show suggestion favicons flag or the
-  // #upcoming-ui-features flag is enabled.
-  static bool IsShowSuggestionFaviconsEnabled();
 
   // Returns true if the experimental keyword mode is enabled.
   static bool IsExperimentalKeywordModeEnabled();

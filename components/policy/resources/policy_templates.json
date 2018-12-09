@@ -1626,7 +1626,7 @@
           'caption': '''Monochrome printing only''',
         },
       ],
-      'supported_on': ['chrome_os:70-'],
+      'supported_on': ['chrome_os:71-'],
       'features': {
         'can_be_recommended': False,
         'dynamic_refresh': True,
@@ -1734,7 +1734,6 @@
         },
       ],
       'supported_on': ['chrome_os:72-'],
-      'future': True,
       'features': {
         'can_be_recommended': False,
         'dynamic_refresh': True,
@@ -1775,7 +1774,6 @@
         },
       ],
       'supported_on': ['chrome_os:72-'],
-      'future': True,
       'features': {
         'can_be_recommended': False,
         'dynamic_refresh': True,
@@ -2271,11 +2269,11 @@
       'id': 358,
       'caption': '''Enable the creation of roaming copies for <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> profile data''',
       'tags': ['local-data-access'],
-      'desc': '''If you enable this setting, the settings stored in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> profiles like bookmarks, autofill data, passwords, etc. will also be written to a file stored in the Roaming user profile folder or a location specified by the Administrator through the <ph name="ROAMING_PROFILE_LOCATION_POLICY_NAME">$1<ex>RoamingProfileLocation</ex></ph> policy. Enabling this policy disables cloud sync.
+      'desc': '''If you enable this setting, the settings stored in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> profiles like bookmarks, autofill data, passwords, etc. will also be written to a file stored in the Roaming user profile folder or a location specified by the Administrator through the <ph name="ROAMING_PROFILE_LOCATION_POLICY_NAME">RoamingProfileLocation</ph> policy. Enabling this policy disables cloud sync.
 
       If this policy is disabled or left not set only the regular local profiles will be used.
 
-      The <ph name="SYNC_DISABLED_POLICY_NAME">SyncDisabled</ph> policy disables all data synchronization, overriding RoamingProfileSupportEnabled.''',
+      The <ph name="SYNC_DISABLED_POLICY_NAME">SyncDisabled</ph> policy disables all data synchronization, overriding <ph name="ROAMING_PROFILE_SUPPORT_ENABLED_POLICY_NAME">RoamingProfileSupportEnabled</ph>.''',
       'label': '''Enable the creation of roaming copies for <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> profile data.''',
     },
     {
@@ -2293,7 +2291,7 @@
       'tags': ['local-data-access'],
       'desc': '''Configures the directory that <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> will use for storing the roaming copy of the profiles.
 
-      If you set this policy, <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> will use the provided directory to store the roaming copy of the profiles if the <ph name="ROAMING_PROFILE_SUPPORT_ENABLED_POLICY_NAME">$1<ex>RoamingProfileSupportEnabled</ex></ph> policy has been enabled. If the <ph name="ROAMING_PROFILE_SUPPORT_ENABLED_POLICY_NAME">$1<ex>RoamingProfileSupportEnabled</ex></ph> policy is disabled or left unset the value stored in this policy is not used.
+      If you set this policy, <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> will use the provided directory to store the roaming copy of the profiles if the <ph name="ROAMING_PROFILE_SUPPORT_ENABLED_POLICY_NAME">RoamingProfileSupportEnabled</ph> policy has been enabled. If the <ph name="ROAMING_PROFILE_SUPPORT_ENABLED_POLICY_NAME">RoamingProfileSupportEnabled</ph> policy is disabled or left unset the value stored in this policy is not used.
 
       See https://www.chromium.org/administrators/policy-list-3/user-data-directory-variables for a list of variables that can be used.
 
@@ -12472,6 +12470,24 @@
         The value of this policy is an Enrollment token that can be retrieved from the Google Admin console.''',
     },
     {
+      'name': 'CloudManagementEnrollmentMandatory',
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'supported_on': ['chrome.*:72-'],
+      'features': {
+        'dynamic_refresh': False,
+        'per_profile': False,
+      },
+      'example_value': True,
+      'id': 505,
+      'caption': '''Enable mandatory cloud management enrollment''',
+      'tags': [],
+      'desc': '''
+        If this policy is set to True, cloud management enrollment is mandatory and blocks Chrome launch process if failed.
+
+        If this policy is left unset or set to False, cloud management enrollment is optional and does not blocks Chrome launch process if failed.''',
+    },
+    {
       'name': 'AutoplayAllowed',
       'type': 'main',
       'schema': { 'type': 'boolean' },
@@ -13833,6 +13849,123 @@
 
       For more information on Internet Explorer's <ph name="IEEM_SITELIST_POLICY">SiteList</ph> policy: https://docs.microsoft.com/internet-explorer/ie11-deploy-guide/what-is-enterprise-mode''',
     },
+    {
+      'name': 'DeviceDisplayResolution',
+      'type': 'dict',
+      'schema': {
+        'type': 'object',
+        'properties': {
+          'external_width': { 'type': 'integer', 'minimum': 1 },
+          'external_height': { 'type': 'integer', 'minimum': 1 },
+          'external_scale_percentage': { 'type': 'integer', 'minimum': 1 },
+          'external_use_native': { 'type': 'boolean' },
+          'internal_scale_percentage': { 'type': 'integer', 'minimum': 1 },
+          'recommended': { 'type': 'boolean' }
+        }
+      },
+      'supported_on': [ 'chrome_os:72-' ],
+      'features': {
+        'can_be_recommended': False,
+        'dynamic_refresh': True,
+        'per_profile': False,
+      },
+      'device_only': True,
+      'example_value': {
+        'external_width': 1920,
+        'external_height': 1080,
+        'external_use_native': False,
+        'external_scale_percentage': 100,
+        'internal_scale_percentage': 150,
+        'recommended': True
+      },
+      'id': 502,
+      'caption': '''Set display resolution and scale factor''',
+      'tags': [],
+      'desc': '''When this policy is set, resolution and scale factor of each
+      display are set to the specified values. External display settings are
+      applied to all connected external displays.
+
+      Values of "external_width" and "external_height" should be specified in
+      pixels. Values of "external_scale_percentage" and
+      "internal_scale_percentage" should be specified in percents.
+
+      If "external_use_native" is set to true, policy will ignore values of
+      "external_height" and "external_width" and set resolution of the external
+      displays to their native resolution.
+
+      If "external_use_native" is false or not provided and either
+      "external_height" or "external_width" is not provided, policy doesn't
+      affect the external display settings. If specified resolution or
+      scale factor is not supported by some display, policy is not applied to
+      that display.
+
+      If "recommended" flag is set to true, users may change resolution and
+      scale factor of any display via the settings page after logging in, but
+      their settings will be overriden by the policy value at the next reboot.
+      If "recommended" flag is set to false or not set, users can't change the
+      display settings.''',
+    },
+    {
+      'name': 'PluginVm',
+      'type': 'group',
+      'caption': '''PluginVm''',
+      'policies': [
+        'PluginVmAllowed',
+        'PluginVmImage',
+      ],
+      'desc': '''This is a group policy for PluginVm related policies.''',
+    },
+    {
+      'name': 'PluginVmAllowed',
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'supported_on': ['chrome_os:72-'],
+      'device_only': True,
+      'features': {
+        'dynamic_refresh': True,
+      },
+      'example_value': True,
+      'id': 503,
+      'caption': '''Device is enabled to run PluginVm''',
+      'tags': [],
+      'desc': '''Enable this device to run PluginVm.
+
+      If the policy is set to false or left unset, PluginVm is not enabled for the device.
+      If set to true, PluginVm is enabled for the device as long as other settings also allow it.
+      PluginVmAllowed needs to be true and PluginVmImage needs to be set for PluginVm to be allowed to run.''',
+    },
+    {
+      'name': 'PluginVmImage',
+      'type': 'dict',
+      'schema': {
+        'type': 'object',
+        'properties': {
+          'url': {
+            'description': 'The URL from which the PluginVm image can be downloaded.',
+            'type': 'string'
+          },
+          'hash': {
+            'description': 'The SHA-256 hash of the PluginVm image.',
+            'type': 'string'
+          }
+        },
+      },
+      'supported_on': ['chrome_os:72-'],
+      'device_only': True,
+      'features': {
+        'dynamic_refresh': True,
+      },
+      'example_value': {
+        "url": "https://example.com/plugin_vm_image",
+        "hash": "842841a4c75a55ad050d686f4ea5f77e83ae059877fe9b6946aa63d3d057ed32"
+      },
+      'id': 504,
+      'caption': '''PluginVm image''',
+      'tags': [],
+      'desc': '''Configure device-level PluginVm image. The policy is set by specifying the URL from which the Chrome OS device can download the image and a SHA-256 hash used to verify the integrity of the download.
+
+      The policy should be specified as a string that expresses the URL and hash in the JSON format.''',
+    },
   ],
 
   'messages': {
@@ -13974,5 +14107,5 @@ The recommended way to configure policy on Windows is via GPO, although provisio
   },
   'placeholders': [],
   'deleted_policy_ids': [412],
-  'highest_id_currently_used':  501
+  'highest_id_currently_used': 505
 }

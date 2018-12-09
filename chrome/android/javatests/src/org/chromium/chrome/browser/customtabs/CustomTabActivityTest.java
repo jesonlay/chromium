@@ -42,6 +42,7 @@ import android.support.customtabs.PostMessageBackend;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.MediumTest;
 import android.support.test.filters.SmallTest;
+import android.support.test.uiautomator.UiDevice;
 import android.support.v7.content.res.AppCompatResources;
 import android.text.TextUtils;
 import android.view.Menu;
@@ -77,6 +78,7 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.AppHooksModule;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeSwitches;
@@ -88,6 +90,7 @@ import org.chromium.chrome.browser.appmenu.AppMenuHandler;
 import org.chromium.chrome.browser.browserservices.BrowserSessionContentUtils;
 import org.chromium.chrome.browser.browserservices.Origin;
 import org.chromium.chrome.browser.browserservices.OriginVerifier;
+import org.chromium.chrome.browser.dependency_injection.ModuleFactoryOverrides;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.firstrun.FirstRunStatus;
 import org.chromium.chrome.browser.history.BrowsingHistoryBridge;
@@ -117,6 +120,7 @@ import org.chromium.chrome.test.util.browser.TabTitleObserver;
 import org.chromium.chrome.test.util.browser.contextmenu.ContextMenuUtils;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContentsObserver;
+import org.chromium.content_public.browser.test.util.ClickUtils;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.DOMUtils;
@@ -124,12 +128,14 @@ import org.chromium.content_public.browser.test.util.JavaScriptUtils;
 import org.chromium.content_public.browser.test.util.WebContentsUtils;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.net.test.util.TestWebServer;
+import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.mojom.WindowOpenDisposition;
 import org.chromium.ui.test.util.UiRestriction;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -220,6 +226,9 @@ public class CustomTabActivityTest {
         PathUtils.setPrivateDataDirectorySuffix(PRIVATE_DATA_DIRECTORY_SUFFIX);
         LibraryLoader.getInstance().ensureInitialized(LibraryProcessType.PROCESS_BROWSER);
         mWebServer = TestWebServer.start();
+
+        ModuleFactoryOverrides.setOverride(AppHooksModule.Factory.class,
+                CustomTabsDynamicModuleTestUtils.AppHooksModuleForTest::new);
     }
 
     @After
@@ -236,6 +245,8 @@ public class CustomTabActivityTest {
             if (handler != null) handler.hideAppMenu();
         });
         mWebServer.shutdown();
+
+        ModuleFactoryOverrides.clearOverrides();
     }
 
     private CustomTabActivity getActivity() {
@@ -1110,6 +1121,123 @@ public class CustomTabActivityTest {
         }
     }
 
+    private void runAndWaitForActivityStopped(Runnable runnable)
+            throws TimeoutException, InterruptedException {
+        CallbackHelper cctHiddenCallback = new CallbackHelper();
+        ActivityStateListener listener = (activity, newState) -> {
+            if (activity == mCustomTabActivityTestRule.getActivity()
+                    && (newState == ActivityState.STOPPED || newState == ActivityState.DESTROYED)) {
+                cctHiddenCallback.notifyCalled();
+            }
+        };
+        ApplicationStatus.registerStateListenerForAllActivities(listener);
+
+        runnable.run();
+        cctHiddenCallback.waitForCallback("Hide cct", 0);
+        ApplicationStatus.unregisterActivityStateListener(listener);
+    }
+
+    /**
+     This test executes the following workflow assuming dynamic module has been loaded succesfully:
+      - moduleManagedUrl1 -> nav1.1 -> nav1.2 -> modulemanagedUrl2 -> nav2.1 -> nav2.2
+      - User hits the "close button", therefore goes back to modulemanagedUrl2
+      - User hits the Android back button, going returning to nav1.2
+      - User hits the "close button" again, going return to moduleManagedUrl1
+      - User hits the Android back button thereby closes CCT.
+     */
+    @Test
+    @SmallTest
+    @EnableFeatures(ChromeFeatureList.CCT_MODULE)
+    public void testCloseButtonBehaviourWithDynamicModule()
+            throws InterruptedException, ExecutionException, TimeoutException {
+        String moduleManagedUrl1 = mTestServer.getURL(
+                "/chrome/test/data/android/about.html");
+        String moduleManagedUrl2 = mTestServer.getURL(
+                "/chrome/test/data/android/simple.html");
+
+        Intent intent = CustomTabsDynamicModuleTestUtils.makeDynamicModuleIntent(moduleManagedUrl1,
+                "^(" + moduleManagedUrl1 + "|" + moduleManagedUrl2 + ")$");
+
+        // Open CCT with moduleManagedUrl1 and navigate
+        // moduleManagedUrl1 -> nav1.1 - nav1.2 -> modulemanagedUrl2 -> nav2.1 -> nav2.2
+        mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
+        CustomTabActivity cctActivity = mCustomTabActivityTestRule.getActivity();
+
+        mCustomTabActivityTestRule.loadUrlInTab(mTestPage, PageTransition.LINK,
+                cctActivity.getActivityTab());
+        mCustomTabActivityTestRule.loadUrlInTab(mTestPage2, PageTransition.LINK,
+                cctActivity.getActivityTab());
+        mCustomTabActivityTestRule.loadUrlInTab(moduleManagedUrl2, PageTransition.TYPED,
+                cctActivity.getActivityTab());
+        mCustomTabActivityTestRule.loadUrlInTab(mTestPage, PageTransition.LINK,
+                cctActivity.getActivityTab());
+        mCustomTabActivityTestRule.loadUrlInTab(mTestPage2, PageTransition.LINK,
+                cctActivity.getActivityTab());
+
+        // click the close button and wait while tab page loaded
+        ClickUtils.clickButton(cctActivity.findViewById(R.id.close_button));
+        ChromeTabUtils.waitForTabPageLoaded(cctActivity.getActivityTab(), (String) null);
+
+        // close button returns back to moduleManagedUrl2
+        Assert.assertEquals(moduleManagedUrl2, cctActivity.getActivityTab().getUrl());
+
+        // press the back button and wait while tab page loaded
+        UiDevice mDevice = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
+        mDevice.pressBack();
+        ChromeTabUtils.waitForTabPageLoaded(cctActivity.getActivityTab(), (String) null);
+
+        // the back button returns to nav1.2
+        Assert.assertEquals(mTestPage2, cctActivity.getActivityTab().getUrl());
+
+        // click the close button and wait while tab page loaded
+        ClickUtils.clickButton(cctActivity.findViewById(R.id.close_button));
+        ChromeTabUtils.waitForTabPageLoaded(cctActivity.getActivityTab(), (String) null);
+
+        // close button returns back to moduleManagedUrl1
+        Assert.assertEquals(moduleManagedUrl1, cctActivity.getActivityTab().getUrl());
+
+        // press back button and while cct is hidden
+        runAndWaitForActivityStopped(mDevice::pressBack);
+    }
+
+    /**
+     This test executes the following workflow assuming dynamic module has not been loaded:
+     - moduleManagedUrl1 -> nav1.1 - nav1.2 -> modulemanagedUrl2 -> nav2.1 -> nav2.2
+     - User hits the close button, thereby closes CCT
+     */
+    @Test
+    @SmallTest
+    public void testCloseButtonBehaviourWithoutDynamicModule()
+            throws InterruptedException, ExecutionException, TimeoutException {
+        String moduleManagedUrl1 = mTestServer.getURL(
+                "/chrome/test/data/android/about.html");
+        String moduleManagedUrl2 = mTestServer.getURL(
+                "/chrome/test/data/android/simple.html");
+
+        // Open CCT with moduleManagedUrl1 and navigate
+        // moduleManagedUrl1 -> nav1.1 - nav1.2 -> modulemanagedUrl2 -> nav2.1 -> nav2.2
+
+        Intent intent = CustomTabsTestUtils.createMinimalCustomTabIntent(
+                InstrumentationRegistry.getTargetContext(), moduleManagedUrl1);
+        mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
+        CustomTabActivity cctActivity = mCustomTabActivityTestRule.getActivity();
+
+        mCustomTabActivityTestRule.loadUrlInTab(mTestPage, PageTransition.LINK,
+                cctActivity.getActivityTab());
+        mCustomTabActivityTestRule.loadUrlInTab(mTestPage2, PageTransition.LINK,
+                cctActivity.getActivityTab());
+        mCustomTabActivityTestRule.loadUrlInTab(moduleManagedUrl2, PageTransition.LINK,
+                cctActivity.getActivityTab());
+        mCustomTabActivityTestRule.loadUrlInTab(mTestPage, PageTransition.LINK,
+                cctActivity.getActivityTab());
+        mCustomTabActivityTestRule.loadUrlInTab(mTestPage2, PageTransition.LINK,
+                cctActivity.getActivityTab());
+
+        // click close button and wait while cct is hidden
+        runAndWaitForActivityStopped(() ->
+                ClickUtils.clickButton(cctActivity.findViewById(R.id.close_button)));
+    }
+
     @Test
     @SmallTest
     @RetryOnFailure
@@ -1146,8 +1274,8 @@ public class CustomTabActivityTest {
 
     @Test
     @SmallTest
-    @RetryOnFailure
-    public void testSetTopBarContentView_moduleManagedUrl_topBarVisible() throws Exception {
+    @EnableFeatures(ChromeFeatureList.CCT_MODULE)
+    public void testSetTopBarContentView_moduleNotProvided_topBarInvisible() throws Exception {
         Intent intent = CustomTabsTestUtils.createMinimalCustomTabIntent(
                 InstrumentationRegistry.getTargetContext(),
                 "https://www.google.com/search?q=london");
@@ -1162,7 +1290,141 @@ public class CustomTabActivityTest {
             ViewGroup topBar = cctActivity.findViewById(R.id.topbar);
             Assert.assertNotNull(topBar);
             Assert.assertThat(anyView.getParent(), equalTo(topBar));
+            Assert.assertEquals(View.GONE, anyView.getVisibility());
+        });
+    }
+
+    @Test
+    @SmallTest
+    @DisableFeatures(ChromeFeatureList.CCT_MODULE)
+    public void testSetTopBarContentView_featureDisabled_topBarInvisible() throws Exception {
+        Intent intent = CustomTabsTestUtils.createMinimalCustomTabIntent(
+                InstrumentationRegistry.getTargetContext(),
+                "https://www.google.com/search?q=london");
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_MODULE_PACKAGE_NAME,
+                "com.google.android.googlequicksearchbox");
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_MODULE_CLASS_NAME,
+                "com.google.android.googlequicksearchbox.SearchActivity");
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_MODULE_MANAGED_URLS_REGEX,
+                "^https://www.google.com/search.*");
+        mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
+
+        ThreadUtils.runOnUiThread(() -> {
+            CustomTabActivity cctActivity = mCustomTabActivityTestRule.getActivity();
+            View anyView = new View(cctActivity);
+            cctActivity.setTopBarContentView(anyView);
+            ViewGroup topBar = cctActivity.findViewById(R.id.topbar);
+            Assert.assertNotNull(topBar);
+            Assert.assertThat(anyView.getParent(), equalTo(topBar));
+            Assert.assertEquals(View.GONE, anyView.getVisibility());
+        });
+    }
+
+    @Test
+    @SmallTest
+    @EnableFeatures(ChromeFeatureList.CCT_MODULE)
+    public void testSetTopBarContentView_withModuleAndManagedUrls_topBarVisible() throws Exception {
+        Intent intent = CustomTabsTestUtils.createMinimalCustomTabIntent(
+                InstrumentationRegistry.getTargetContext(),
+                "https://www.google.com/search?q=london");
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_MODULE_PACKAGE_NAME,
+                "com.google.android.googlequicksearchbox");
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_MODULE_CLASS_NAME,
+                "com.google.android.googlequicksearchbox.SearchActivity");
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_MODULE_MANAGED_URLS_REGEX,
+                "^https://www.google.com/search.*");
+        mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
+
+        ThreadUtils.runOnUiThread(() -> {
+            CustomTabActivity cctActivity = mCustomTabActivityTestRule.getActivity();
+            View anyView = new View(cctActivity);
+            cctActivity.setTopBarContentView(anyView);
+            ViewGroup topBar = cctActivity.findViewById(R.id.topbar);
+            Assert.assertNotNull(topBar);
+            Assert.assertThat(anyView.getParent(), equalTo(topBar));
             Assert.assertEquals(View.VISIBLE, anyView.getVisibility());
+        });
+    }
+
+    @Test
+    @SmallTest
+    @EnableFeatures({ChromeFeatureList.CCT_MODULE, ChromeFeatureList.CCT_MODULE_CUSTOM_HEADER})
+    public void testSetTopBarContentView_moduleNotProvided_cctHeaderVisible() throws Exception {
+        Intent intent = CustomTabsTestUtils.createMinimalCustomTabIntent(
+                InstrumentationRegistry.getTargetContext(),
+                "https://www.google.com/search?q=london");
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_MODULE_MANAGED_URLS_REGEX,
+                "^https://www.google.com/search.*");
+        intent.putExtra(
+                CustomTabIntentDataProvider.EXTRA_HIDE_CCT_HEADER_ON_MODULE_MANAGED_URLS, true);
+        mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
+
+        ThreadUtils.runOnUiThread(() -> {
+            CustomTabActivity cctActivity = mCustomTabActivityTestRule.getActivity();
+            cctActivity.setTopBarContentView(new View(cctActivity));
+            View toolbarView = cctActivity.findViewById(R.id.toolbar);
+            Assert.assertTrue(
+                    "A custom tab toolbar is never shown", toolbarView instanceof CustomTabToolbar);
+            CustomTabToolbar toolbar = (CustomTabToolbar) toolbarView;
+            Assert.assertEquals(View.VISIBLE, toolbar.getVisibility());
+        });
+    }
+
+    @Test
+    @SmallTest
+    @DisableFeatures(ChromeFeatureList.CCT_MODULE_CUSTOM_HEADER)
+    public void testSetTopBarContentView_featureDisabled_cctHeaderVisible() throws Exception {
+        Intent intent = CustomTabsTestUtils.createMinimalCustomTabIntent(
+                InstrumentationRegistry.getTargetContext(),
+                "https://www.google.com/search?q=london");
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_MODULE_PACKAGE_NAME,
+                "com.google.android.googlequicksearchbox");
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_MODULE_CLASS_NAME,
+                "com.google.android.googlequicksearchbox.SearchActivity");
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_MODULE_MANAGED_URLS_REGEX,
+                "^https://www.google.com/search.*");
+        intent.putExtra(
+                CustomTabIntentDataProvider.EXTRA_HIDE_CCT_HEADER_ON_MODULE_MANAGED_URLS, true);
+        mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
+
+        ThreadUtils.runOnUiThread(() -> {
+            CustomTabActivity cctActivity = mCustomTabActivityTestRule.getActivity();
+            cctActivity.setTopBarContentView(new View(cctActivity));
+            View toolbarView = cctActivity.findViewById(R.id.toolbar);
+            Assert.assertTrue(
+                    "A custom tab toolbar is never shown", toolbarView instanceof CustomTabToolbar);
+            CustomTabToolbar toolbar = (CustomTabToolbar) toolbarView;
+            Assert.assertEquals(View.VISIBLE, toolbar.getVisibility());
+        });
+    }
+
+    @Test
+    @SmallTest
+    @EnableFeatures({ChromeFeatureList.CCT_MODULE, ChromeFeatureList.CCT_MODULE_CUSTOM_HEADER})
+    public void testSetTopBarContentView_withModuleAndExtras_cctHeaderHidden() throws Exception {
+        Intent intent = CustomTabsTestUtils.createMinimalCustomTabIntent(
+                InstrumentationRegistry.getTargetContext(),
+                "https://www.google.com/search?q=london");
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_MODULE_PACKAGE_NAME,
+                "com.google.android.googlequicksearchbox");
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_MODULE_CLASS_NAME,
+                "com.google.android.googlequicksearchbox.SearchActivity");
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_MODULE_MANAGED_URLS_REGEX,
+                "^https://www.google.com/search.*");
+        intent.putExtra(
+                CustomTabIntentDataProvider.EXTRA_HIDE_CCT_HEADER_ON_MODULE_MANAGED_URLS, true);
+        mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
+
+        ThreadUtils.runOnUiThread(() -> {
+            CustomTabActivity cctActivity = mCustomTabActivityTestRule.getActivity();
+            cctActivity.setTopBarContentView(new View(cctActivity));
+            ViewGroup toolbarContainerView = cctActivity.findViewById(R.id.toolbar_container);
+            for (int index = 0; index < toolbarContainerView.getChildCount(); index++) {
+                View childView = toolbarContainerView.getChildAt(index);
+                if (childView.getId() != R.id.topbar) {
+                    Assert.assertEquals(View.GONE, childView.getVisibility());
+                }
+            }
         });
     }
 
@@ -1226,7 +1488,7 @@ public class CustomTabActivityTest {
         final CallbackHelper pageLoadFinishedHelper = new CallbackHelper();
         tab.addObserver(new EmptyTabObserver() {
             @Override
-            public void onPageLoadFinished(Tab tab) {
+            public void onPageLoadFinished(Tab tab, String url) {
                 pageLoadFinishedHelper.notifyCalled();
             }
         });
@@ -1288,7 +1550,7 @@ public class CustomTabActivityTest {
             }
 
             @Override
-            public void onPageLoadFinished(Tab tab) {
+            public void onPageLoadFinished(Tab tab, String url) {
                 pageLoadFinishedHelper.notifyCalled();
             }
         });
@@ -1328,7 +1590,7 @@ public class CustomTabActivityTest {
             }
 
             @Override
-            public void onPageLoadFinished(Tab tab) {
+            public void onPageLoadFinished(Tab tab, String url) {
                 pageLoadFinishedHelper.notifyCalled();
             }
         });
@@ -2130,7 +2392,6 @@ public class CustomTabActivityTest {
 
     @Test
     @SmallTest
-    @EnableFeatures(ChromeFeatureList.CCT_PARALLEL_REQUEST)
     public void testParallelRequest() throws Exception {
         String url = mTestServer.getURL("/echoheader?Cookie");
         Uri requestUri = Uri.parse(mTestServer.getURL("/set-cookie?acookie"));

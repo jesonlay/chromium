@@ -4537,6 +4537,11 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="CustomTabs.CloseButtonClicked.GoToModuleManagedUrl">
+  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
+  <description>Please enter the description of the metric.</description>
+</action>
+
 <action name="CustomTabs.StartedInitially">
   <owner>tedchoc@chromium.org</owner>
   <description>A CustomTabActivity was stared for the first time.</description>
@@ -10099,6 +10104,14 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="ManualFallback_CreditCard_OpenManageCreditCard">
+  <owner>javierrobles@chromium.org</owner>
+  <description>
+    The user tapped on &quot;Manage credit cards&quot; on the Password Manual
+    Fallback view.
+  </description>
+</action>
+
 <action name="ManualFallback_OpenCreditCard">
   <owner>javierrobles@chromium.org</owner>
   <description>The user opened Credit Card Manual Fallback view.</description>
@@ -10141,6 +10154,14 @@ should be able to be added at any place in this file.
   <owner>javierrobles@chromium.org</owner>
   <description>
     The user tapped on a username in the Password Manual Fallback view.
+  </description>
+</action>
+
+<action name="ManualFallback_Profiles_OpenManageProfiles">
+  <owner>javierrobles@chromium.org</owner>
+  <description>
+    The user tapped on &quot;Manage addresses&quot; on the Password Manual
+    Fallback view.
   </description>
 </action>
 
@@ -11631,6 +11652,45 @@ should be able to be added at any place in this file.
     User used the omnibox to go somewhere. The action doesn't have to lead to a
     search page (except on iOS, where this is only recorded for search-type
     navigations).
+  </description>
+</action>
+
+<action name="MobileOmniboxShortcutsOpenBookmarks">
+  <owner>stkhapugin@chromium.org</owner>
+  <description>
+    The user clicked the Bookmarks shortcut in Omnibox popup shortcuts. iOS
+    only.
+  </description>
+</action>
+
+<action name="MobileOmniboxShortcutsOpenHistory">
+  <owner>stkhapugin@chromium.org</owner>
+  <description>
+    The user clicked the History shortcut in Omnibox popup shortcuts. iOS only.
+  </description>
+</action>
+
+<action name="MobileOmniboxShortcutsOpenMostVisitedItem">
+  <owner>stkhapugin@chromium.org</owner>
+  <description>
+    The user clicked one of the Most Visited tiles in Omnibox popup shortcuts.
+    iOS only.
+  </description>
+</action>
+
+<action name="MobileOmniboxShortcutsOpenReadingList">
+  <owner>stkhapugin@chromium.org</owner>
+  <description>
+    The user clicked the Reading List shortcut in Omnibox popup shortcuts. iOS
+    only.
+  </description>
+</action>
+
+<action name="MobileOmniboxShortcutsOpenRecentTabs">
+  <owner>stkhapugin@chromium.org</owner>
+  <description>
+    The user clicked the Recent Tabs shortcut in Omnibox popup shortcuts. iOS
+    only.
   </description>
 </action>
 
@@ -18697,12 +18757,12 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="StatusArea_DictationDisabled">
-  <owner>zhelfins@chromium.org</owner>
+  <owner>anastasi@google.com</owner>
   <description>Ash system menu: Accessibility: Disable Dictation.</description>
 </action>
 
 <action name="StatusArea_DictationEnabled">
-  <owner>zhelfins@chromium.org</owner>
+  <owner>anastasi@google.com</owner>
   <description>Ash system menu: Accessibility: Enable Dictation.</description>
 </action>
 

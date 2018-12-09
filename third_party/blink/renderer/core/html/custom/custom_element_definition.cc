@@ -17,6 +17,7 @@
 #include "third_party/blink/renderer/core/html/custom/custom_element_reaction.h"
 #include "third_party/blink/renderer/core/html/custom/custom_element_reaction_stack.h"
 #include "third_party/blink/renderer/core/html/custom/custom_element_upgrade_reaction.h"
+#include "third_party/blink/renderer/core/html/custom/element_internals.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/core/html_element_factory.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
@@ -30,12 +31,14 @@ CustomElementDefinition::CustomElementDefinition(
 CustomElementDefinition::CustomElementDefinition(
     const CustomElementDescriptor& descriptor,
     const HashSet<AtomicString>& observed_attributes,
-    const Vector<String>& disabled_features)
+    const Vector<String>& disabled_features,
+    FormAssociationFlag form_association_flag)
     : descriptor_(descriptor),
       observed_attributes_(observed_attributes),
       has_style_attribute_changed_callback_(
           observed_attributes.Contains(html_names::kStyleAttr.LocalName())),
-      disable_internals_(disabled_features.Contains(String("internals"))) {}
+      disable_internals_(disabled_features.Contains(String("internals"))),
+      is_form_associated_(form_association_flag == FormAssociationFlag::kYes) {}
 
 CustomElementDefinition::~CustomElementDefinition() = default;
 
@@ -209,6 +212,9 @@ void CustomElementDefinition::Upgrade(Element* element) {
   }
 
   element->SetCustomElementDefinition(this);
+
+  if (IsFormAssociated())
+    ToHTMLElement(element)->EnsureElementInternals().DidUpgrade();
   AddDefaultStylesTo(*element);
 }
 

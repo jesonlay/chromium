@@ -9,10 +9,9 @@
 
 #include "base/debug/task_annotator.h"
 #include "base/message_loop/message_pump.h"
-#include "base/optional.h"
 #include "base/run_loop.h"
+#include "base/task/common/operations_controller.h"
 #include "base/task/sequence_manager/associated_thread_id.h"
-#include "base/task/sequence_manager/moveable_auto_lock.h"
 #include "base/task/sequence_manager/sequenced_task_source.h"
 #include "base/task/sequence_manager/thread_controller.h"
 #include "base/thread_annotations.h"
@@ -65,6 +64,8 @@ class BASE_EXPORT ThreadControllerWithMessagePumpImpl
 #if defined(OS_IOS) || defined(OS_ANDROID)
   void AttachToMessagePump() override;
 #endif
+  bool ShouldQuitRunLoopWhenIdle() override;
+
   // RunLoop::NestingObserver:
   void OnBeginNestedRunLoop() override;
   void OnExitNestedRunLoop() override;
@@ -119,6 +120,9 @@ class BASE_EXPORT ThreadControllerWithMessagePumpImpl
     // Number of nested RunLoops on the stack.
     int nesting_depth = 0;
 
+    // Should always be < |nesting_depth|.
+    int runloop_count = 0;
+
     // When the next scheduled delayed work should run, if any.
     TimeTicks next_delayed_do_work = TimeTicks::Max();
 
@@ -135,12 +139,6 @@ class BASE_EXPORT ThreadControllerWithMessagePumpImpl
     return main_thread_only_;
   }
 
-  // Acquires a |pump_lock_| if necessary when we want to read |pump_|.
-  // Non-main thread read access should be guarded by a lock,
-  // while main-thread access can be lock-free. Write access is possible
-  // only from the main thread and needs a lock.
-  Optional<MoveableAutoLock> AcquirePumpReadLockIfNeeded();
-
   // TODO(altimin): Merge with the one in SequenceManager.
   scoped_refptr<AssociatedThreadId> associated_thread_;
   MainThreadOnly main_thread_only_;
@@ -149,12 +147,13 @@ class BASE_EXPORT ThreadControllerWithMessagePumpImpl
   scoped_refptr<SingleThreadTaskRunner> task_runner_
       GUARDED_BY(task_runner_lock_);
 
-  // Protects |pump_| and |should_schedule_work_after_bind_| as work can be
-  // scheduled from another thread before we create the pump.
-  // TODO(altimin, crbug.com/901345): Remove this lock.
-  base::Lock pump_lock_;
+  // OperationsController will only be started after |pump_| is set.
+  base::internal::OperationsController operations_controller_;
+
+  // Can only be set once (just before calling
+  // operations_controller_.StartAcceptingOperations()). After that only read
+  // access is allowed.
   std::unique_ptr<MessagePump> pump_;
-  bool should_schedule_work_after_bind_ = false;
 
   debug::TaskAnnotator task_annotator_;
   const TickClock* time_source_;  // Not owned.

@@ -520,9 +520,7 @@ config("compiler") {
   }
 
   # Makes builds independent of absolute file path.
-  # Currently disabled for nacl since its toolchain lacks this flag (too old).
-  # TODO(zforman): Once nacl's toolchain is updated, remove check.
-  if (symbol_level != 0 && is_clang && !is_nacl && !is_mac && !is_ios &&
+  if (symbol_level != 0 && is_clang && !is_mac && !is_ios &&
       strip_absolute_paths_from_debug_symbols) {
     # If debug option is given, clang includes $cwd in debug info by default.
     # For such build, this flag generates reproducible obj files even we use
@@ -663,16 +661,22 @@ config("compiler") {
       # linker jobs. This is still suboptimal to a potential dynamic
       # resource allocation scheme, but should be good enough.
       if (use_lld) {
-        # Limit the size of the ThinLTO cache to the lesser of 10% of available disk
-        # space, 10GB and 100000 files.
-        cache_policy =
-            "cache_size=10%:cache_size_bytes=10g:cache_size_files=100000"
         ldflags += [
           "-Wl,--thinlto-jobs=8",
-          "-Wl,--thinlto-cache-dir=" +
-              rebase_path("$root_out_dir/thinlto-cache", root_build_dir),
-          "-Wl,--thinlto-cache-policy,$cache_policy",
         ]
+
+        # Disable caching on Chrome OS temporarily (crbug.com/889967)
+        if (!is_chromeos) {
+          # Limit the size of the ThinLTO cache to the lesser of 10% of
+          # available disk space, 10GB and 100000 files.
+          cache_policy =
+              "cache_size=10%:cache_size_bytes=10g:cache_size_files=100000"
+          ldflags += [
+            "-Wl,--thinlto-cache-dir=" +
+                rebase_path("$root_out_dir/thinlto-cache", root_build_dir),
+            "-Wl,--thinlto-cache-policy,$cache_policy",
+          ]
+        }
       } else {
         ldflags += [ "-Wl,-plugin-opt,jobs=8" ]
       }
@@ -1488,10 +1492,13 @@ config("default_warnings") {
           # Ignore warnings about MSVC optimization pragmas.
           # TODO(thakis): Only for no_chromium_code? http://crbug.com/505314
           "-Wno-ignored-pragma-optimize",
-
-          # TODO(hans): https://crbug.com/890307
-          "-Wno-defaulted-function-deleted",
         ]
+        if (is_fuchsia) {
+          cflags += [
+            # TODO(hans): https://crbug.com/890307
+            "-Wno-defaulted-function-deleted",
+          ]
+        }
       }
     }
   }

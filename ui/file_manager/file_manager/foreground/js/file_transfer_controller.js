@@ -1242,6 +1242,12 @@ FileTransferController.prototype.setDropTarget_ =
     return;
   }
 
+  if (this.selectionHandler_.selection.entries.find(element => {
+        return util.isSameEntry(element, destinationEntry);
+      })) {
+    return;
+  }
+
   // Add accept class if the domElement can accept the drag.
   domElement.classList.add('accepts');
   this.destinationEntry_ = destinationEntry;
@@ -1298,6 +1304,19 @@ FileTransferController.prototype.clearDropTarget_ = function() {
 FileTransferController.prototype.isDocumentWideEvent_ = function() {
   return this.document_.activeElement.nodeName.toLowerCase() !== 'input' ||
       this.document_.activeElement.type.toLowerCase() !== 'text';
+};
+
+/**
+ * @return {boolean} Returns true if there is a dialog showing that we should
+ * treat as modal, false otherwise.
+ * @private
+ */
+FileTransferController.prototype.isModalDialogBeingDisplayed_ = function() {
+  // Do not allow Cut or Copy if a modal dialog is being displayed.
+  if (document.querySelector('.cr-dialog-container.shown') !== null) {
+    return true;
+  }
+  return false;
 };
 
 /**
@@ -1408,6 +1427,10 @@ FileTransferController.prototype.canCutOrCopy_ = function(isMove) {
     var volumeInfo = this.volumeManager_.getVolumeInfo(selectedItem.entry);
     return !volumeInfo.isReadOnly && metadata[0].canCopy !== false &&
         metadata[0].canDelete !== false;
+  }
+
+  if (this.isModalDialogBeingDisplayed_()) {
+    return false;
   }
 
   return isMove ? this.canCutOrDrag_() : this.canCopyOrDrag_() ;

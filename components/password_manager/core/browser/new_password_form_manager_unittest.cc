@@ -56,6 +56,14 @@ class MockPasswordManagerDriver : public StubPasswordManagerDriver {
   MOCK_METHOD1(AllowPasswordGenerationForForm, void(const PasswordForm&));
 };
 
+class MockPasswordManagerClient : public StubPasswordManagerClient {
+ public:
+  MockPasswordManagerClient() = default;
+  ~MockPasswordManagerClient() override = default;
+
+  MOCK_METHOD0(UpdateFormManagers, void());
+};
+
 void CheckPendingCredentials(const PasswordForm& expected,
                              const PasswordForm& actual) {
   EXPECT_EQ(expected.signon_realm, actual.signon_realm);
@@ -279,7 +287,7 @@ class NewPasswordFormManagerTest : public testing::Test {
   PasswordForm blacklisted_match_;
   PasswordForm parsed_observed_form_;
   PasswordForm parsed_submitted_form_;
-  StubPasswordManagerClient client_;
+  MockPasswordManagerClient client_;
   MockPasswordManagerDriver driver_;
   scoped_refptr<TestMockTimeTaskRunner> task_runner_;
   // Define |fetcher_| before |form_manager_|, because the former needs to
@@ -400,7 +408,7 @@ TEST_F(NewPasswordFormManagerTest, AutofillWithBlacklistedMatch) {
 TEST_F(NewPasswordFormManagerTest, SetSubmitted) {
   EXPECT_FALSE(form_manager_->is_submitted());
   EXPECT_TRUE(
-      form_manager_->SetSubmittedFormIfIsManaged(submitted_form_, &driver_));
+      form_manager_->ProvisionallySaveIfIsManaged(submitted_form_, &driver_));
   EXPECT_TRUE(form_manager_->is_submitted());
 
   FormData another_form = submitted_form_;
@@ -408,7 +416,7 @@ TEST_F(NewPasswordFormManagerTest, SetSubmitted) {
   // |another_form| is managed because the same |unique_renderer_id| as
   // |observed_form_|.
   EXPECT_TRUE(
-      form_manager_->SetSubmittedFormIfIsManaged(another_form, &driver_));
+      form_manager_->ProvisionallySaveIfIsManaged(another_form, &driver_));
   EXPECT_TRUE(form_manager_->is_submitted());
 
   form_manager_->set_not_submitted();
@@ -416,13 +424,13 @@ TEST_F(NewPasswordFormManagerTest, SetSubmitted) {
 
   another_form.unique_renderer_id = observed_form_.unique_renderer_id + 1;
   EXPECT_FALSE(
-      form_manager_->SetSubmittedFormIfIsManaged(another_form, &driver_));
+      form_manager_->ProvisionallySaveIfIsManaged(another_form, &driver_));
   EXPECT_FALSE(form_manager_->is_submitted());
 
   // An identical form but in a different frame (represented here by a null
   // driver) is also not considered managed.
   EXPECT_FALSE(
-      form_manager_->SetSubmittedFormIfIsManaged(observed_form_, nullptr));
+      form_manager_->ProvisionallySaveIfIsManaged(observed_form_, nullptr));
   EXPECT_FALSE(form_manager_->is_submitted());
 
   // Check if the subbmitted form can not be parsed then form manager does not
@@ -430,13 +438,13 @@ TEST_F(NewPasswordFormManagerTest, SetSubmitted) {
   FormData malformed_form = submitted_form_;
   malformed_form.fields.clear();
   EXPECT_FALSE(
-      form_manager_->SetSubmittedFormIfIsManaged(malformed_form, &driver_));
+      form_manager_->ProvisionallySaveIfIsManaged(malformed_form, &driver_));
   EXPECT_FALSE(form_manager_->is_submitted());
 }
 
 TEST_F(NewPasswordFormManagerTest, SetSubmittedMultipleTimes) {
   EXPECT_TRUE(
-      form_manager_->SetSubmittedFormIfIsManaged(submitted_form_, &driver_));
+      form_manager_->ProvisionallySaveIfIsManaged(submitted_form_, &driver_));
   EXPECT_TRUE(form_manager_->is_submitted());
 
   // Make the submitted form to be invalid password form.
@@ -445,7 +453,7 @@ TEST_F(NewPasswordFormManagerTest, SetSubmittedMultipleTimes) {
   // Expect that |form_manager_| is still in submitted state because the first
   // time the submited form was valid.
   EXPECT_TRUE(
-      form_manager_->SetSubmittedFormIfIsManaged(submitted_form_, &driver_));
+      form_manager_->ProvisionallySaveIfIsManaged(submitted_form_, &driver_));
   EXPECT_TRUE(form_manager_->is_submitted());
   EXPECT_TRUE(form_manager_->GetSubmittedForm());
 }
@@ -516,7 +524,7 @@ TEST_F(NewPasswordFormManagerTest, CreatePendingCredentialsEmptyStore) {
   fetcher_->SetNonFederated({}, 0u);
 
   EXPECT_TRUE(
-      form_manager_->SetSubmittedFormIfIsManaged(submitted_form_, &driver_));
+      form_manager_->ProvisionallySaveIfIsManaged(submitted_form_, &driver_));
   CheckPendingCredentials(parsed_submitted_form_,
                           form_manager_->GetPendingCredentials());
 }
@@ -528,7 +536,7 @@ TEST_F(NewPasswordFormManagerTest, CreatePendingCredentialsNewCredentials) {
   fetcher_->SetNonFederated({&saved_match_}, 0u);
 
   EXPECT_TRUE(
-      form_manager_->SetSubmittedFormIfIsManaged(submitted_form_, &driver_));
+      form_manager_->ProvisionallySaveIfIsManaged(submitted_form_, &driver_));
   CheckPendingCredentials(parsed_submitted_form_,
                           form_manager_->GetPendingCredentials());
 }
@@ -544,7 +552,7 @@ TEST_F(NewPasswordFormManagerTest, CreatePendingCredentialsAlreadySaved) {
   submitted_form_.fields[kPasswordFieldIndex].value =
       saved_match_.password_value;
   EXPECT_TRUE(
-      form_manager_->SetSubmittedFormIfIsManaged(submitted_form_, &driver_));
+      form_manager_->ProvisionallySaveIfIsManaged(submitted_form_, &driver_));
   CheckPendingCredentials(/* expected */ saved_match_,
                           form_manager_->GetPendingCredentials());
 }
@@ -567,7 +575,7 @@ TEST_F(NewPasswordFormManagerTest, CreatePendingCredentialsPSLMatchSaved) {
       saved_match_.password_value;
 
   EXPECT_TRUE(
-      form_manager_->SetSubmittedFormIfIsManaged(submitted_form_, &driver_));
+      form_manager_->ProvisionallySaveIfIsManaged(submitted_form_, &driver_));
   CheckPendingCredentials(expected, form_manager_->GetPendingCredentials());
 }
 
@@ -584,7 +592,7 @@ TEST_F(NewPasswordFormManagerTest, CreatePendingCredentialsPasswordOverriden) {
       saved_match_.username_value;
   submitted_form_.fields[kPasswordFieldIndex].value = expected.password_value;
   EXPECT_TRUE(
-      form_manager_->SetSubmittedFormIfIsManaged(submitted_form_, &driver_));
+      form_manager_->ProvisionallySaveIfIsManaged(submitted_form_, &driver_));
   CheckPendingCredentials(expected, form_manager_->GetPendingCredentials());
 }
 
@@ -602,7 +610,7 @@ TEST_F(NewPasswordFormManagerTest, CreatePendingCredentialsUpdate) {
   expected.password_value = ASCIIToUTF16("verystrongpassword");
 
   EXPECT_TRUE(
-      form_manager_->SetSubmittedFormIfIsManaged(submitted_form, &driver_));
+      form_manager_->ProvisionallySaveIfIsManaged(submitted_form, &driver_));
   CheckPendingCredentials(expected, form_manager_->GetPendingCredentials());
 }
 
@@ -625,7 +633,7 @@ TEST_F(NewPasswordFormManagerTest,
   expected.password_value = ASCIIToUTF16("verystrongpassword");
 
   EXPECT_TRUE(
-      form_manager_->SetSubmittedFormIfIsManaged(submitted_form, &driver_));
+      form_manager_->ProvisionallySaveIfIsManaged(submitted_form, &driver_));
   CheckPendingCredentials(expected, form_manager_->GetPendingCredentials());
 }
 
@@ -645,7 +653,7 @@ TEST_F(NewPasswordFormManagerTest, CreatePendingCredentialsEmptyName) {
   form_manager_->ProcessServerPredictions(predictions);
 
   EXPECT_TRUE(
-      form_manager_->SetSubmittedFormIfIsManaged(anonymous_signup, &driver_));
+      form_manager_->ProvisionallySaveIfIsManaged(anonymous_signup, &driver_));
   EXPECT_EQ(ASCIIToUTF16("a password"),
             form_manager_->GetPendingCredentials().password_value);
 }
@@ -665,7 +673,7 @@ TEST_F(NewPasswordFormManagerTest, NoCrashOnNonPasswordForm) {
   submitted_form.fields[kPasswordFieldIndex].value = ASCIIToUTF16("password");
 
   // Expect no crash.
-  form_manager_->SetSubmittedFormIfIsManaged(submitted_form, &driver_);
+  form_manager_->ProvisionallySaveIfIsManaged(submitted_form, &driver_);
 }
 
 TEST_F(NewPasswordFormManagerTest, IsEqualToSubmittedForm) {
@@ -682,7 +690,7 @@ TEST_F(NewPasswordFormManagerTest, IsEqualToSubmittedForm) {
   EXPECT_FALSE(form_manager_->IsEqualToSubmittedForm(submitted_form));
 
   ASSERT_TRUE(
-      form_manager_->SetSubmittedFormIfIsManaged(submitted_form, &driver_));
+      form_manager_->ProvisionallySaveIfIsManaged(submitted_form, &driver_));
 
   observed_form_.unique_renderer_id += 10;
   observed_form_.fields.clear();
@@ -707,7 +715,7 @@ TEST_F(NewPasswordFormManagerTest, SaveNewCredentials) {
   submitted_form.fields[kPasswordFieldIndex].value = new_password;
 
   EXPECT_TRUE(
-      form_manager_->SetSubmittedFormIfIsManaged(submitted_form, &driver_));
+      form_manager_->ProvisionallySaveIfIsManaged(submitted_form, &driver_));
   EXPECT_TRUE(form_manager_->IsNewLogin());
 
   MockFormSaver& form_saver = MockFormSaver::Get(form_manager_.get());
@@ -715,6 +723,7 @@ TEST_F(NewPasswordFormManagerTest, SaveNewCredentials) {
   std::map<base::string16, const PasswordForm*> best_matches;
   EXPECT_CALL(form_saver, Save(_, _))
       .WillOnce(DoAll(SaveArg<0>(&saved_form), SaveArg<1>(&best_matches)));
+  EXPECT_CALL(client_, UpdateFormManagers());
 
   form_manager_->Save();
 
@@ -759,7 +768,7 @@ TEST_F(NewPasswordFormManagerTest, SavePSLToAlreadySaved) {
       psl_saved_match_.password_value;
 
   EXPECT_TRUE(
-      form_manager_->SetSubmittedFormIfIsManaged(submitted_form, &driver_));
+      form_manager_->ProvisionallySaveIfIsManaged(submitted_form, &driver_));
   EXPECT_TRUE(form_manager_->IsNewLogin());
   EXPECT_TRUE(form_manager_->IsPendingCredentialsPublicSuffixMatch());
 
@@ -799,7 +808,7 @@ TEST_F(NewPasswordFormManagerTest, OverridePassword) {
   submitted_form.fields[kPasswordFieldIndex].value = new_password;
 
   EXPECT_TRUE(
-      form_manager_->SetSubmittedFormIfIsManaged(submitted_form, &driver_));
+      form_manager_->ProvisionallySaveIfIsManaged(submitted_form, &driver_));
   EXPECT_FALSE(form_manager_->IsNewLogin());
   EXPECT_TRUE(form_manager_->IsPasswordOverridden());
 
@@ -842,7 +851,7 @@ TEST_F(NewPasswordFormManagerTest, UpdatePasswordOnChangePasswordForm) {
   submitted_form.fields[1].value = new_password;
 
   EXPECT_TRUE(
-      form_manager_->SetSubmittedFormIfIsManaged(submitted_form, &driver_));
+      form_manager_->ProvisionallySaveIfIsManaged(submitted_form, &driver_));
   EXPECT_FALSE(form_manager_->IsNewLogin());
   EXPECT_FALSE(form_manager_->IsPasswordOverridden());
 
@@ -877,7 +886,7 @@ TEST_F(NewPasswordFormManagerTest, UpdateUsernameEmptyStore) {
   TestMockTimeTaskRunner::ScopedContext scoped_context(task_runner_.get());
   fetcher_->SetNonFederated({}, 0u);
 
-  form_manager_->SetSubmittedFormIfIsManaged(submitted_form_, &driver_);
+  form_manager_->ProvisionallySaveIfIsManaged(submitted_form_, &driver_);
 
   base::string16 new_username =
       parsed_submitted_form_.username_value + ASCIIToUTF16("1");
@@ -895,7 +904,7 @@ TEST_F(NewPasswordFormManagerTest, UpdateUsernameToAlreadyExisting) {
   TestMockTimeTaskRunner::ScopedContext scoped_context(task_runner_.get());
   fetcher_->SetNonFederated({&saved_match_}, 0u);
 
-  form_manager_->SetSubmittedFormIfIsManaged(submitted_form_, &driver_);
+  form_manager_->ProvisionallySaveIfIsManaged(submitted_form_, &driver_);
 
   base::string16 new_username = saved_match_.username_value;
   base::string16 expected_password = parsed_submitted_form_.password_value;
@@ -913,7 +922,7 @@ TEST_F(NewPasswordFormManagerTest, UpdatePasswordEmptyStore) {
   TestMockTimeTaskRunner::ScopedContext scoped_context(task_runner_.get());
   fetcher_->SetNonFederated({}, 0u);
 
-  form_manager_->SetSubmittedFormIfIsManaged(submitted_form_, &driver_);
+  form_manager_->ProvisionallySaveIfIsManaged(submitted_form_, &driver_);
 
   base::string16 new_password =
       parsed_submitted_form_.password_value + ASCIIToUTF16("1");
@@ -934,7 +943,7 @@ TEST_F(NewPasswordFormManagerTest, UpdatePasswordToAlreadyExisting) {
   // Emulate submitting form with known username and different password.
   submitted_form_.fields[kUsernameFieldIndex].value =
       saved_match_.username_value;
-  form_manager_->SetSubmittedFormIfIsManaged(submitted_form_, &driver_);
+  form_manager_->ProvisionallySaveIfIsManaged(submitted_form_, &driver_);
 
   // The user changes password to already saved one.
   base::string16 password = saved_match_.password_value;
@@ -966,6 +975,10 @@ TEST_F(NewPasswordFormManagerTest, Clone) {
   TestMockTimeTaskRunner::ScopedContext scoped_context(task_runner_.get());
   fetcher_->SetNonFederated({}, 0u);
 
+  // Provisionally save in order to create pending credentials.
+  ASSERT_TRUE(
+      form_manager_->ProvisionallySaveIfIsManaged(submitted_form_, &driver_));
+
   std::unique_ptr<NewPasswordFormManager> cloned_manager =
       form_manager_->Clone();
 
@@ -976,6 +989,9 @@ TEST_F(NewPasswordFormManagerTest, Clone) {
 
   EXPECT_EQ(form_manager_->metrics_recorder(),
             cloned_manager->metrics_recorder());
+
+  EXPECT_EQ(form_manager_->GetPendingCredentials(),
+            cloned_manager->GetPendingCredentials());
 }
 
 // Extracts the information whether parsing was successful from a metric
@@ -1054,7 +1070,7 @@ TEST_F(NewPasswordFormManagerTest, RecordReadonlyWhenSaving) {
   fetcher_->SetNonFederated({&saved_match_}, 0u);
 
   EXPECT_TRUE(
-      form_manager_->SetSubmittedFormIfIsManaged(submitted_form_, &driver_));
+      form_manager_->ProvisionallySaveIfIsManaged(submitted_form_, &driver_));
 
   // Destroy the form manager to destroy the UKM recorder it owns. The recorder
   // only records metrics in its destructor.
@@ -1079,7 +1095,7 @@ TEST_F(NewPasswordFormManagerTest, RecordReadonlyWhenSaving_ParsingFailed) {
   FormData malformed_form = submitted_form_;
   malformed_form.fields.clear();
   EXPECT_FALSE(
-      form_manager_->SetSubmittedFormIfIsManaged(malformed_form, &driver_));
+      form_manager_->ProvisionallySaveIfIsManaged(malformed_form, &driver_));
 
   // Destroy the form manager to destroy the UKM recorder it owns. The recorder
   // only records metrics in its destructor.
@@ -1337,6 +1353,44 @@ TEST_F(NewPasswordFormManagerTest, FillFormWaitForServerPredictions) {
   uint32_t expected_differences_mask = 2;  // renderer_id changes.
   histogram_tester.ExpectUniqueSample("PasswordManager.DynamicFormChanges",
                                       expected_differences_mask, 1);
+}
+
+TEST_F(NewPasswordFormManagerTest, Update) {
+  TestMockTimeTaskRunner::ScopedContext scoped_context(task_runner_.get());
+
+  PasswordForm not_best_saved_match = saved_match_;
+  not_best_saved_match.preferred = false;
+  PasswordForm saved_match_another_username = saved_match_;
+  saved_match_another_username.username_value += ASCIIToUTF16("1");
+  fetcher_->SetNonFederated({&saved_match_, &saved_match_another_username}, 0u);
+
+  FormData submitted_form = observed_form_;
+  base::string16 username = saved_match_.username_value;
+  base::string16 new_password = saved_match_.password_value + ASCIIToUTF16("1");
+  submitted_form.fields[kUsernameFieldIndex].value = username;
+  submitted_form.fields[kPasswordFieldIndex].value = new_password;
+
+  EXPECT_TRUE(
+      form_manager_->ProvisionallySaveIfIsManaged(submitted_form, &driver_));
+
+  MockFormSaver& form_saver = MockFormSaver::Get(form_manager_.get());
+  PasswordForm updated_form;
+  std::map<base::string16, const PasswordForm*> best_matches;
+  std::vector<PasswordForm> credentials_to_update;
+  EXPECT_CALL(form_saver, Update(_, _, _, nullptr))
+      .WillOnce(DoAll(SaveArg<0>(&updated_form), SaveArg<1>(&best_matches),
+                      SaveArgPointee<2>(&credentials_to_update)));
+  EXPECT_CALL(client_, UpdateFormManagers());
+
+  form_manager_->Update(saved_match_);
+
+  EXPECT_TRUE(ArePasswordFormUniqueKeyEqual(saved_match_, updated_form));
+  EXPECT_TRUE(updated_form.preferred);
+  EXPECT_EQ(new_password, updated_form.password_value);
+  EXPECT_EQ(2u, best_matches.size());
+  ASSERT_TRUE(best_matches.find(username) != best_matches.end());
+  EXPECT_EQ(saved_match_, *best_matches[username]);
+  EXPECT_TRUE(credentials_to_update.empty());
 }
 
 }  // namespace

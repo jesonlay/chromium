@@ -66,12 +66,18 @@ public class TouchEventFilter
 
     private Client mClient;
     private ChromeFullscreenManager mFullscreenManager;
+    private GestureListenerManager mGestureListenerManager;
     private final List<RectF> mTouchableArea = new ArrayList<>();
     private final Paint mGrayOut;
     private final Paint mClear;
 
-    /** Whether filtering is enabled. */
-    private boolean mEnabled;
+    /** Whether a partial-screen overlay is enabled or not. Has precedence over {@link
+     * @mFullOverlayEnabled}. */
+    private boolean mPartialOverlayEnabled;
+
+    /** Whether a full-screen overlay is enabled or not. Is overridden by {@link
+     * @mPartialOverlayEnabled}.*/
+    private boolean mFullOverlayEnabled;
 
     /** Padding added between the element area and the grayed-out area. */
     private final float mPaddingPx;
@@ -153,12 +159,14 @@ public class TouchEventFilter
             @Override
             public boolean onScroll(MotionEvent downEvent, MotionEvent moveEvent, float distanceX,
                     float distanceY) {
-                mClient.scrollBy(distanceX / getWidth(), distanceY / getVisualViewportHeight());
+                if (mPartialOverlayEnabled)
+                    mClient.scrollBy(distanceX / getWidth(), distanceY / getVisualViewportHeight());
                 return true;
             }
         });
 
-        updateTouchableArea(false, Collections.emptyList());
+        setFullOverlay(false);
+        setPartialOverlay(false, Collections.emptyList());
     }
 
     /** Initializes dependencies. */
@@ -167,7 +175,20 @@ public class TouchEventFilter
         mClient = client;
         mFullscreenManager = fullscreenManager;
         mFullscreenManager.addListener(this);
-        GestureListenerManager.fromWebContents(webContents).addListener(this);
+        mGestureListenerManager = GestureListenerManager.fromWebContents(webContents);
+        mGestureListenerManager.addListener(this);
+    }
+
+    public void deInit() {
+        mClient = null;
+        if (mFullscreenManager != null) {
+            mFullscreenManager.removeListener(this);
+            mFullscreenManager = null;
+        }
+        if (mGestureListenerManager != null) {
+            mGestureListenerManager.removeListener(this);
+            mGestureListenerManager = null;
+        }
     }
 
     /** Sets the color to be used for unusable areas. */
@@ -175,32 +196,49 @@ public class TouchEventFilter
         mGrayOut.setColor(color);
     }
 
-    /** Enables/disables the filter. Clears all currently set touchable areas. */
-    public void setEnableFiltering(boolean enabled) {
-        if (mEnabled != enabled) {
-            clearTouchableArea();
-            mEnabled = enabled;
-            setAlpha(mEnabled ? 1.0f : 0.0f);
+    /**
+     * Enables/disables a full screen overlay.
+     *
+     * If both a full and a partial screen overlay are set, the partial overlay has precedence.
+     *
+     * @param enabled if {@code false}, the full screen overlay is disabled
+     */
+    public void setFullOverlay(boolean enabled) {
+        if (mFullOverlayEnabled != enabled) {
+            mFullOverlayEnabled = enabled;
 
-            // reset tap counter each time the filter is disabled.
-            if (!mEnabled) mUnexpectedTapTimes.clear();
-
+            // reset tap counter each time the full screen overlay is disabled.
+            if (!mFullOverlayEnabled) mUnexpectedTapTimes.clear();
+            updateVisibility();
             invalidate();
         }
     }
 
     /**
-     * Defines the area of the visible viewport that can be used.
+     * Enables/disables a partial screen overlay.
      *
-     * @param enabled if {@code false}, the filter is fully disabled and invisible
+     * If both a full and a partial screen overlay are set, the partial overlay has precedence.
+     *
+     * @param enabled if {@code false}, the partial overlay is disabled
      * @param rectangles rectangles defining the area that can be used, may be empty
      */
-    public void updateTouchableArea(boolean enabled, List<RectF> rectangles) {
-        setEnableFiltering(enabled);
-        if (!mTouchableArea.equals(rectangles)) {
+    public void setPartialOverlay(boolean enabled, List<RectF> rectangles) {
+        if (mPartialOverlayEnabled != enabled || (enabled && !mTouchableArea.equals(rectangles))) {
+            mPartialOverlayEnabled = enabled;
+
             clearTouchableArea();
             mTouchableArea.addAll(rectangles);
+            updateVisibility();
+            invalidate();
         }
+    }
+
+    private boolean isOverlayShown() {
+        return mFullOverlayEnabled || mPartialOverlayEnabled;
+    }
+
+    private void updateVisibility() {
+        setAlpha(isOverlayShown() ? 1.0f : 0.0f);
     }
 
     private void clearTouchableArea() {
@@ -208,16 +246,21 @@ public class TouchEventFilter
         mOffsetY = 0;
         mInitialBrowserScrollOffsetY += mBrowserScrollOffsetY;
         mBrowserScrollOffsetY = 0;
-        invalidate();
     }
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
+        // Note that partial overlays have precedence over full overlays
+        if (mPartialOverlayEnabled) return dispatchTouchEventWithPartialOverlay(event);
+        if (mFullOverlayEnabled) return dispatchTouchEventWithFullOverlay(event);
+        return false;
+    }
+
+    private boolean dispatchTouchEventWithPartialOverlay(MotionEvent event) {
         switch (event.getAction()) {
             case MotionEvent.ACTION_SCROLL:
                 // Scrolling is always safe. Let it through.
                 return false;
-
             case MotionEvent.ACTION_MOVE:
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
@@ -236,8 +279,6 @@ public class TouchEventFilter
             // fallthrough
 
             case MotionEvent.ACTION_DOWN:
-                if (!mEnabled) return false; // let everything through
-
                 // Only let through events if they're meant for the touchable area of the screen.
                 int yTop = getVisualViewportTop();
                 int yBottom = getVisualViewportBottom();
@@ -259,12 +300,17 @@ public class TouchEventFilter
         }
     }
 
+    private boolean dispatchTouchEventWithFullOverlay(MotionEvent event) {
+        mNonBrowserGesture.onTouchEvent(event);
+        return true;
+    }
+
     /** Returns the origin of the visual viewport in this view. */
     @Override
     @SuppressLint("CanvasSize")
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        if (!mEnabled) {
+        if (!isOverlayShown()) {
             return;
         }
         canvas.drawPaint(mGrayOut);

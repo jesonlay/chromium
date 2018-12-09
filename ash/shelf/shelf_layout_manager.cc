@@ -349,14 +349,23 @@ void ShelfLayoutManager::UpdateAutoHideForMouseEvent(ui::MouseEvent* event,
   }
 }
 
-void ShelfLayoutManager::ProcessGestureEventOnWindow(ui::GestureEvent* event,
-                                                     aura::Window* target) {
+void ShelfLayoutManager::ProcessGestureEventOfAutoHideShelf(
+    ui::GestureEvent* event,
+    aura::Window* target) {
+  const bool is_shelf_window = IsShelfWindow(target);
   // Skip event processing if shelf widget is fully visible to let the default
   // event dispatching do its work.
-  if (IsVisible() || in_shutdown_)
+  if (IsVisible() || in_shutdown_) {
+    // Tap outside of the AUTO_HIDE_SHOWN shelf should hide it.
+    if (!IsShelfWindow(target) && visibility_state() == SHELF_AUTO_HIDE &&
+        state_.auto_hide_state == SHELF_AUTO_HIDE_SHOWN &&
+        event->type() == ui::ET_GESTURE_TAP) {
+      UpdateAutoHideState();
+    }
     return;
+  }
 
-  if (IsShelfWindow(target)) {
+  if (is_shelf_window) {
     ui::GestureEvent event_in_screen(*event);
     gfx::Point location_in_screen(event->location());
     ::wm::ConvertPointToScreen(target, &location_in_screen);
@@ -394,13 +403,6 @@ bool ShelfLayoutManager::ProcessGestureEvent(
 
   if (gesture_drag_status_ != GESTURE_DRAG_IN_PROGRESS &&
       gesture_drag_status_ != GESTURE_DRAG_APPLIST_IN_PROGRESS) {
-    if ((shelf_->GetVisibilityState() == SHELF_AUTO_HIDE &&
-         shelf_->GetAutoHideState() == SHELF_AUTO_HIDE_HIDDEN) ||
-        shelf_->GetVisibilityState() == SHELF_HIDDEN) {
-      // Do not allow children to handle events while the shelf is hidden.
-      return true;
-    }
-
     return false;
   }
 
@@ -1240,6 +1242,10 @@ bool ShelfLayoutManager::StartGestureDrag(
   if (is_app_list_visible_ && !IsHomeLauncherEnabledInTabletMode())
     return false;
 
+  // Also disable shelf drags until the overflow shelf is closed.
+  if (shelf_widget_->IsShowingOverflowBubble())
+    return false;
+
   gesture_drag_status_ = GESTURE_DRAG_IN_PROGRESS;
   gesture_drag_auto_hide_state_ = visibility_state() == SHELF_AUTO_HIDE
                                       ? auto_hide_state()
@@ -1386,6 +1392,11 @@ bool ShelfLayoutManager::CanStartFullscreenAppListDrag(
 
   // If the shelf is not visible, swiping up should show the shelf.
   if (!IsVisible())
+    return false;
+
+  // Do not show the fullscreen app list until the overflow bubble has been
+  // closed.
+  if (shelf_widget_->IsShowingOverflowBubble())
     return false;
 
   // If app list is already opened, swiping up on the shelf should keep the app

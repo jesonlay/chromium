@@ -78,7 +78,7 @@ class Page;
 class PaintArtifactCompositor;
 class PaintController;
 class PaintLayerScrollableArea;
-class PaintTracker;
+class PaintTimingDetector;
 class PrintContext;
 class RootFrameViewport;
 class ScrollableArea;
@@ -110,6 +110,7 @@ class CORE_EXPORT LocalFrameView final
   static LocalFrameView* Create(LocalFrame&);
   static LocalFrameView* Create(LocalFrame&, const IntSize& initial_size);
 
+  explicit LocalFrameView(LocalFrame&, IntRect);
   ~LocalFrameView() override;
 
   void Invalidate() { InvalidateRect(IntRect(0, 0, Width(), Height())); }
@@ -319,8 +320,10 @@ class CORE_EXPORT LocalFrameView final
   // be in the lifecycle state PaintClean.  If lifecycle throttling is allowed
   // (see DocumentLifecycle::AllowThrottlingScope), some frames may skip the
   // lifecycle update (e.g., based on visibility) and will not end up being
-  // PaintClean.
-  void UpdateAllLifecyclePhases();
+  // PaintClean. Set |reason| to indicate the reason for this update,
+  // for metrics purposes.
+  void UpdateAllLifecyclePhases(
+      DocumentLifecycle::LifecycleUpdateReason reason);
 
   // Computes the style, layout, compositing and pre-paint lifecycle stages
   // if needed.
@@ -683,7 +686,9 @@ class CORE_EXPORT LocalFrameView final
 
   void ScrollAndFocusFragmentAnchor();
   JankTracker& GetJankTracker() { return *jank_tracker_; }
-  PaintTracker& GetPaintTracker() const { return *paint_tracker_; }
+  PaintTimingDetector& GetPaintTimingDetector() const {
+    return *paint_timing_detector_;
+  }
 
  protected:
   void NotifyFrameRectsChangedIfNeeded();
@@ -717,8 +722,6 @@ class CORE_EXPORT LocalFrameView final
   };
 #endif
 
-  explicit LocalFrameView(LocalFrame&, IntRect);
-
   void PaintInternal(GraphicsContext&,
                      const GlobalPaintFlags,
                      const CullRect&) const;
@@ -733,7 +736,8 @@ class CORE_EXPORT LocalFrameView final
 
   // Returns whether the lifecycle was succesfully updated to the
   // target state.
-  bool UpdateLifecyclePhases(DocumentLifecycle::LifecycleState target_state);
+  bool UpdateLifecyclePhases(DocumentLifecycle::LifecycleState target_state,
+                             DocumentLifecycle::LifecycleUpdateReason reason);
   // The internal version that does the work after the proper context and checks
   // have passed in the above function call.
   void UpdateLifecyclePhasesInternal(
@@ -972,7 +976,7 @@ class CORE_EXPORT LocalFrameView final
 
   UniqueObjectId unique_id_;
   std::unique_ptr<JankTracker> jank_tracker_;
-  Member<PaintTracker> paint_tracker_;
+  Member<PaintTimingDetector> paint_timing_detector_;
 
   FRIEND_TEST_ALL_PREFIXES(WebViewTest, DeviceEmulationResetScrollbars);
 };

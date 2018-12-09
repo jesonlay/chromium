@@ -233,12 +233,10 @@ void LoopbackServer::SaveEntity(std::unique_ptr<LoopbackServerEntity> entity) {
   entities_[entity->GetId()] = std::move(entity);
 }
 
-void LoopbackServer::HandleCommand(
-    const string& request,
-    HttpResponse::ServerConnectionCode* server_status,
-    int64_t* response_code,
-    std::string* response) {
+net::HttpStatusCode LoopbackServer::HandleCommand(const string& request,
+                                                  std::string* response) {
   DCHECK(thread_checker_.CalledOnValidThread());
+  response->clear();
 
   sync_pb::ClientToServerMessage message;
   bool parsed = message.ParseFromString(request);
@@ -267,33 +265,25 @@ void LoopbackServer::HandleCommand(
         success = true;
         break;
       default:
-        *server_status = HttpResponse::SYNC_SERVER_ERROR;
-        *response_code = net::ERR_NOT_IMPLEMENTED;
-        *response = string();
-        return;
+        return net::HTTP_BAD_REQUEST;
     }
 
     if (!success) {
-      *server_status = HttpResponse::SYNC_SERVER_ERROR;
-      *response_code = net::ERR_FAILED;
-      *response = string();
       UMA_HISTOGRAM_ENUMERATION(
           "Sync.Local.RequestTypeOnError", message.message_contents(),
           sync_pb::ClientToServerMessage_Contents_Contents_MAX);
-      return;
+      return net::HTTP_INTERNAL_SERVER_ERROR;
     }
 
     response_proto.set_error_code(sync_pb::SyncEnums::SUCCESS);
   }
 
   response_proto.set_store_birthday(GetStoreBirthday());
-
-  *server_status = HttpResponse::SERVER_CONNECTION_OK;
-  *response_code = net::HTTP_OK;
   *response = response_proto.SerializeAsString();
 
   // TODO(pastarmovj): This should be done asynchronously.
   SaveStateToFile(persistent_file_);
+  return net::HTTP_OK;
 }
 
 void LoopbackServer::EnableStrongConsistencyWithConflictDetectionModel() {

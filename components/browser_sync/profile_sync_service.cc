@@ -36,6 +36,7 @@
 #include "components/sync/driver/clear_server_data_events.h"
 #include "components/sync/driver/configure_context.h"
 #include "components/sync/driver/directory_data_type_controller.h"
+#include "components/sync/driver/model_type_controller.h"
 #include "components/sync/driver/sync_api_component_factory.h"
 #include "components/sync/driver/sync_driver_switches.h"
 #include "components/sync/driver/sync_type_preference_provider.h"
@@ -52,6 +53,7 @@
 #include "components/sync/model/model_type_store_service.h"
 #include "components/sync/model/sync_error.h"
 #include "components/sync/model_impl/client_tag_based_model_type_processor.h"
+#include "components/sync/model_impl/forwarding_model_type_controller_delegate.h"
 #include "components/sync/syncable/base_transaction.h"
 #include "components/sync/syncable/directory.h"
 #include "components/sync_sessions/session_sync_service.h"
@@ -173,8 +175,6 @@ ProfileSyncService::ProfileSyncService(InitParams init_params)
       sync_service_url_(
           syncer::GetSyncServiceURL(*base::CommandLine::ForCurrentProcess(),
                                     init_params.channel)),
-      user_events_separate_pref_group_(
-          init_params.user_events_separate_pref_group),
       crypto_(
           base::BindRepeating(&ProfileSyncService::NotifyObservers,
                               base::Unretained(this)),
@@ -253,15 +253,22 @@ void ProfileSyncService::Initialize() {
       sync_service_url_, local_device_->GetSyncUserAgent(), url_loader_factory_,
       syncer::SyncStoppedReporter::ResultCallback());
 
+  data_type_controllers_ =
+      BuildDataTypeControllerMap(sync_client_->CreateDataTypeControllers());
+
   device_info_sync_bridge_ = std::make_unique<syncer::DeviceInfoSyncBridge>(
       local_device_.get(), model_type_store_factory,
       std::make_unique<syncer::ClientTagBasedModelTypeProcessor>(
           syncer::DEVICE_INFO,
           /*dump_stack=*/base::BindRepeating(&syncer::ReportUnrecoverableError,
                                              channel_)));
-
-  data_type_controllers_ = BuildDataTypeControllerMap(
-      sync_client_->CreateDataTypeControllers(local_device_.get()));
+  data_type_controllers_[syncer::DEVICE_INFO] =
+      std::make_unique<syncer::ModelTypeController>(
+          syncer::DEVICE_INFO,
+          std::make_unique<syncer::ForwardingModelTypeControllerDelegate>(
+              device_info_sync_bridge_->change_processor()
+                  ->GetControllerDelegate()
+                  .get()));
 
   if (gaia_cookie_manager_service_)
     gaia_cookie_manager_service_->AddObserver(this);
@@ -1058,10 +1065,6 @@ void ProfileSyncService::OnExperimentsChanged(
     return;
 
   current_experiments_ = experiments;
-
-  sync_client_->GetPrefService()->SetBoolean(
-      invalidation::prefs::kInvalidationServiceUseGCMChannel,
-      experiments.gcm_invalidations_enabled);
 }
 
 void ProfileSyncService::OnConnectionStatusChange(
@@ -1377,8 +1380,7 @@ void ProfileSyncService::OnUserChoseDatatypes(
 
   const syncer::ModelTypeSet registered_types = GetRegisteredDataTypes();
   // Will only enable those types that are registered and preferred.
-  sync_prefs_.SetPreferredDataTypes(registered_types, chosen_types,
-                                    user_events_separate_pref_group_);
+  sync_prefs_.SetPreferredDataTypes(registered_types, chosen_types);
 
   // Now reconfigure the DTM.
   ReconfigureDatatypeManager(/*bypass_setup_in_progress_check=*/false);
@@ -1415,8 +1417,7 @@ bool ProfileSyncService::HasObserver(
 syncer::ModelTypeSet ProfileSyncService::GetPreferredDataTypes() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   syncer::ModelTypeSet preferred_types =
-      Union(sync_prefs_.GetPreferredDataTypes(GetRegisteredDataTypes(),
-                                              user_events_separate_pref_group_),
+      Union(sync_prefs_.GetPreferredDataTypes(GetRegisteredDataTypes()),
             syncer::ControlTypes());
   if (IsLocalSyncEnabled()) {
     preferred_types.Remove(syncer::APP_LIST);
@@ -1431,7 +1432,7 @@ syncer::ModelTypeSet ProfileSyncService::GetForcedDataTypes() const {
   syncer::ModelTypeSet forced_types;
   for (const syncer::SyncTypePreferenceProvider* provider :
        preference_providers_) {
-    forced_types.PutAll(provider->GetPreferredDataTypes());
+    forced_types.PutAll(provider->GetForcedDataTypes());
   }
   return Intersection(forced_types, GetRegisteredDataTypes());
 }
@@ -1484,8 +1485,9 @@ void ProfileSyncService::ConfigureDataTypeManager(
   configure_context.authenticated_account_id =
       GetAuthenticatedAccountInfo().account_id;
   configure_context.cache_guid = local_device_->GetLocalSyncCacheGUID();
-  configure_context.storage_option = syncer::ConfigureContext::STORAGE_ON_DISK;
+  configure_context.storage_option = syncer::STORAGE_ON_DISK;
   configure_context.reason = reason;
+  configure_context.configuration_start_time = base::Time::Now();
 
   if (!migrator_) {
     // We create the migrator at the same time.
@@ -1532,8 +1534,7 @@ void ProfileSyncService::ConfigureDataTypeManager(
     }
 
     types = Intersection(types, allowed_types);
-    configure_context.storage_option =
-        syncer::ConfigureContext::STORAGE_IN_MEMORY;
+    configure_context.storage_option = syncer::STORAGE_IN_MEMORY;
   }
   data_type_manager_->Configure(types, configure_context);
 
@@ -2058,12 +2059,6 @@ bool ProfileSyncService::IsRetryingAccessTokenFetchForTest() const {
 std::string ProfileSyncService::GetAccessTokenForTest() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return auth_manager_->access_token();
-}
-
-base::WeakPtr<syncer::ModelTypeControllerDelegate>
-ProfileSyncService::GetDeviceInfoSyncControllerDelegate() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return device_info_sync_bridge_->change_processor()->GetControllerDelegate();
 }
 
 syncer::SyncTokenStatus ProfileSyncService::GetSyncTokenStatus() const {

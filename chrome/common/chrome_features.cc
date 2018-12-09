@@ -222,11 +222,6 @@ const base::Feature kDisallowUnsafeHttpDownloads{
     "DisallowUnsafeHttpDownloads", base::FEATURE_DISABLED_BY_DEFAULT};
 const char kDisallowUnsafeHttpDownloadsParamName[] = "MimeTypeList";
 
-#if !defined(OS_ANDROID)
-const base::Feature kDoodlesOnLocalNtp{"DoodlesOnLocalNtp",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
-#endif
-
 #if defined(OS_ANDROID)
 // Enable changing default downloads storage location on Android.
 const base::Feature kDownloadsLocationChange{"DownloadsLocationChange",
@@ -576,13 +571,13 @@ const base::Feature kSysInternals{"SysInternals",
 const base::Feature kSystemWebApps{"SystemWebApps",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables or disables the App Management UI.
+const base::Feature kAppManagement{"AppManagement",
+                                   base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enable TopSites to source and sort its site data using site engagement.
 const base::Feature kTopSitesFromSiteEngagement{
     "TopSitesFromSiteEngagement", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Enables using the local NTP if Google is the default search engine.
-const base::Feature kUseGoogleLocalNtp{"UseGoogleLocalNtp",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if defined(OS_CHROMEOS)
 // Enables or disables logging for adaptive screen brightness on Chrome OS.
@@ -656,6 +651,10 @@ const base::Feature kUsbguard{"USBGuard", base::FEATURE_DISABLED_BY_DEFAULT};
 // Enable running shill in a minijail sandbox on Chrome OS.
 const base::Feature kShillSandboxing{"ShillSandboxing",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enable restriction of symlink traversal on user-supplied filesystems.
+const base::Feature kFsNosymfollow{"FsNosymfollow",
+                                   base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_CHROMEOS)
 
 // Enable showing a tab-modal dialog while a Web Authentication API request is

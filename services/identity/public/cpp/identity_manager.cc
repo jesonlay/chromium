@@ -54,7 +54,8 @@ IdentityManager::IdentityManager(
       token_service_(token_service),
       account_tracker_service_(account_tracker_service),
       gaia_cookie_manager_service_(gaia_cookie_manager_service),
-      primary_account_mutator_(std::move(primary_account_mutator)) {
+      primary_account_mutator_(std::move(primary_account_mutator)),
+      accounts_mutator_(token_service_) {
   signin_manager_->AddObserver(this);
   token_service_->AddDiagnosticsObserver(this);
   token_service_->AddObserver(this);
@@ -191,6 +192,10 @@ PrimaryAccountMutator* IdentityManager::GetPrimaryAccountMutator() {
   return primary_account_mutator_.get();
 }
 
+AccountsMutator* IdentityManager::GetAccountsMutator() {
+  return &accounts_mutator_;
+}
+
 void IdentityManager::AddObserver(Observer* observer) {
   observer_list_.AddObserver(observer);
 }
@@ -205,6 +210,18 @@ void IdentityManager::AddDiagnosticsObserver(DiagnosticsObserver* observer) {
 
 void IdentityManager::RemoveDiagnosticsObserver(DiagnosticsObserver* observer) {
   diagnostics_observer_list_.RemoveObserver(observer);
+}
+
+SigninManagerBase* IdentityManager::GetSigninManager() {
+  return signin_manager_;
+}
+
+ProfileOAuth2TokenService* IdentityManager::GetTokenService() {
+  return token_service_;
+}
+
+AccountTrackerService* IdentityManager::GetAccountTrackerService() {
+  return account_tracker_service_;
 }
 
 void IdentityManager::SetPrimaryAccountSynchronouslyForTests(
@@ -261,6 +278,14 @@ AccountInfo IdentityManager::GetAccountInfoForAccountWithRefreshToken(
 void IdentityManager::GoogleSigninSucceeded(const AccountInfo& account_info) {
   for (auto& observer : observer_list_) {
     observer.OnPrimaryAccountSet(account_info);
+  }
+}
+
+void IdentityManager::GoogleSigninSucceededWithPassword(
+    const AccountInfo& account_info,
+    const std::string& password) {
+  for (auto& observer : observer_list_) {
+    observer.OnPrimaryAccountSetWithPassword(account_info, password);
   }
 }
 

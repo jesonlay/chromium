@@ -54,13 +54,19 @@ class CORE_EXPORT FormData final
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static FormData* Create(HTMLFormElement* form = nullptr) {
-    return new FormData(form);
+  static FormData* Create() { return MakeGarbageCollected<FormData>(); }
+  static FormData* Create(ExceptionState& exception_state) {
+    return MakeGarbageCollected<FormData>();
   }
+  static FormData* Create(HTMLFormElement* form,
+                          ExceptionState& exception_state);
 
   static FormData* Create(const WTF::TextEncoding& encoding) {
-    return new FormData(encoding);
+    return MakeGarbageCollected<FormData>(encoding);
   }
+
+  explicit FormData(const WTF::TextEncoding&);
+  FormData();
   void Trace(blink::Visitor*) override;
 
   // FormData IDL interface.
@@ -98,8 +104,6 @@ class CORE_EXPORT FormData final
   scoped_refptr<EncodedFormData> EncodeMultiPartFormData();
 
  private:
-  explicit FormData(const WTF::TextEncoding&);
-  explicit FormData(HTMLFormElement*);
   void SetEntry(const Entry*);
   IterationSource* StartIteration(ScriptState*, ExceptionState&) override;
 

@@ -40,14 +40,11 @@
 
 namespace blink {
 
-namespace file_error {
-enum class ErrorCode;
-}
-
 class Blob;
 class DOMException;
 class ExceptionState;
 class ExecutionContext;
+enum class FileErrorCode;
 
 class FileWriter final : public EventTargetWithInlineData,
                          public FileWriterBase,
@@ -59,6 +56,8 @@ class FileWriter final : public EventTargetWithInlineData,
 
  public:
   static FileWriter* Create(ExecutionContext*);
+
+  explicit FileWriter(ExecutionContext*);
   ~FileWriter() override;
 
   enum ReadyState { kInit = 0, kWriting = 1, kDone = 2 };
@@ -109,8 +108,6 @@ class FileWriter final : public EventTargetWithInlineData,
     kOperationAbort
   };
 
-  explicit FileWriter(ExecutionContext*);
-
   void CompleteAbort();
 
   void DoOperation(Operation);
@@ -119,7 +116,7 @@ class FileWriter final : public EventTargetWithInlineData,
 
   void FireEvent(const AtomicString& type);
 
-  void SetError(file_error::ErrorCode, ExceptionState&);
+  void SetError(FileErrorCode, ExceptionState&);
 
   void Dispose();
 

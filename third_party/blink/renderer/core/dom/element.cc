@@ -178,22 +178,36 @@ bool IsRootEditableElementWithCounting(const Element& element) {
   const auto* style = element.GetComputedStyle();
   if (!style)
     return is_editable;
+  auto user_modify = style->UserModify();
   const AtomicString& ce_value = element.FastGetAttribute(kContenteditableAttr);
   if (ce_value.IsNull() || DeprecatedEqualIgnoringCase(ce_value, "false")) {
-    if (style->UserModify() != EUserModify::kReadOnly)
-      UseCounter::Count(doc, WebFeature::kWebKitUserModifyEffective);
-    if (style->UserModify() == EUserModify::kReadWritePlaintextOnly)
+    if (user_modify == EUserModify::kReadWritePlaintextOnly) {
       UseCounter::Count(doc, WebFeature::kPlainTextEditingEffective);
+      UseCounter::Count(doc, WebFeature::kWebKitUserModifyPlainTextEffective);
+      UseCounter::Count(doc, WebFeature::kWebKitUserModifyEffective);
+    } else if (user_modify == EUserModify::kReadWrite) {
+      UseCounter::Count(doc, WebFeature::kWebKitUserModifyReadWriteEffective);
+      UseCounter::Count(doc, WebFeature::kWebKitUserModifyEffective);
+    }
   } else if (ce_value.IsEmpty() ||
              DeprecatedEqualIgnoringCase(ce_value, "true")) {
-    if (style->UserModify() != EUserModify::kReadWrite)
-      UseCounter::Count(doc, WebFeature::kWebKitUserModifyEffective);
-    if (style->UserModify() == EUserModify::kReadWritePlaintextOnly)
+    if (user_modify == EUserModify::kReadWritePlaintextOnly) {
       UseCounter::Count(doc, WebFeature::kPlainTextEditingEffective);
-  } else if (DeprecatedEqualIgnoringCase(ce_value, "plaintext-only")) {
-    if (style->UserModify() != EUserModify::kReadWritePlaintextOnly)
+      UseCounter::Count(doc, WebFeature::kWebKitUserModifyPlainTextEffective);
       UseCounter::Count(doc, WebFeature::kWebKitUserModifyEffective);
+    } else if (user_modify == EUserModify::kReadOnly) {
+      UseCounter::Count(doc, WebFeature::kWebKitUserModifyReadOnlyEffective);
+      UseCounter::Count(doc, WebFeature::kWebKitUserModifyEffective);
+    }
+  } else if (DeprecatedEqualIgnoringCase(ce_value, "plaintext-only")) {
     UseCounter::Count(doc, WebFeature::kPlainTextEditingEffective);
+    if (user_modify == EUserModify::kReadWrite) {
+      UseCounter::Count(doc, WebFeature::kWebKitUserModifyReadWriteEffective);
+      UseCounter::Count(doc, WebFeature::kWebKitUserModifyEffective);
+    } else if (user_modify == EUserModify::kReadOnly) {
+      UseCounter::Count(doc, WebFeature::kWebKitUserModifyReadOnlyEffective);
+      UseCounter::Count(doc, WebFeature::kWebKitUserModifyEffective);
+    }
   }
   return is_editable;
 }
@@ -201,7 +215,7 @@ bool IsRootEditableElementWithCounting(const Element& element) {
 }  // namespace
 
 Element* Element::Create(const QualifiedName& tag_name, Document* document) {
-  return new Element(tag_name, document, kCreateElement);
+  return MakeGarbageCollected<Element>(tag_name, document, kCreateElement);
 }
 
 Element::Element(const QualifiedName& tag_name,
@@ -384,7 +398,7 @@ ElementAnimations* Element::GetElementAnimations() const {
 ElementAnimations& Element::EnsureElementAnimations() {
   ElementRareData& rare_data = EnsureElementRareData();
   if (!rare_data.GetElementAnimations())
-    rare_data.SetElementAnimations(new ElementAnimations());
+    rare_data.SetElementAnimations(MakeGarbageCollected<ElementAnimations>());
   return *rare_data.GetElementAnimations();
 }
 
@@ -2131,7 +2145,8 @@ scoped_refptr<ComputedStyle> Element::StyleForLayoutObject() {
 
   if (RuntimeEnabledFeatures::InvisibleDOMEnabled() &&
       hasAttribute(html_names::kInvisibleAttr)) {
-    auto style = ComputedStyle::Create();
+    auto style =
+        GetDocument().GetStyleResolver()->InitialStyleForElement(GetDocument());
     style->SetDisplay(EDisplay::kNone);
     return style;
   }
@@ -2194,6 +2209,11 @@ void Element::RecalcStyleForTraversalRootAncestor() {
 void Element::RecalcStyle(StyleRecalcChange change) {
   DCHECK(GetDocument().InStyleRecalc());
   DCHECK(!GetDocument().Lifecycle().InDetach());
+
+  if (StyleRecalcBlockedByDisplayLock())
+    return;
+  NotifyDisplayLockDidRecalcStyle();
+
   // If we are re-attaching in a Shadow DOM v0 tree, we recalc down to the
   // distributed nodes to propagate kReattach down the flat tree (See
   // V0InsertionPoint::DidRecalcStyle). That means we may have a shadow-
@@ -2650,6 +2670,18 @@ const AtomicString& Element::IsValue() const {
   if (HasRareData())
     return GetElementRareData()->IsValue();
   return g_null_atom;
+}
+
+void Element::SetDidAttachInternals() {
+  EnsureElementRareData().SetDidAttachInternals();
+}
+
+bool Element::DidAttachInternals() const {
+  return HasRareData() && GetElementRareData()->DidAttachInternals();
+}
+
+ElementInternals& Element::EnsureElementInternals() {
+  return EnsureElementRareData().EnsureElementInternals(ToHTMLElement(*this));
 }
 
 ShadowRoot* Element::createShadowRoot(ExceptionState& exception_state) {
@@ -3535,6 +3567,8 @@ ScriptPromise Element::acquireDisplayLock(ScriptState* script_state,
 }
 
 DisplayLockContext* Element::GetDisplayLockContext() const {
+  if (!RuntimeEnabledFeatures::DisplayLockingEnabled())
+    return nullptr;
   return HasRareData() ? GetElementRareData()->GetDisplayLockContext()
                        : nullptr;
 }
@@ -3750,7 +3784,14 @@ const ComputedStyle* Element::EnsureComputedStyle(
   // EnsureComputedStyle. In some cases you might be fine using GetComputedStyle
   // without updating the style, but in most cases you want a clean tree for
   // that as well.
-  DCHECK(!GetDocument().NeedsLayoutTreeUpdateForNode(*this));
+  //
+  // Adjacent styling bits may be set and affect NeedsLayoutTreeUpdateForNode as
+  // part of EnsureComputedStyle in an ancestor chain.
+  // (see CSSComputedStyleDeclarationTest::NeedsAdjacentStyleRecalc). It is OK
+  // that it happens, but we need to ignore the effect on
+  // NeedsLayoutTreeUpdateForNode here.
+  DCHECK(!GetDocument().NeedsLayoutTreeUpdateForNode(
+      *this, true /* ignore_adjacent_style */));
 
   // FIXME: Find and use the layoutObject from the pseudo element instead of the
   // actual element so that the 'length' properties, which are only known by the
@@ -5070,6 +5111,16 @@ const NamesMap* Element::PartNamesMap() const {
   return RuntimeEnabledFeatures::CSSPartPseudoElementEnabled() && HasRareData()
              ? GetElementRareData()->PartNamesMap()
              : nullptr;
+}
+
+bool Element::StyleRecalcBlockedByDisplayLock() const {
+  auto* context = GetDisplayLockContext();
+  return context && !context->ShouldStyle();
+}
+
+void Element::NotifyDisplayLockDidRecalcStyle() {
+  if (auto* context = GetDisplayLockContext())
+    context->DidStyle();
 }
 
 }  // namespace blink

@@ -192,6 +192,12 @@ void WindowPortLocal::AllocateLocalSurfaceId() {
   UpdateLocalSurfaceId();
 }
 
+void WindowPortLocal::InvalidateLocalSurfaceId() {
+  if (!parent_local_surface_id_allocator_)
+    return;
+  parent_local_surface_id_allocator_->Invalidate();
+}
+
 viz::ScopedSurfaceIdAllocator WindowPortLocal::GetSurfaceIdAllocator(
     base::OnceCallback<void()> allocation_task) {
   return viz::ScopedSurfaceIdAllocator(
@@ -230,7 +236,6 @@ void WindowPortLocal::OnFirstSurfaceActivation(
                                    SK_ColorWHITE,
                                    cc::DeadlinePolicy::UseDefaultDeadline(),
                                    false /* stretch_content_to_fill_bounds */);
-  window_->layer()->SetOldestAcceptableFallback(surface_info.id());
 }
 
 void WindowPortLocal::OnFrameTokenChanged(uint32_t frame_token) {}

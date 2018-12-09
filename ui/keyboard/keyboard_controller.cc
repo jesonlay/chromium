@@ -149,6 +149,47 @@ void LogKeyboardControlEvent(KeyboardControlEvent event) {
                             KEYBOARD_CONTROL_MAX);
 }
 
+class InputMethodKeyboardController : public ui::InputMethodKeyboardController {
+ public:
+  explicit InputMethodKeyboardController(
+      KeyboardController* keyboard_controller)
+      : keyboard_controller_(keyboard_controller) {}
+
+  ~InputMethodKeyboardController() override = default;
+
+  // ui::InputMethodKeyboardController
+  bool DisplayVirtualKeyboard() override {
+    // Calling |ShowKeyboardInternal| may move the keyboard to another display.
+    if (keyboard_controller_->IsKeyboardEnableRequested() &&
+        !keyboard_controller_->keyboard_locked()) {
+      keyboard_controller_->ShowKeyboard(false /* locked */);
+      return true;
+    }
+    return false;
+  }
+
+  void DismissVirtualKeyboard() override {
+    keyboard_controller_->HideKeyboardByUser();
+  }
+
+  void AddObserver(
+      ui::InputMethodKeyboardControllerObserver* observer) override {
+    // TODO: Implement.
+  }
+
+  void RemoveObserver(
+      ui::InputMethodKeyboardControllerObserver* observer) override {
+    // TODO: Implement.
+  }
+
+  bool IsKeyboardVisible() override {
+    return keyboard_controller_->IsKeyboardVisible();
+  }
+
+ private:
+  KeyboardController* keyboard_controller_;
+};
+
 }  // namespace
 
 // Observer for both keyboard show and hide animations. It should be owned by
@@ -178,7 +219,9 @@ class CallbackAnimationObserver : public ui::ImplicitAnimationObserver {
 };
 
 KeyboardController::KeyboardController()
-    : ime_observer_(this),
+    : input_method_keyboard_controller_(
+          std::make_unique<InputMethodKeyboardController>(this)),
+      ime_observer_(this),
       weak_factory_report_lingering_state_(this),
       weak_factory_will_hide_(this) {
   DCHECK_EQ(g_keyboard_controller, nullptr);
@@ -232,6 +275,10 @@ void KeyboardController::DisableKeyboard() {
 
   if (parent_container_)
     DeactivateKeyboard();
+
+  aura::Window* keyboard_window = GetKeyboardWindow();
+  if (keyboard_window)
+    keyboard_window->RemoveObserver(this);
 
   // Return to the INITIAL state to ensure that transitions entering a state
   // is equal to transitions leaving the state.
@@ -303,11 +350,6 @@ void KeyboardController::NotifyKeyboardBoundsChanging(
     notification_manager_.SendNotifications(
         container_behavior_->OccludedBoundsAffectWorkspaceLayout(), new_bounds,
         occluded_bounds_in_screen, observer_list_);
-
-    if (IsKeyboardOverscrollEnabled())
-      ui_->InitInsets(occluded_bounds_in_screen);
-    else
-      ui_->ResetInsets();
   } else {
     visual_bounds_in_screen_ = gfx::Rect();
   }
@@ -444,7 +486,7 @@ bool KeyboardController::IsKeyboardEnableRequested() const {
 }
 
 bool KeyboardController::IsKeyboardOverscrollEnabled() const {
-  if (!keyboard::IsKeyboardEnabled())
+  if (!IsKeyboardEnableRequested())
     return false;
 
   // Users of the sticky accessibility on-screen keyboard are likely to be using
@@ -577,10 +619,6 @@ void KeyboardController::HideKeyboardImplicitlyBySystem() {
       base::TimeDelta::FromMilliseconds(kHideKeyboardDelayMs));
 }
 
-void KeyboardController::DismissVirtualKeyboard() {
-  HideKeyboardByUser();
-}
-
 // private
 void KeyboardController::HideAnimationFinished() {
   if (state_ == KeyboardControllerState::HIDDEN) {
@@ -636,12 +674,14 @@ void KeyboardController::SetContainerBehaviorInternal(
 }
 
 void KeyboardController::ShowKeyboard(bool lock) {
+  DVLOG(1) << "ShowKeyboard";
   set_keyboard_locked(lock);
   ShowKeyboardInternal(display::Display());
 }
 
 void KeyboardController::ShowKeyboardInDisplay(
     const display::Display& display) {
+  DVLOG(1) << "ShowKeyboardInDisplay: " << display.id();
   set_keyboard_locked(true);
   ShowKeyboardInternal(display);
 }
@@ -773,8 +813,9 @@ void KeyboardController::ShowKeyboardIfWithinTransientBlurThreshold() {
 }
 
 void KeyboardController::OnShowVirtualKeyboardIfEnabled() {
+  DVLOG(1) << "OnShowVirtualKeyboardIfEnabled: " << IsKeyboardEnableRequested();
   // Calling |ShowKeyboardInternal| may move the keyboard to another display.
-  if (keyboard::IsKeyboardEnabled() && !keyboard_locked_)
+  if (IsKeyboardEnableRequested() && !keyboard_locked_)
     ShowKeyboardInternal(display::Display());
 }
 
@@ -789,6 +830,7 @@ void KeyboardController::PopulateKeyboardContent(
     bool show_keyboard) {
   DCHECK(show_keyboard || state_ == KeyboardControllerState::INITIAL);
 
+  DVLOG(1) << "PopulateKeyboardContent: " << StateToStr(state_);
   TRACE_EVENT0("vk", "PopulateKeyboardContent");
 
   if (parent_container_->children().empty()) {
@@ -797,6 +839,7 @@ void KeyboardController::PopulateKeyboardContent(
     // |this| and the callback does not outlive |ui_|.
     // TODO(https://crbug.com/845780): Use a weak ptr here in case this
     // assumption changes.
+    DVLOG(1) << "LoadKeyboardWindow";
     aura::Window* keyboard_window = ui_->LoadKeyboardWindow(
         base::BindOnce(&KeyboardController::NotifyKeyboardWindowLoaded,
                        base::Unretained(this)));
@@ -1041,26 +1084,6 @@ void KeyboardController::SetDraggableArea(const gfx::Rect& rect) {
   container_behavior_->SetDraggableArea(rect);
 }
 
-// InputMethodKeyboardController overrides:
-
-bool KeyboardController::DisplayVirtualKeyboard() {
-  // Calling |ShowKeyboardInternal| may move the keyboard to another display.
-  if (keyboard::IsKeyboardEnabled() && !keyboard_locked_) {
-    ShowKeyboardInternal(display::Display());
-    return true;
-  }
-  return false;
-}
-void KeyboardController::AddObserver(
-    ui::InputMethodKeyboardControllerObserver* observer) {
-  // TODO: Implement me
-}
-
-void KeyboardController::RemoveObserver(
-    ui::InputMethodKeyboardControllerObserver* observer) {
-  // TODO: Implement me
-}
-
 bool KeyboardController::IsKeyboardVisible() {
   if (state_ == KeyboardControllerState::SHOWN) {
     DCHECK(IsEnabled());
@@ -1088,8 +1111,10 @@ void KeyboardController::UpdateInputMethodObserver() {
   ime_observer_.RemoveAll();
   ime_observer_.Add(ime);
 
-  // TODO(https://crbug.com/845780): Investigate whether this does anything.
-  OnTextInputStateChanged(ime->GetTextInputClient());
+  // Note: We used to call OnTextInputStateChanged(ime->GetTextInputClient())
+  // here, but that can trigger HideKeyboardImplicitlyBySystem() from a call to
+  // ShowKeyboard() when using mojo APIs in Chrome (SingleProcessMash) if
+  // ime->GetTextInputClient() isn't focused.
 }
 
 void KeyboardController::EnsureCaretInWorkArea(

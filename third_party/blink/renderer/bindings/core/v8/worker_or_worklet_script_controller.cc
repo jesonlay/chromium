@@ -258,8 +258,8 @@ ScriptValue WorkerOrWorkletScriptController::EvaluateInternal(
   DCHECK(IsContextInitialized());
 
   TRACE_EVENT1("devtools.timeline", "EvaluateScript", "data",
-               InspectorEvaluateScriptEvent::Data(nullptr, source_code.Url(),
-                                                  source_code.StartPosition()));
+               inspector_evaluate_script_event::Data(
+                   nullptr, source_code.Url(), source_code.StartPosition()));
 
   ScriptState::Scope scope(script_state_);
 
@@ -332,7 +332,7 @@ bool WorkerOrWorkletScriptController::Evaluate(
         return false;
       }
       if (sanitize_script_errors == SanitizeScriptErrors::kSanitize) {
-        *error_event = ErrorEvent::CreateSanitizedError(world_.get());
+        *error_event = ErrorEvent::CreateSanitizedError(script_state_);
       } else {
         *error_event =
             ErrorEvent::Create(state.error_message, state.location_->Clone(),
@@ -379,11 +379,10 @@ void WorkerOrWorkletScriptController::DisableEval(const String& error_message) {
 void WorkerOrWorkletScriptController::RethrowExceptionFromImportedScript(
     ErrorEvent* error_event,
     ExceptionState& exception_state) {
-  const String& error_message = error_event->message();
   if (execution_state_)
     execution_state_->error_event_from_imported_script_ = error_event;
   exception_state.RethrowV8Exception(
-      V8ThrowException::CreateError(isolate_, error_message));
+      error_event->error(script_state_).V8ValueFor(script_state_));
 }
 
 void WorkerOrWorkletScriptController::Trace(blink::Visitor* visitor) {

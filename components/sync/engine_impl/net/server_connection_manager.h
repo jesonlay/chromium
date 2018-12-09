@@ -55,7 +55,7 @@ struct HttpResponse {
   };
 
   // The HTTP Status code.
-  int64_t response_code;
+  int http_status_code;
 
   // The value of the Content-length header.
   int64_t content_length;

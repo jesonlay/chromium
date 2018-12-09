@@ -7,12 +7,9 @@
 #include <memory>
 
 #include "base/memory/ptr_util.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_task_environment.h"
-#include "chromeos/chromeos_features.h"
 #include "chromeos/components/tether/disconnect_tethering_operation.h"
 #include "chromeos/components/tether/disconnect_tethering_request_sender.h"
-#include "chromeos/components/tether/fake_ble_connection_manager.h"
 #include "chromeos/components/tether/fake_tether_host_fetcher.h"
 #include "chromeos/services/device_sync/public/cpp/fake_device_sync_client.h"
 #include "chromeos/services/secure_channel/public/cpp/client/fake_secure_channel_client.h"
@@ -31,12 +28,10 @@ class FakeDisconnectTetheringOperation : public DisconnectTetheringOperation {
   FakeDisconnectTetheringOperation(
       cryptauth::RemoteDeviceRef device_to_connect,
       device_sync::DeviceSyncClient* device_sync_client,
-      secure_channel::SecureChannelClient* secure_channel_client,
-      BleConnectionManager* connection_manager)
+      secure_channel::SecureChannelClient* secure_channel_client)
       : DisconnectTetheringOperation(device_to_connect,
                                      device_sync_client,
-                                     secure_channel_client,
-                                     connection_manager) {}
+                                     secure_channel_client) {}
 
   ~FakeDisconnectTetheringOperation() override = default;
 
@@ -65,12 +60,10 @@ class FakeDisconnectTetheringOperationFactory
   std::unique_ptr<DisconnectTetheringOperation> BuildInstance(
       cryptauth::RemoteDeviceRef device_to_connect,
       device_sync::DeviceSyncClient* device_sync_client,
-      secure_channel::SecureChannelClient* secure_channel_client,
-      BleConnectionManager* connection_manager) override {
+      secure_channel::SecureChannelClient* secure_channel_client) override {
     FakeDisconnectTetheringOperation* operation =
         new FakeDisconnectTetheringOperation(
-            device_to_connect, device_sync_client, secure_channel_client,
-            connection_manager);
+            device_to_connect, device_sync_client, secure_channel_client);
     created_operations_.push_back(operation);
     return base::WrapUnique(operation);
   }
@@ -108,13 +101,10 @@ class DisconnectTetheringRequestSenderTest : public testing::Test {
   ~DisconnectTetheringRequestSenderTest() override = default;
 
   void SetUp() override {
-    scoped_feature_list_.InitAndDisableFeature(features::kMultiDeviceApi);
-
     fake_device_sync_client_ =
         std::make_unique<device_sync::FakeDeviceSyncClient>();
     fake_secure_channel_client_ =
         std::make_unique<secure_channel::FakeSecureChannelClient>();
-    fake_ble_connection_manager_ = std::make_unique<FakeBleConnectionManager>();
     fake_tether_host_fetcher_ =
         std::make_unique<FakeTetherHostFetcher>(test_devices_);
 
@@ -126,7 +116,6 @@ class DisconnectTetheringRequestSenderTest : public testing::Test {
     disconnect_tethering_request_sender_ =
         DisconnectTetheringRequestSenderImpl::Factory::NewInstance(
             fake_device_sync_client_.get(), fake_secure_channel_client_.get(),
-            fake_ble_connection_manager_.get(),
             fake_tether_host_fetcher_.get());
 
     fake_disconnect_tethering_request_sender_observer_ =
@@ -194,12 +183,10 @@ class DisconnectTetheringRequestSenderTest : public testing::Test {
   }
 
   const cryptauth::RemoteDeviceRefList test_devices_;
-  base::test::ScopedFeatureList scoped_feature_list_;
 
   std::unique_ptr<device_sync::FakeDeviceSyncClient> fake_device_sync_client_;
   std::unique_ptr<secure_channel::SecureChannelClient>
       fake_secure_channel_client_;
-  std::unique_ptr<FakeBleConnectionManager> fake_ble_connection_manager_;
   std::unique_ptr<FakeTetherHostFetcher> fake_tether_host_fetcher_;
 
   std::unique_ptr<FakeDisconnectTetheringOperationFactory>

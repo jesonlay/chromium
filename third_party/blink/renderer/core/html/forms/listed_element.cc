@@ -26,6 +26,7 @@
 
 #include "third_party/blink/renderer/core/dom/id_target_observer.h"
 #include "third_party/blink/renderer/core/dom/node_traversal.h"
+#include "third_party/blink/renderer/core/html/custom/element_internals.h"
 #include "third_party/blink/renderer/core/html/forms/html_form_control_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_form_element.h"
 #include "third_party/blink/renderer/core/html/forms/validity_state.h"
@@ -40,12 +41,13 @@ class FormAttributeTargetObserver : public IdTargetObserver {
  public:
   static FormAttributeTargetObserver* Create(const AtomicString& id,
                                              ListedElement*);
+
+  FormAttributeTargetObserver(const AtomicString& id, ListedElement*);
+
   void Trace(blink::Visitor*) override;
   void IdTargetChanged() override;
 
  private:
-  FormAttributeTargetObserver(const AtomicString& id, ListedElement*);
-
   Member<ListedElement> element_;
 };
 
@@ -280,9 +282,15 @@ bool ListedElement::IsFormControlElementWithState() const {
   return false;
 }
 
+bool ListedElement::IsElementInternals() const {
+  return false;
+}
+
 const HTMLElement& ToHTMLElement(const ListedElement& listed_element) {
   if (listed_element.IsFormControlElement())
     return ToHTMLFormControlElement(listed_element);
+  if (listed_element.IsElementInternals())
+    return To<ElementInternals>(listed_element).Target();
   return ToHTMLObjectElementFromListedElement(listed_element);
 }
 
@@ -304,7 +312,7 @@ HTMLElement& ToHTMLElement(ListedElement& listed_element) {
 FormAttributeTargetObserver* FormAttributeTargetObserver::Create(
     const AtomicString& id,
     ListedElement* element) {
-  return new FormAttributeTargetObserver(id, element);
+  return MakeGarbageCollected<FormAttributeTargetObserver>(id, element);
 }
 
 FormAttributeTargetObserver::FormAttributeTargetObserver(const AtomicString& id,

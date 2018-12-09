@@ -13,10 +13,8 @@ import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_V
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.PointF;
-import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.LargeTest;
 
-import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -35,7 +33,6 @@ import org.chromium.chrome.browser.vr.util.VrBrowserTransitionUtils;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.RenderTestRule;
 import org.chromium.content_public.browser.test.util.JavaScriptUtils;
-import org.chromium.net.test.EmbeddedTestServer;
 
 import java.io.File;
 import java.io.IOException;
@@ -71,7 +68,6 @@ public class VrBrowserDialogTest {
             new RenderTestRule("components/test/data/permission_dialogs/render_tests");
 
     private VrBrowserTestFramework mVrBrowserTestFramework;
-    private EmbeddedTestServer mServer;
 
     @Before
     public void setUp() throws Exception {
@@ -81,13 +77,7 @@ public class VrBrowserDialogTest {
         if (!sBaseDirectory.exists() && !sBaseDirectory.isDirectory()) {
             Assert.assertTrue("Failed to make image capture directory", sBaseDirectory.mkdirs());
         }
-    }
-
-    @After
-    public void tearDown() throws Exception {
-        if (mServer != null) {
-            mServer.stopAndDestroyServer();
-        }
+        mVrTestRule.getEmbeddedTestServerRule().setServerPort(SERVER_PORT);
     }
 
     private void captureScreen(String filenameBase) throws InterruptedException {
@@ -111,27 +101,28 @@ public class VrBrowserDialogTest {
         mRenderTestRule.compareForResult(bitmap, id);
     }
 
-    private void navigateAndDisplayPermissionPrompt(String page, String promptCommand)
+    private void navigateAndDisplayPermissionPrompt(String page, final String promptCommand)
             throws InterruptedException, TimeoutException {
         // Trying to grant permissions on file:// URLs ends up hitting DCHECKS, so load from a local
         // server instead.
-        if (mServer == null) {
-            mServer = EmbeddedTestServer.createAndStartServerWithPort(
-                    InstrumentationRegistry.getContext(), SERVER_PORT);
-        }
         mVrBrowserTestFramework.loadUrlAndAwaitInitialization(
-                mServer.getURL(VrBrowserTestFramework.getEmbeddedServerPathForHtmlTestFile(page)),
+                mVrTestRule.getTestServer().getURL(
+                        VrBrowserTestFramework.getEmbeddedServerPathForHtmlTestFile(page)),
                 PAGE_LOAD_TIMEOUT_S);
 
         // Display the given permission prompt.
         VrBrowserTransitionUtils.forceEnterVrBrowserOrFail(POLL_TIMEOUT_LONG_MS);
         NativeUiUtils.enableMockedInput();
-        mVrBrowserTestFramework.runJavaScriptOrFail(promptCommand, POLL_TIMEOUT_LONG_MS);
-        VrBrowserTransitionUtils.waitForNativeUiPrompt(POLL_TIMEOUT_LONG_MS);
-
-        // There is currently no way to know whether a dialog has been drawn yet,
-        // so sleep long enough for it to show up.
-        Thread.sleep(VR_ENTRY_SLEEP_MS);
+        // Wait for any residual animations from entering VR to finish so that they don't get caught
+        // later.
+        NativeUiUtils.waitForUiQuiescence();
+        NativeUiUtils.performActionAndWaitForUiQuiescence(() -> {
+            NativeUiUtils.performActionAndWaitForVisibilityStatus(
+                    UserFriendlyElementName.BROWSING_DIALOG, true /* visible */, () -> {
+                        mVrBrowserTestFramework.runJavaScriptOrFail(
+                                promptCommand, POLL_TIMEOUT_LONG_MS);
+                    });
+        });
     }
 
     private void navigateAndDisplayJavaScriptDialog(String page, String dialogCommand)
@@ -173,7 +164,7 @@ public class VrBrowserDialogTest {
             throws InterruptedException, TimeoutException, IOException {
         // Display audio permissions prompt.
         navigateAndDisplayPermissionPrompt(
-                "test_navigation_2d_page", "navigator.getUserMedia({audio: true}, ()=>{}, ()=>{})");
+                "blank_2d_page", "navigator.getUserMedia({audio: true}, ()=>{}, ()=>{})");
 
         // Capture image
         String filenameBase = "MicrophonePermissionPrompt_Visible";
@@ -190,6 +181,7 @@ public class VrBrowserDialogTest {
                                 + e.toString());
                     }
                 });
+        NativeUiUtils.waitForUiQuiescence();
         filenameBase = "MicrophonePermissionPrompt_Granted";
         captureScreen(filenameBase);
         compareCapturedImaged(filenameBase, NativeUiUtils.FRAME_BUFFER_SUFFIX_BROWSER_UI,

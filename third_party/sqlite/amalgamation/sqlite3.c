@@ -43143,6 +43143,7 @@ static int winTruncate(sqlite3_file *id, sqlite3_int64 nByte){
   DWORD lastErrno;
 #if SQLITE_MAX_MMAP_SIZE>0
   sqlite3_int64 oldMmapSize;
+  if( pFile->nFetchOut>0 ) return SQLITE_OK;
 #endif
 
   assert( pFile );
@@ -219049,7 +219050,7 @@ SQLITE_API int sqlite3_stmt_init(
 #endif /* !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_STMTVTAB) */
 
 /************** End of stmt.c ************************************************/
-#if __LINE__!=219052
+#if __LINE__!=219053
 #undef SQLITE_SOURCE_ID
 #define SQLITE_SOURCE_ID      "2018-11-05 20:37:38 89e099fbe5e13c33e683bef07361231ca525b88f7907be7092058007b750alt2"
 #endif

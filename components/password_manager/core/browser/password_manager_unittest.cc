@@ -101,6 +101,7 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
   MOCK_CONST_METHOD0(GetMainFrameURL, const GURL&());
   MOCK_METHOD0(GetDriver, PasswordManagerDriver*());
   MOCK_CONST_METHOD0(GetStoreResultFilter, const MockStoreResultFilter*());
+  MOCK_METHOD0(GetMetricsRecorder, PasswordManagerMetricsRecorder*());
 
   // Workaround for std::unique_ptr<> lacking a copy constructor.
   bool PromptUserToSaveOrUpdatePassword(
@@ -202,6 +203,7 @@ class PasswordManagerTest : public testing::Test {
     EXPECT_CALL(*store_, IsAbleToSavePasswords()).WillRepeatedly(Return(true));
 
     ON_CALL(client_, GetMainFrameURL()).WillByDefault(ReturnRef(test_url_));
+    ON_CALL(client_, GetMetricsRecorder()).WillByDefault(Return(nullptr));
   }
 
   void TearDown() override {
@@ -1979,25 +1981,30 @@ TEST_F(PasswordManagerTest,
 }
 
 TEST_F(PasswordManagerTest, UpdateFormManagers) {
-  // Seeing some forms should result in creating PasswordFormManagers and
-  // querying PasswordStore. Calling UpdateFormManagers should result in
-  // querying the store again.
-  EXPECT_CALL(*store_, GetLogins(_, _));
+  for (bool new_parsing_for_saving : {false, true}) {
+    SCOPED_TRACE(testing::Message()
+                 << "new_parsing_for_saving = " << new_parsing_for_saving);
+    base::test::ScopedFeatureList scoped_feature_list;
+    if (new_parsing_for_saving)
+      TurnOnNewParsingForSaving(&scoped_feature_list);
 
-  PasswordForm form;
-  std::vector<PasswordForm> observed;
-  observed.push_back(form);
-  manager()->OnPasswordFormsParsed(&driver_, observed);
-  ASSERT_EQ(1u, manager()->pending_login_managers().size());
-  PasswordFormManager* form_manager =
-      manager()->pending_login_managers().front().get();
+    // Seeing a form should result in creating PasswordFormManager and
+    // NewPasswordFormManager and querying PasswordStore. Calling
+    // UpdateFormManagers should result in querying the store again.
+    EXPECT_CALL(*store_, GetLogins(_, _))
+        .WillRepeatedly(WithArg<1>(InvokeEmptyConsumerWithForms()));
 
-  // The first GetLogins should have fired, but to unblock the second, we need
-  // to first send a response from the store (to be ignored).
-  static_cast<FormFetcherImpl*>(form_manager->GetFormFetcher())
-      ->OnGetPasswordStoreResults(std::vector<std::unique_ptr<PasswordForm>>());
-  EXPECT_CALL(*store_, GetLogins(_, _));
-  manager()->UpdateFormManagers();
+    manager()->OnPasswordFormsParsed(&driver_, {PasswordForm()});
+
+    // When new parsing is on, both PasswordFormManager and
+    // NewPasswordFormManager query the password store.
+    size_t expected_calls_to_store = new_parsing_for_saving ? 2 : 1;
+
+    EXPECT_CALL(*store_, GetLogins(_, _)).Times(expected_calls_to_store);
+    manager()->UpdateFormManagers();
+
+    testing::Mock::VerifyAndClearExpectations(&store_);
+  }
 }
 
 TEST_F(PasswordManagerTest, DropFormManagers) {
@@ -2929,6 +2936,79 @@ TEST_F(PasswordManagerTest, AutofillPredictionBeforeFormParsed) {
 
   manager()->OnPasswordFormsParsed(&driver_, {form});
   task_runner_->FastForwardUntilNoTasksRemain();
+}
+
+// Checks the following scenario:
+// 1. The user is typing in a password form.
+// 2. Navigation happens.
+// 3. The password disappeared after navigation.
+// 4. A save prompt is shown.
+TEST_F(PasswordManagerTest, SavingAfterUserTypingAndNavigation) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  TurnOnNewParsingForSaving(&scoped_feature_list);
+  EXPECT_CALL(client_, IsSavingAndFillingEnabledForCurrentPage())
+      .WillRepeatedly(Return(true));
+
+  PasswordForm form(MakeSimpleForm());
+  EXPECT_CALL(*store_, GetLogins(_, _))
+      .WillRepeatedly(WithArg<1>(InvokeEmptyConsumerWithForms()));
+  manager()->OnPasswordFormsParsed(&driver_, {form});
+
+  // The user is typing as a result the saving manual fallback is shown.
+  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
+  EXPECT_CALL(client_, ShowManualFallbackForSavingPtr(_, false, false))
+      .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
+  manager()->ShowManualFallbackForSaving(&driver_, form);
+  ASSERT_TRUE(form_manager_to_save);
+  EXPECT_THAT(form_manager_to_save->GetPendingCredentials(), FormMatches(form));
+
+  // Check that a save prompt is shown when there is no password form after
+  // the navigation (which suggests that the submission was successful).
+  EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_))
+      .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
+
+  manager()->DidNavigateMainFrame();
+  manager()->OnPasswordFormsRendered(&driver_, {}, true);
+
+  EXPECT_THAT(form_manager_to_save->GetPendingCredentials(), FormMatches(form));
+}
+
+// Check that when a form is submitted and a NewPasswordFormManager not present,
+// this ends up reported.
+TEST_F(PasswordManagerTest, ReportMissingFormManager_New) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  TurnOnNewParsingForSaving(&scoped_feature_list);
+
+  EXPECT_CALL(client_, IsSavingAndFillingEnabledForCurrentPage())
+      .WillRepeatedly(Return(true));
+  manager()->OnPasswordFormsParsed(&driver_, {});
+  manager()->OnPasswordFormsRendered(&driver_, {}, true);
+
+  base::HistogramTester histogram_tester;
+  ukm::TestAutoSetUkmRecorder test_ukm_recorder;
+  auto metrics_recorder = std::make_unique<PasswordManagerMetricsRecorder>(
+      1234, GURL("http://example.com"));
+  EXPECT_CALL(client_, GetMetricsRecorder())
+      .WillRepeatedly(Return(metrics_recorder.get()));
+
+  PasswordForm unobserved_form = MakeSimpleForm();
+  manager()->OnPasswordFormSubmitted(nullptr, unobserved_form);
+
+  // 2 samples instead of just 1, because one is also reported from the missing
+  // (old) PasswordFormManager.
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.ProvisionalSaveFailure",
+      PasswordManagerMetricsRecorder::NO_MATCHING_FORM, 2);
+  // Flush the UKM reports.
+  metrics_recorder.reset();
+  std::vector<const ukm::mojom::UkmEntry*> ukm_entries =
+      test_ukm_recorder.GetEntriesByName(
+          ukm::builders::PageWithPassword::kEntryName);
+  ASSERT_EQ(1u, ukm_entries.size());
+  test_ukm_recorder.ExpectEntryMetric(
+      ukm_entries[0],
+      ukm::builders::PageWithPassword::kProvisionalSaveFailureName,
+      static_cast<int64_t>(PasswordManagerMetricsRecorder::NO_MATCHING_FORM));
 }
 
 }  // namespace password_manager

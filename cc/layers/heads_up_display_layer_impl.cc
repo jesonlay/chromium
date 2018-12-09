@@ -244,7 +244,7 @@ void HeadsUpDisplayLayerImpl::UpdateHudTexture(
   if (raster_context_provider) {
     lock.emplace(raster_context_provider);
     use_oopr = raster_context_provider->GetGpuFeatureInfo()
-                   .status_values[gpu::GPU_FEATURE_TYPE_GPU_RASTERIZATION] ==
+                   .status_values[gpu::GPU_FEATURE_TYPE_OOP_RASTERIZATION] ==
                gpu::kGpuFeatureStatusEnabled;
     if (!use_oopr) {
       raster_context_provider = nullptr;
@@ -691,14 +691,12 @@ SkRect HeadsUpDisplayLayerImpl::DrawFPSDisplay(
   SkRect text_bounds =
       SkRect::MakeXYWH(left + kPadding, title_bounds.bottom() + 2 * kPadding,
                        kGraphWidth + kHistogramWidth + kGap + 2, kFontHeight);
-  SkRect graph_bounds = SkRect::MakeXYWH(left + kPadding,
-                                         text_bounds.bottom() + 2 * kPadding,
-                                         kGraphWidth,
-                                         kGraphHeight);
-  SkRect histogram_bounds = SkRect::MakeXYWH(graph_bounds.right() + kGap,
-                                             graph_bounds.top(),
-                                             kHistogramWidth,
-                                             kGraphHeight);
+  SkRect graph_bounds =
+      SkRect::MakeXYWH(left + kPadding, text_bounds.bottom() + 2 * kPadding,
+                       kGraphWidth, kGraphHeight);
+  SkRect histogram_bounds =
+      SkRect::MakeXYWH(graph_bounds.right() + kGap, graph_bounds.top(),
+                       kHistogramWidth, kGraphHeight);
 
   const std::string title("Frame Rate");
   const std::string value_text =
@@ -724,7 +722,7 @@ SkRect HeadsUpDisplayLayerImpl::DrawFPSDisplay(
   SkPath path;
 
   const int kHistogramSize = 20;
-  double histogram[kHistogramSize] = { 1.0 };
+  double histogram[kHistogramSize] = {1.0};
   double max_bucket_value = 1.0;
 
   for (FrameRateCounter::RingBufferType::Iterator it = --fps_counter->end(); it;

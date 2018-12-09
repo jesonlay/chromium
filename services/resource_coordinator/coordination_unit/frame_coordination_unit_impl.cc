@@ -34,7 +34,8 @@ FrameCoordinationUnitImpl::~FrameCoordinationUnitImpl() {
 void FrameCoordinationUnitImpl::SetProcess(const CoordinationUnitID& cu_id) {
   ProcessCoordinationUnitImpl* process_cu =
       ProcessCoordinationUnitImpl::GetCoordinationUnitByID(graph_, cu_id);
-  DCHECK(process_cu);
+  if (!process_cu)
+    return;
   DCHECK(!process_coordination_unit_);
   process_coordination_unit_ = process_cu;
   process_cu->AddFrame(this);

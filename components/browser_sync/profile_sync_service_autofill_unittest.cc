@@ -355,8 +355,13 @@ class ProfileSyncServiceAutofillTest
   void OnDataTypeConfigureComplete(
       const std::vector<syncer::DataTypeConfigurationStats>&
           configuration_stats) override {
-    ASSERT_EQ(1u, configuration_stats.size());
-    association_stats_ = configuration_stats[0].association_stats;
+    for (const syncer::DataTypeConfigurationStats& stat : configuration_stats) {
+      if (stat.model_type == syncer::AUTOFILL_PROFILE) {
+        association_stats_ = stat.association_stats;
+        return;
+      }
+    }
+    ASSERT_TRUE(false) << "Autofill profile type did not get configured!";
   }
 
  protected:
@@ -434,7 +439,7 @@ class ProfileSyncServiceAutofillTest
     CreateSyncService(std::move(sync_client_owned_), std::move(callback));
 
     EXPECT_CALL(*profile_sync_service_bundle()->component_factory(),
-                CreateCommonDataTypeControllers(_, _))
+                CreateCommonDataTypeControllers(_))
         .WillOnce(testing::InvokeWithoutArgs([=]() {
           syncer::DataTypeController::TypeVector controllers;
           controllers.push_back(

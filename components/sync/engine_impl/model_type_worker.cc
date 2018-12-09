@@ -229,7 +229,7 @@ SyncerError ModelTypeWorker::ProcessGetUpdatesResponse(
       ContainsDuplicate(std::move(client_tag_hashes)));
 
   debug_info_emitter_->EmitUpdateCountersUpdate();
-  return SYNCER_OK;
+  return SyncerError(SyncerError::SYNCER_OK);
 }
 
 // static
@@ -394,11 +394,12 @@ void ModelTypeWorker::EncryptionAcceptedMaybeApplyUpdates() {
 void ModelTypeWorker::ApplyPendingUpdates() {
   if (BlockForEncryption())
     return;
+
+  DCHECK(entries_pending_decryption_.empty());
+
   DVLOG(1) << ModelTypeToString(type_) << ": "
            << base::StringPrintf("Delivering %" PRIuS " applicable updates.",
                                  pending_updates_.size());
-
-  DCHECK(entries_pending_decryption_.empty());
 
   const bool contains_duplicate_server_ids =
       ContainsDuplicateServerID(pending_updates_);
@@ -539,6 +540,9 @@ bool ModelTypeWorker::CanCommitItems() const {
 }
 
 bool ModelTypeWorker::BlockForEncryption() const {
+  if (!entries_pending_decryption_.empty())
+    return true;
+
   // Should be using encryption, but we do not have the keys.
   return cryptographer_ && !cryptographer_->is_ready();
 }
@@ -572,9 +576,16 @@ void ModelTypeWorker::DecryptStoredEntities() {
       specifics = data->specifics;
     } else {
       DCHECK(data->specifics.has_encrypted());
-      if (!cryptographer_->CanDecrypt(data->specifics.encrypted()) ||
-          !DecryptSpecifics(*cryptographer_, data->specifics, &specifics)) {
+      if (!cryptographer_->CanDecrypt(data->specifics.encrypted())) {
         ++it;
+        continue;
+      }
+
+      if (!DecryptSpecifics(*cryptographer_, data->specifics, &specifics)) {
+        // Decryption error should be permanent (e.g. corrupt data), since
+        // CanDecrypt() above claims decryption keys are up-to-date. Let's
+        // ignore this update to avoid blocking other updates.
+        it = entries_pending_decryption_.erase(it);
         continue;
       }
     }

@@ -874,6 +874,32 @@
             ]
         }
     ],
+    "AutofillSmallFormUploads": [
+        {
+            "platforms": [
+                "android",
+                "chromeos",
+                "ios",
+                "linux",
+                "mac",
+                "windows"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "disable_features": [
+                        "AutofillEnforceMinRequiredFieldsForUpload"
+                    ]
+                },
+                {
+                    "name": "Control",
+                    "enable_features": [
+                        "AutofillEnforceMinRequiredFieldsForUpload"
+                    ]
+                }
+            ]
+        }
+    ],
     "AutofillUpstreamDisallowEloAndJcb": [
         {
             "platforms": [
@@ -1100,25 +1126,6 @@
                     },
                     "enable_features": [
                         "BlobDataPipeTuning"
-                    ]
-                }
-            ]
-        }
-    ],
-    "BlockTabUnders": [
-        {
-            "platforms": [
-                "android",
-                "chromeos",
-                "linux",
-                "mac",
-                "windows"
-            ],
-            "experiments": [
-                {
-                    "name": "Enabled",
-                    "enable_features": [
-                        "BlockTabUnders"
                     ]
                 }
             ]
@@ -2159,24 +2166,6 @@
             ]
         }
     ],
-    "GuestViewCrossProcessFrames": [
-        {
-            "platforms": [
-                "chromeos",
-                "linux",
-                "mac",
-                "windows"
-            ],
-            "experiments": [
-                {
-                    "name": "Enabled",
-                    "enable_features": [
-                        "GuestViewCrossProcessFrames"
-                    ]
-                }
-            ]
-        }
-    ],
     "HTMLParsingYieldTime": [
         {
             "platforms": [
@@ -2518,21 +2507,6 @@
                 },
                 {
                     "name": "Disabled"
-                }
-            ]
-        }
-    ],
-    "JavaScriptTabModalDialogs": [
-        {
-            "platforms": [
-                "android"
-            ],
-            "experiments": [
-                {
-                    "name": "Enabled",
-                    "enable_features": [
-                        "TabModalJsDialog"
-                    ]
                 }
             ]
         }
@@ -4343,6 +4317,24 @@
             ]
         }
     ],
+    "ScheduledScriptStreaming": [
+        {
+            "platforms": [
+                "android",
+                "chromeos",
+                "linux",
+                "windows"
+            ],
+            "experiments": [
+                {
+                    "name": "ScheduledScriptStreaming",
+                    "enable_features": [
+                        "ScheduledScriptStreaming"
+                    ]
+                }
+            ]
+        }
+    ],
     "SearchEnginePromo": [
         {
             "platforms": [
@@ -4665,26 +4657,6 @@
                     "enable_features": [
                         "SyncUSSAutofillWalletData"
                     ]
-                }
-            ]
-        }
-    ],
-    "TLS13Variant": [
-        {
-            "platforms": [
-                "android",
-                "chromeos",
-                "ios",
-                "linux",
-                "mac",
-                "windows"
-            ],
-            "experiments": [
-                {
-                    "name": "FinalV7",
-                    "params": {
-                        "variant": "final"
-                    }
                 }
             ]
         }
@@ -5696,26 +5668,6 @@
                     "name": "Shipped",
                     "enable_features": [
                         "WebSocketHandshakeReuseConnection"
-                    ]
-                }
-            ]
-        }
-    ],
-    "WheelScrollLatchingAndAsyncWheelEvents": [
-        {
-            "platforms": [
-                "android",
-                "chromeos",
-                "linux",
-                "mac",
-                "windows"
-            ],
-            "experiments": [
-                {
-                    "name": "Enabled",
-                    "enable_features": [
-                        "AsyncWheelEvents",
-                        "TouchpadAndWheelScrollLatching"
                     ]
                 }
             ]

@@ -22,6 +22,18 @@ class DetailsProto;
 // Controller to control autofill assistant UI.
 class UiController {
  public:
+  // A choice, for Choose().
+  struct Choice {
+    // Localized string to display.
+    std::string name;
+
+    // If true, highlight this choice in the UI.
+    bool highlight = false;
+
+    // Opaque data to send back to the callback. Not necessarily a UTF8 string.
+    std::string server_payload;
+  };
+
   virtual ~UiController() = default;
 
   // Set assistant UI delegate called by assistant UI controller.
@@ -29,6 +41,10 @@ class UiController {
 
   // Show status message on the bottom bar.
   virtual void ShowStatusMessage(const std::string& message) = 0;
+
+  // Returns the current status message. The purpose of this call is to allow
+  // restoring a previous status message.
+  virtual std::string GetStatusMessage() = 0;
 
   // Show the overlay.
   virtual void ShowOverlay() = 0;
@@ -46,11 +62,21 @@ class UiController {
   // Warning: this indirectly deletes the caller.
   virtual void ShutdownGracefully() = 0;
 
-  // Shuts down Autofill Assistant and closes CCT.
-  virtual void CloseCustomTab() = 0;
+  // Shuts down Autofill Assistant and closes Chrome.
+  virtual void Close() = 0;
 
   // Update the list of scripts in the UI.
   virtual void UpdateScripts(const std::vector<ScriptHandle>& scripts) = 0;
+
+  // Show UI to ask user to make a choice. Sends the server_payload of the
+  // choice to the callback.
+  virtual void Choose(
+      const std::vector<Choice>& choices,
+      base::OnceCallback<void(const std::string&)> callback) = 0;
+
+  // Cancels a choose action in progress. Calls the registered callback, if any,
+  // with the given server_payload.
+  virtual void ForceChoose(const std::string& server_payload) = 0;
 
   // Show UI to ask user to choose an address in personal data manager. GUID of
   // the chosen address will be returned through callback, otherwise empty

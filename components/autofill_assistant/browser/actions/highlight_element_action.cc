@@ -23,8 +23,8 @@ void HighlightElementAction::InternalProcessAction(
     ActionDelegate* delegate,
     ProcessActionCallback callback) {
   DCHECK_GT(proto_.highlight_element().element().selectors_size(), 0);
-  delegate->WaitForElement(
-      ExtractVector(proto_.highlight_element().element().selectors()),
+  delegate->ShortWaitForElementExist(
+      ExtractSelector(proto_.highlight_element().element()),
       base::BindOnce(&HighlightElementAction::OnWaitForElement,
                      weak_ptr_factory_.GetWeakPtr(), base::Unretained(delegate),
                      std::move(callback)));
@@ -40,7 +40,7 @@ void HighlightElementAction::OnWaitForElement(ActionDelegate* delegate,
   }
 
   delegate->HighlightElement(
-      ExtractVector(proto_.highlight_element().element().selectors()),
+      ExtractSelector(proto_.highlight_element().element()),
       base::BindOnce(&HighlightElementAction::OnHighlightElement,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }

@@ -13,8 +13,6 @@
 #include "base/test/bind_test_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/test/integration/quiesce_status_change_checker.h"
 #include "chrome/browser/sync/test/integration/single_client_status_change_checker.h"
@@ -23,13 +21,9 @@
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/browser/ui/webui/signin/login_ui_test_utils.h"
-#include "chrome/browser/unified_consent/unified_consent_service_factory.h"
 #include "chrome/common/channel_info.h"
-#include "components/signin/core/browser/signin_manager.h"
 #include "components/sync/driver/about_sync_util.h"
 #include "components/sync/engine/sync_string_conversions.h"
-#include "components/unified_consent/feature.h"
-#include "components/unified_consent/unified_consent_service.h"
 #include "services/identity/public/cpp/identity_manager.h"
 #include "services/identity/public/cpp/identity_test_utils.h"
 
@@ -140,8 +134,6 @@ bool ProfileSyncServiceHarness::SignInPrimaryAccount() {
     case SigninType::FAKE_SIGNIN: {
       identity::IdentityManager* identity_manager =
           IdentityManagerFactory::GetForProfile(profile_);
-      ProfileOAuth2TokenService* token_service =
-          ProfileOAuth2TokenServiceFactory::GetForProfile(profile_);
 
       // Verify HasPrimaryAccount() separately because
       // MakePrimaryAccountAvailable() below DCHECK fails if there is already
@@ -154,13 +146,11 @@ bool ProfileSyncServiceHarness::SignInPrimaryAccount() {
         // always hand out the same access token string, any new access token
         // acquired later would also be considered invalid.
         if (!identity_manager->HasPrimaryAccountWithRefreshToken()) {
-          identity::SetRefreshTokenForPrimaryAccount(token_service,
-                                                     identity_manager);
+          identity::SetRefreshTokenForPrimaryAccount(identity_manager);
         }
       } else {
         // Authenticate sync client using GAIA credentials.
         identity::MakePrimaryAccountAvailable(
-            SigninManagerFactory::GetForProfile(profile_), token_service,
             identity_manager, username_);
       }
       return true;
@@ -175,7 +165,6 @@ bool ProfileSyncServiceHarness::SignInPrimaryAccount() {
 void ProfileSyncServiceHarness::SignOutPrimaryAccount() {
   DCHECK(!username_.empty());
   identity::ClearPrimaryAccount(
-      SigninManagerFactory::GetForProfile(profile_),
       IdentityManagerFactory::GetForProfile(profile_),
       identity::ClearPrimaryAccountPolicy::REMOVE_ALL_ACCOUNTS);
 }
@@ -272,19 +261,8 @@ bool ProfileSyncServiceHarness::SetupSyncImpl(
   // Choose the datatypes to be synced. If all datatypes are to be synced,
   // set sync_everything to true; otherwise, set it to false.
   bool sync_everything = (synced_datatypes == syncer::UserSelectableTypes());
-  if (unified_consent::IsUnifiedConsentFeatureEnabled()) {
-    // When unified consent given is set to |true|, the unified consent service
-    // enables syncing all datatypes.
-    UnifiedConsentServiceFactory::GetForProfile(profile_)
-        ->SetUnifiedConsentGiven(sync_everything);
-    if (!sync_everything) {
-      service()->GetUserSettings()->SetChosenDataTypes(sync_everything,
-                                                       synced_datatypes);
-    }
-  } else {
-    service()->GetUserSettings()->SetChosenDataTypes(sync_everything,
-                                                     synced_datatypes);
-  }
+  service()->GetUserSettings()->SetChosenDataTypes(sync_everything,
+                                                   synced_datatypes);
 
   if (encryption_passphrase.has_value()) {
     service()->GetUserSettings()->SetEncryptionPassphrase(
@@ -533,12 +511,6 @@ bool ProfileSyncServiceHarness::DisableSyncForDatatype(
     return true;
   }
 
-  // Disable unified consent first as otherwise disabling sync is not possible.
-  if (unified_consent::IsUnifiedConsentFeatureEnabled()) {
-    UnifiedConsentServiceFactory::GetForProfile(profile_)
-        ->SetUnifiedConsentGiven(false);
-  }
-
   synced_datatypes.RetainAll(syncer::UserSelectableTypes());
   synced_datatypes.Remove(datatype);
   service()->GetUserSettings()->SetChosenDataTypes(false, synced_datatypes);
@@ -568,14 +540,9 @@ bool ProfileSyncServiceHarness::EnableSyncForAllDatatypes() {
     return false;
   }
 
-  if (unified_consent::IsUnifiedConsentFeatureEnabled()) {
-    // Setting unified consent given to true will enable all sync data types.
-    UnifiedConsentServiceFactory::GetForProfile(profile_)
-        ->SetUnifiedConsentGiven(true);
-  } else {
-    service()->GetUserSettings()->SetChosenDataTypes(
-        true, syncer::UserSelectableTypes());
-  }
+  service()->GetUserSettings()->SetChosenDataTypes(
+      true, syncer::UserSelectableTypes());
+
   if (AwaitSyncSetupCompletion(/*skip_passphrase_verification=*/false)) {
     DVLOG(1) << "EnableSyncForAllDatatypes(): Enabled sync for all datatypes "
              << "on " << profile_debug_name_ << ".";
@@ -633,7 +600,8 @@ std::string ProfileSyncServiceHarness::GetClientInfoString(
     os << ", has_unsynced_items: " << snap.has_remaining_local_changes()
        << ", did_commit: "
        << (snap.model_neutral_state().num_successful_commits == 0 &&
-           snap.model_neutral_state().commit_result == syncer::SYNCER_OK)
+           snap.model_neutral_state().commit_result.value() ==
+               syncer::SyncerError::SYNCER_OK)
        << ", encryption conflicts: " << snap.num_encryption_conflicts()
        << ", hierarchy conflicts: " << snap.num_hierarchy_conflicts()
        << ", server conflicts: " << snap.num_server_conflicts()

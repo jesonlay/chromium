@@ -51,8 +51,6 @@
 #include "components/signin/ios/browser/active_state_manager.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/app/tests_hook.h"
-#import "ios/chrome/browser/app_launcher/app_launcher_abuse_detector.h"
-#import "ios/chrome/browser/app_launcher/app_launcher_tab_helper.h"
 #import "ios/chrome/browser/autofill/autofill_tab_helper.h"
 #include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
@@ -96,8 +94,6 @@
 #import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
 #import "ios/chrome/browser/ssl/captive_portal_detector_tab_helper.h"
 #import "ios/chrome/browser/ssl/captive_portal_detector_tab_helper_delegate.h"
-#import "ios/chrome/browser/store_kit/store_kit_coordinator.h"
-#import "ios/chrome/browser/store_kit/store_kit_tab_helper.h"
 #import "ios/chrome/browser/tabs/legacy_tab_helper.h"
 #import "ios/chrome/browser/tabs/tab.h"
 #import "ios/chrome/browser/tabs/tab_dialog_delegate.h"
@@ -111,10 +107,6 @@
 #import "ios/chrome/browser/ui/activity_services/activity_service_legacy_coordinator.h"
 #import "ios/chrome/browser/ui/activity_services/requirements/activity_service_presentation.h"
 #import "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
-#import "ios/chrome/browser/ui/alert_coordinator/repost_form_coordinator.h"
-#import "ios/chrome/browser/ui/app_launcher/app_launcher_coordinator.h"
-#import "ios/chrome/browser/ui/authentication/consent_bump/consent_bump_coordinator.h"
-#import "ios/chrome/browser/ui/authentication/consent_bump/consent_bump_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/password_coordinator.h"
 #import "ios/chrome/browser/ui/background_generator.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_interaction_controller.h"
@@ -175,9 +167,7 @@
 #import "ios/chrome/browser/ui/presenters/vertical_animation_container.h"
 #import "ios/chrome/browser/ui/print/print_controller.h"
 #import "ios/chrome/browser/ui/reading_list/offline_page_native_content.h"
-#import "ios/chrome/browser/ui/reading_list/reading_list_coordinator.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_menu_notifier.h"
-#import "ios/chrome/browser/ui/recent_tabs/recent_tabs_coordinator.h"
 #include "ios/chrome/browser/ui/sad_tab/features.h"
 #import "ios/chrome/browser/ui/sad_tab/sad_tab_coordinator.h"
 #import "ios/chrome/browser/ui/sad_tab/sad_tab_legacy_coordinator.h"
@@ -224,7 +214,6 @@
 #import "ios/chrome/browser/web/page_placeholder_tab_helper.h"
 #include "ios/chrome/browser/web/print_tab_helper.h"
 #import "ios/chrome/browser/web/repost_form_tab_helper.h"
-#import "ios/chrome/browser/web/repost_form_tab_helper_delegate.h"
 #import "ios/chrome/browser/web/sad_tab_tab_helper.h"
 #include "ios/chrome/browser/web/web_state_printer.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
@@ -415,7 +404,6 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 @interface BrowserViewController ()<ActivityServicePresentation,
                                     BubblePresenterDelegate,
                                     CaptivePortalDetectorTabHelperDelegate,
-                                    ConsentBumpCoordinatorDelegate,
                                     CRWNativeContentProvider,
                                     CRWWebStateDelegate,
                                     DialogPresenterDelegate,
@@ -431,7 +419,6 @@ NSString* const kBrowserViewControllerSnackbarCategory =
                                     PageInfoPresentation,
                                     PasswordControllerDelegate,
                                     PreloadControllerDelegate,
-                                    RepostFormTabHelperDelegate,
                                     SadTabCoordinatorDelegate,
                                     SideSwipeControllerDelegate,
                                     SnapshotGeneratorDelegate,
@@ -478,9 +465,6 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 
   // Used to display the Voice Search UI.  Nil if not visible.
   scoped_refptr<VoiceSearchController> _voiceSearchController;
-
-  // Used to display the Reading List.
-  ChromeCoordinator* _readingListCoordinator;
 
   // Used to display the Find In Page UI. Nil if not visible.
   FindBarControllerIOS* _findBarController;
@@ -542,9 +526,6 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   // Coordinator for Page Info UI.
   PageInfoLegacyCoordinator* _pageInfoCoordinator;
 
-  // Coordinator for displaying Repost Form dialog.
-  RepostFormCoordinator* _repostFormCoordinator;
-
   ToolbarCoordinatorAdaptor* _toolbarCoordinatorAdaptor;
 
   // The toolbar UI updater for the toolbar managed by |_toolbarCoordinator|.
@@ -565,17 +546,11 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   // A map associating webStates with their NTP coordinators.
   std::map<web::WebState*, NewTabPageCoordinator*> _ntpCoordinatorsForWebStates;
 
-  // Coordinator for presenting SKStoreProductViewController.
-  StoreKitCoordinator* _storeKitCoordinator;
-
   // Coordinator for the language selection UI.
   LanguageSelectionCoordinator* _languageSelectionCoordinator;
 
   // Coordinator for the PassKit UI presentation.
   PassKitCoordinator* _passKitCoordinator;
-
-  // Coordinator for UI related to launching external apps.
-  AppLauncherCoordinator* _appLauncherCoordinator;
 
   // Fake status bar view used to blend the toolbar into the status bar.
   UIView* _fakeStatusBarView;
@@ -627,8 +602,6 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 // for the presentation of a new tab. Can be used to record performance metrics.
 @property(nonatomic, strong, nullable)
     ProceduralBlock foregroundTabWasAddedCompletionBlock;
-// Coordinator for Recent Tabs.
-@property(nonatomic, strong) ChromeCoordinator* recentTabsCoordinator;
 // Coordinator for tablet tab strip.
 @property(nonatomic, strong) TabStripLegacyCoordinator* tabStripCoordinator;
 // Coordinator for Infobars.
@@ -686,7 +659,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 @property(nonatomic, assign) CGFloat footerFullscreenProgress;
 // Y-dimension offset for placement of the header.
 @property(nonatomic, readonly) CGFloat headerOffset;
-// Height of the header view for the tab model's current tab.
+// Height of the header view.
 @property(nonatomic, readonly) CGFloat headerHeight;
 
 // The webState of the active tab.
@@ -696,9 +669,6 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 @property(nonatomic, readonly) BOOL usesFullscreenContainer;
 // Whether the safe area insets should be used to adjust the viewport.
 @property(nonatomic, readonly) BOOL usesSafeInsetsForViewportAdjustments;
-
-// Coordinator to ask the user for the new consent.
-@property(nonatomic, strong) ConsentBumpCoordinator* consentBumpCoordinator;
 
 // BVC initialization
 // ------------------
@@ -766,8 +736,6 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 - (CGRect)ntpFrameForWebState:(web::WebState*)webState;
 // Returns web contents frame without including primary toolbar.
 - (CGRect)visibleFrameForTab:(Tab*)tab;
-// Returns the header height needed for |tab|.
-- (CGFloat)headerHeightForTab:(Tab*)tab;
 // Sets the frame for the headers.
 - (void)setFramesForHeaders:(NSArray<HeaderDefinition*>*)headers
                    atOffset:(CGFloat)headerOffset;
@@ -848,13 +816,6 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 // Adds the given url to the reading list.
 - (void)addToReadingListURL:(const GURL&)URL title:(NSString*)title;
 
-// Recent Tabs
-// ------------
-// Creates the right RecentTabs Coordinator, once we stop supporting the legacy
-// implementation we can delete this method and start the coordinator on
-// |showRecentTabs|.
-- (void)createRecentTabsCoordinator;
-
 @end
 
 @implementation BrowserViewController
@@ -871,7 +832,6 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 @synthesize activityOverlayCoordinator = _activityOverlayCoordinator;
 @synthesize foregroundTabWasAddedCompletionBlock =
     _foregroundTabWasAddedCompletionBlock;
-@synthesize recentTabsCoordinator = _recentTabsCoordinator;
 @synthesize tabStripCoordinator = _tabStripCoordinator;
 @synthesize tabStripView = _tabStripView;
 @synthesize popupMenuCoordinator = _popupMenuCoordinator;
@@ -895,7 +855,6 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 // DialogPresenterDelegate property
 @synthesize dialogPresenterDelegateIsPresenting =
     _dialogPresenterDelegateIsPresenting;
-@synthesize consentBumpCoordinator = _consentBumpCoordinator;
 
 #pragma mark - Object lifecycle
 
@@ -945,9 +904,6 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
         [[ToolbarCoordinatorAdaptor alloc] initWithDispatcher:self.dispatcher];
     self.toolbarInterface = _toolbarCoordinatorAdaptor;
 
-    _storeKitCoordinator =
-        [[StoreKitCoordinator alloc] initWithBaseViewController:self];
-
     _languageSelectionCoordinator =
         [[LanguageSelectionCoordinator alloc] initWithBaseViewController:self];
     _languageSelectionCoordinator.presenter =
@@ -966,9 +922,6 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
         initWithBaseViewController:_browserContainerCoordinator.viewController];
     _downloadManagerCoordinator.presenter =
         [[VerticalAnimationContainer alloc] init];
-
-    _appLauncherCoordinator =
-        [[AppLauncherCoordinator alloc] initWithBaseViewController:self];
 
     _javaScriptDialogPresenter.reset(
         new JavaScriptDialogPresenterImpl(_dialogPresenter));
@@ -1288,7 +1241,20 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
 }
 
 - (CGFloat)headerHeight {
-  return [self headerHeightForTab:self.tabModel.currentTab];
+  NSArray<HeaderDefinition*>* views = [self headerViews];
+
+  CGFloat height = self.headerOffset;
+  for (HeaderDefinition* header in views) {
+    if (header.view && header.behaviour == Hideable) {
+      height += CGRectGetHeight([header.view frame]);
+    }
+  }
+
+  CGFloat statusBarOffset = 0;
+  if (!self.usesFullscreenContainer) {
+    statusBarOffset = StatusBarHeight();
+  }
+  return height - statusBarOffset;
 }
 
 - (web::WebState*)currentWebState {
@@ -1780,8 +1746,6 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
     self.typingShield = nil;
     if (_voiceSearchController)
       _voiceSearchController->SetDispatcher(nil);
-    _readingListCoordinator = nil;
-    self.recentTabsCoordinator = nil;
     self.primaryToolbarCoordinator = nil;
     self.secondaryToolbarContainerCoordinator = nil;
     self.secondaryToolbarCoordinator = nil;
@@ -2640,23 +2604,6 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
   return UIEdgeInsetsInsetRect([self viewForTab:tab].bounds, headerInset);
 }
 
-- (CGFloat)headerHeightForTab:(Tab*)tab {
-  NSArray<HeaderDefinition*>* views = [self headerViews];
-
-  CGFloat height = self.headerOffset;
-  for (HeaderDefinition* header in views) {
-    if (header.view && header.behaviour == Hideable) {
-      height += CGRectGetHeight([header.view frame]);
-    }
-  }
-
-  CGFloat statusBarOffset = 0;
-  if (!self.usesFullscreenContainer) {
-    statusBarOffset = StatusBarHeight();
-  }
-  return height - statusBarOffset;
-}
-
 - (void)setFramesForHeaders:(NSArray<HeaderDefinition*>*)headers
                    atOffset:(CGFloat)headerOffset {
   CGFloat height = self.headerOffset;
@@ -2872,22 +2819,15 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
   // Install the proper CRWWebController delegates.
   tab.webController.nativeProvider = self;
   tab.webController.swipeRecognizerProvider = self.sideSwipeController;
-  StoreKitTabHelper* tabHelper = StoreKitTabHelper::FromWebState(tab.webState);
-  if (tabHelper)
-    tabHelper->SetLauncher(_storeKitCoordinator);
   tab.webState->SetDelegate(_webStateDelegate.get());
   // BrowserViewController owns the coordinator that displays the Sad Tab.
   if (!SadTabTabHelper::FromWebState(tab.webState)) {
     SadTabTabHelper::CreateForWebState(tab.webState, _sadTabCoordinator);
   }
   PrintTabHelper::CreateForWebState(tab.webState, self);
-  RepostFormTabHelper::CreateForWebState(tab.webState, self);
   NetExportTabHelper::CreateForWebState(tab.webState, self);
   CaptivePortalDetectorTabHelper::CreateForWebState(tab.webState, self);
   PassKitTabHelper::CreateForWebState(tab.webState, _passKitCoordinator);
-  AppLauncherTabHelper::CreateForWebState(
-      tab.webState, [[AppLauncherAbuseDetector alloc] init],
-      _appLauncherCoordinator);
 
   // DownloadManagerTabHelper cannot function without delegate.
   DCHECK(_downloadManagerCoordinator);
@@ -2936,9 +2876,6 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
   }
   tab.webController.nativeProvider = nil;
   tab.webController.swipeRecognizerProvider = nil;
-  StoreKitTabHelper* tabHelper = StoreKitTabHelper::FromWebState(tab.webState);
-  if (tabHelper)
-    tabHelper->SetLauncher(nil);
   tab.webState->SetDelegate(nullptr);
   if (AccountConsistencyService* accountConsistencyService =
           ios::AccountConsistencyServiceFactory::GetForBrowserState(
@@ -3019,17 +2956,6 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
                          IDS_IOS_READING_LIST_SNACKBAR_MESSAGE)];
 }
 
-#pragma mark - Private Methods: Recent Tabs
-
-- (void)createRecentTabsCoordinator {
-  RecentTabsCoordinator* recentTabsCoordinator =
-      [[RecentTabsCoordinator alloc] initWithBaseViewController:self
-                                                   browserState:_browserState];
-  recentTabsCoordinator.loader = self;
-  recentTabsCoordinator.dispatcher = self.dispatcher;
-  self.recentTabsCoordinator = recentTabsCoordinator;
-}
-
 #pragma mark - ** Protocol Implementations and Helpers **
 
 #pragma mark - BubblePresenterDelegate
@@ -3067,8 +2993,6 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
 
 - (BOOL)canTakeSnapshotForWebState:(web::WebState*)webState {
   DCHECK(webState);
-  Tab* tab = LegacyTabHelper::GetTabForWebState(webState);
-  DCHECK([self.tabModel indexOfTab:tab] != NSNotFound);
   PagePlaceholderTabHelper* pagePlaceholderTabHelper =
       PagePlaceholderTabHelper::FromWebState(webState);
   return !pagePlaceholderTabHelper->displaying_placeholder() &&
@@ -3077,9 +3001,6 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
 
 - (UIEdgeInsets)snapshotEdgeInsetsForWebState:(web::WebState*)webState {
   DCHECK(webState);
-  Tab* tab = LegacyTabHelper::GetTabForWebState(webState);
-  DCHECK([self.tabModel indexOfTab:tab] != NSNotFound);
-
   // The NTP's snapshot should be inset |headerHeight| from the top to remove
   // the fake NTP toolbar from the snapshot.
   NewTabPageTabHelper* NTPHelper = NewTabPageTabHelper::FromWebState(webState);
@@ -3095,8 +3016,7 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
                               ->IsInitialized() ||
                           webState->GetWebViewProxy().shouldUseViewContentInset;
   if (isNTPActive || (outOfWeb && !usesContentInset)) {
-    CGFloat headerHeight = [self headerHeightForTab:tab];
-    return UIEdgeInsetsMake(headerHeight, 0.0, 0.0, 0.0);
+    return UIEdgeInsetsMake(self.headerHeight, 0.0, 0.0, 0.0);
   }
 
   // For all other scenarios, the content area is inset from the snapshot base
@@ -3139,9 +3059,9 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
             viewController];
     UIView* sadTabView = viewController.view;
     if (sadTabView) {
-      CGFloat offset = [self headerHeightForTab:tab];
       SnapshotOverlay* sadTabOverlay =
-          [[SnapshotOverlay alloc] initWithView:sadTabView yOffset:offset];
+          [[SnapshotOverlay alloc] initWithView:sadTabView
+                                        yOffset:self.headerHeight];
       [overlays addObject:sadTabOverlay];
     }
   }
@@ -3488,7 +3408,7 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
     title = l10n_util::GetNSStringWithFixup(IDS_IOS_CONTENT_CONTEXT_OPENIMAGE);
     action = ^{
       Record(ACTION_OPEN_IMAGE, isImage, isLink);
-      web::NavigationManager::WebLoadParams params(imageUrl);
+      ChromeLoadParams params(imageUrl);
       [weakSelf loadURLWithParams:params];
     };
     [_contextMenuCoordinator addItemWithTitle:title action:action];
@@ -3546,11 +3466,9 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
     runRepostFormDialogWithCompletionHandler:(void (^)(BOOL))handler {
   // Display the action sheet with the arrow pointing at the top center of the
   // web contents.
-  Tab* tab = LegacyTabHelper::GetTabForWebState(webState);
   UIView* view = webState->GetView();
-  CGPoint dialogLocation =
-      CGPointMake(CGRectGetMidX(view.frame),
-                  CGRectGetMinY(view.frame) + [self headerHeightForTab:tab]);
+  CGPoint dialogLocation = CGPointMake(
+      CGRectGetMidX(view.frame), CGRectGetMinY(view.frame) + self.headerHeight);
   auto* helper = RepostFormTabHelper::FromWebState(webState);
   helper->PresentDialog(dialogLocation, base::BindOnce(^(bool shouldContinue) {
                           handler(shouldContinue);
@@ -3706,9 +3624,15 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
 
 - (CGFloat)overscrollActionsControllerHeaderInset:
     (OverscrollActionsController*)controller {
-  if (controller == [[[self tabModel] currentTab] overscrollActionsController])
-    return self.headerHeight;
-  else
+  if (controller ==
+      [[[self tabModel] currentTab] overscrollActionsController]) {
+    if (!base::ios::IsRunningOnIOS12OrLater() &&
+        self.currentWebState->GetContentsMimeType() == "application/pdf") {
+      return self.headerHeight - self.view.safeAreaInsets.top;
+    } else {
+      return self.headerHeight;
+    }
+  } else
     return 0;
 }
 
@@ -3815,15 +3739,14 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
 }
 
 - (CGFloat)nativeContentHeaderHeightForWebState:(web::WebState*)webState {
-  Tab* tab = LegacyTabHelper::GetTabForWebState(webState);
-  if (IsVisibleUrlNewTabPage(tab.webState) && ![self canShowTabStrip]) {
+  if (IsVisibleUrlNewTabPage(webState) && ![self canShowTabStrip]) {
     if (self.usesFullscreenContainer)
       return 0;
     // Also subtract the top safe area so the view will appear as full screen.
     // TODO(crbug.com/826369) Remove this once NTP is out of native content.
     return -self.view.safeAreaInsets.top;
   }
-  return [self headerHeightForTab:tab];
+  return self.headerHeight;
 }
 
 #pragma mark - DialogPresenterDelegate methods
@@ -4144,7 +4067,8 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
 
 #pragma mark - UrlLoader (Public)
 
-- (void)loadURLWithParams:(const web::NavigationManager::WebLoadParams&)params {
+- (void)loadURLWithParams:(const ChromeLoadParams&)chromeParams {
+  web::NavigationManager::WebLoadParams params = chromeParams.web_params;
   [[OmniboxGeolocationController sharedInstance]
       locationBarDidSubmitURL:params.url
                    transition:params.transition_type
@@ -4484,14 +4408,6 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
   [self addToReadingListURL:[command URL] title:[command title]];
 }
 
-- (void)showReadingList {
-  _readingListCoordinator = [[ReadingListCoordinator alloc]
-      initWithBaseViewController:self
-                    browserState:self.browserState
-                          loader:self];
-  [_readingListCoordinator start];
-}
-
 - (void)preloadVoiceSearch {
   // Preload VoiceSearchController and views and view controllers needed
   // for voice search.
@@ -4614,24 +4530,6 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
   [_bookmarkInteractionController presentBookmarks];
 }
 
-- (void)showRecentTabs {
-  // TODO(crbug.com/825431): If BVC's clearPresentedState is ever called (such
-  // as in tearDown after a failed egtest), then this coordinator is left in a
-  // started state even though its corresponding VC is no longer on screen.
-  // That causes issues when the coordinator is started again and we destroy the
-  // old mediator without disconnecting it first.  Temporarily work around these
-  // issues by not having a long lived coordinator.  A longer-term solution will
-  // require finding a way to stop this coordinator so that the mediator is
-  // properly disconnected and destroyed and does not live longer than its
-  // associated VC.
-  if (self.recentTabsCoordinator) {
-    [self.recentTabsCoordinator stop];
-    self.recentTabsCoordinator = nil;
-  }
-  [self createRecentTabsCoordinator];
-  [self.recentTabsCoordinator start];
-}
-
 - (void)requestDesktopSite {
   if (self.userAgentType != web::UserAgentType::MOBILE)
     return;
@@ -4674,7 +4572,7 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
 - (void)navigateToMemexTabSwitcher {
   // TODO(crbug.com/799601): Delete this once its not needed.
   const GURL memexURL("https://chrome-memex.appspot.com");
-  web::NavigationManager::WebLoadParams params(memexURL);
+  ChromeLoadParams params(memexURL);
   [self loadURLWithParams:params];
 }
 
@@ -4692,24 +4590,6 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
   if (type == PopupMenuCommandTypeToolsMenu) {
     [self.bubblePresenter toolsMenuDisplayed];
   }
-}
-
-- (void)showConsentBumpIfNeeded {
-  DCHECK(!self.consentBumpCoordinator);
-  if (![ConsentBumpCoordinator
-          shouldShowConsentBumpWithBrowserState:_browserState]) {
-    return;
-  }
-  self.consentBumpCoordinator =
-      [[ConsentBumpCoordinator alloc] initWithBaseViewController:self
-                                                    browserState:_browserState];
-  self.consentBumpCoordinator.delegate = self;
-  [self.consentBumpCoordinator start];
-  self.consentBumpCoordinator.viewController.modalPresentationStyle =
-      UIModalPresentationFormSheet;
-  [self presentViewController:self.consentBumpCoordinator.viewController
-                     animated:YES
-                   completion:nil];
 }
 
 - (void)focusFakebox {
@@ -5339,25 +5219,6 @@ nativeContentHeaderHeightForPreloadController:(PreloadController*)controller
     [self.dispatcher printTab];
 }
 
-#pragma mark - RepostFormTabHelperDelegate
-
-- (void)repostFormTabHelper:(RepostFormTabHelper*)helper
-    presentRepostFormDialogForWebState:(web::WebState*)webState
-                         dialogAtPoint:(CGPoint)location
-                     completionHandler:(void (^)(BOOL))completion {
-  _repostFormCoordinator =
-      [[RepostFormCoordinator alloc] initWithBaseViewController:self
-                                                 dialogLocation:location
-                                                       webState:webState
-                                              completionHandler:completion];
-  [_repostFormCoordinator start];
-}
-
-- (void)repostFormTabHelperDismissRepostFormDialog:
-    (RepostFormTabHelper*)helper {
-  _repostFormCoordinator = nil;
-}
-
 #pragma mark - TabStripPresentation
 
 - (BOOL)isTabStripFullyVisible {
@@ -5435,23 +5296,6 @@ nativeContentHeaderHeightForPreloadController:(PreloadController*)controller
 
 - (void)showSyncPassphraseSettings {
   [self.dispatcher showSyncPassphraseSettingsFromViewController:self];
-}
-
-#pragma mark - ConsentBumpCoordinatorDelegate
-
-- (void)consentBumpCoordinator:(ConsentBumpCoordinator*)coordinator
-    didFinishNeedingToShowSettings:(BOOL)shouldShowSettings {
-  DCHECK(self.consentBumpCoordinator);
-  DCHECK(self.consentBumpCoordinator.viewController);
-  auto completion = ^{
-    if (shouldShowSettings) {
-      [self.dispatcher showGoogleServicesSettingsFromViewController:self];
-    }
-  };
-  [self.consentBumpCoordinator.viewController
-      dismissViewControllerAnimated:YES
-                         completion:completion];
-  self.consentBumpCoordinator = nil;
 }
 
 #pragma mark - NewTabPageTabHelperDelegate

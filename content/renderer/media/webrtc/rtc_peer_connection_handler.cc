@@ -845,6 +845,19 @@ class RTCPeerConnectionHandler::Observer
     }
   }
 
+  void OnConnectionChange(
+      PeerConnectionInterface::PeerConnectionState new_state) override {
+    if (!main_thread_->BelongsToCurrentThread()) {
+      main_thread_->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              &RTCPeerConnectionHandler::Observer::OnConnectionChange, this,
+              new_state));
+    } else if (handler_) {
+      handler_->OnConnectionChange(new_state);
+    }
+  }
+
   void OnIceGatheringChange(
       PeerConnectionInterface::IceGatheringState new_state) override {
     if (!main_thread_->BelongsToCurrentThread()) {
@@ -970,6 +983,15 @@ bool RTCPeerConnectionHandler::Initialize(
 
   configuration_.set_experiment_cpu_load_estimator(
       base::FeatureList::IsEnabled(media::kNewEncodeCpuLoadEstimator));
+
+  // Configure optional SRTP configurations enabled via the command line.
+  configuration_.crypto_options = webrtc::CryptoOptions{};
+  configuration_.crypto_options->srtp.enable_gcm_crypto_suites =
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableWebRtcSrtpAesGcm);
+  configuration_.crypto_options->srtp.enable_encrypted_rtp_header_extensions =
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableWebRtcSrtpEncryptedHeaders);
 
   // Copy all the relevant constraints into |config|.
   CopyConstraintsIntoRtcConfiguration(options, &configuration_);
@@ -1941,6 +1963,14 @@ void RTCPeerConnectionHandler::OnIceConnectionChange(
     peer_connection_tracker_->TrackIceConnectionStateChange(this, new_state);
   if (!is_closed_)
     client_->DidChangeIceConnectionState(new_state);
+}
+
+// Called any time the combined peerconnection state changes
+void RTCPeerConnectionHandler::OnConnectionChange(
+    webrtc::PeerConnectionInterface::PeerConnectionState new_state) {
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
+  if (!is_closed_)
+    client_->DidChangePeerConnectionState(new_state);
 }
 
 // Called any time the IceGatheringState changes

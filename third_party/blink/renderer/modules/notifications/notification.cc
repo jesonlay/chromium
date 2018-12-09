@@ -192,7 +192,10 @@ void Notification::DidLoadResources(NotificationResourcesLoader* loader) {
 
   mojom::blink::NonPersistentNotificationListenerPtr event_listener;
 
-  listener_binding_.Bind(mojo::MakeRequest(&event_listener));
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+      GetExecutionContext()->GetTaskRunner(blink::TaskType::kInternalDefault);
+  listener_binding_.Bind(mojo::MakeRequest(&event_listener, task_runner),
+                         task_runner);
 
   NotificationManager::From(GetExecutionContext())
       ->DisplayNonPersistentNotification(token_, data_->Clone(),
@@ -449,7 +452,7 @@ ScriptPromise Notification::requestPermission(
       script_state, deprecated_callback);
 }
 
-size_t Notification::maxActions() {
+uint32_t Notification::maxActions() {
   return kWebNotificationMaxActions;
 }
 

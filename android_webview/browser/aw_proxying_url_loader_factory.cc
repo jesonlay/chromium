@@ -7,6 +7,9 @@
 #include <utility>
 
 #include "android_webview/browser/aw_contents_client_bridge.h"
+#include "android_webview/browser/aw_contents_io_thread_client.h"
+#include "android_webview/browser/net/aw_web_resource_response.h"
+#include "android_webview/browser/net_helpers.h"
 #include "android_webview/browser/renderer_host/auto_login_parser.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/post_task.h"
@@ -16,6 +19,7 @@
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_utils.h"
+#include "net/base/load_flags.h"
 #include "net/http/http_util.h"
 
 namespace android_webview {
@@ -57,17 +61,23 @@ class InterceptedRequest : public network::mojom::URLLoader,
   void OnComplete(const network::URLLoaderCompletionStatus& status) override;
 
   // network::mojom::URLLoader
-  void FollowRedirect(const base::Optional<std::vector<std::string>>&
-                          to_be_removed_request_headers,
-                      const base::Optional<net::HttpRequestHeaders>&
-                          modified_request_headers) override;
+  void FollowRedirect(
+      const base::Optional<std::vector<std::string>>&
+          to_be_removed_request_headers,
+      const base::Optional<net::HttpRequestHeaders>& modified_request_headers,
+      const base::Optional<GURL>& new_url) override;
   void ProceedWithResponse() override;
   void SetPriority(net::RequestPriority priority,
                    int32_t intra_priority_value) override;
   void PauseReadingBodyFromNet() override;
   void ResumeReadingBodyFromNet() override;
 
+  void ContinueAfterIntercept();
+  void InterceptResponseReceived(
+      std::unique_ptr<AwWebResourceResponse> response);
+
  private:
+  std::unique_ptr<AwContentsIoThreadClient> GetIoThreadClient();
   void OnRequestError(const network::URLLoaderCompletionStatus& status);
 
   // TODO(timvolodine): consider factoring this out of this class.
@@ -126,6 +136,31 @@ void InterceptedRequest::Restart() {
   // TODO(timvolodine): add async check shouldOverrideUrlLoading and
   // shouldInterceptRequest.
 
+  std::unique_ptr<AwContentsIoThreadClient> io_thread_client =
+      GetIoThreadClient();
+  DCHECK(io_thread_client);
+  request_.load_flags = GetCacheModeForClient(io_thread_client.get());
+
+  // TODO: verify the case when WebContents::RenderFrameDeleted is called
+  // before network request is intercepted (i.e. if that's possible and
+  // whether it can result in any issues).
+  io_thread_client->ShouldInterceptRequestAsync(
+      AwWebResourceRequest(request_),
+      base::BindOnce(&InterceptedRequest::InterceptResponseReceived,
+                     weak_factory_.GetWeakPtr()));
+}
+
+void InterceptedRequest::InterceptResponseReceived(
+    std::unique_ptr<AwWebResourceResponse> response) {
+  if (response) {
+    // TODO(timvolodine): handle the case where response contains data,
+    // i.e. is actually overridden, crbug.com/893566.
+  } else {
+    ContinueAfterIntercept();
+  }
+}
+
+void InterceptedRequest::ContinueAfterIntercept() {
   if (!target_loader_ && target_factory_) {
     network::mojom::URLLoaderClientPtr proxied_client;
     proxied_client_binding_.Bind(mojo::MakeRequest(&proxied_client));
@@ -285,10 +320,11 @@ void InterceptedRequest::OnComplete(
 void InterceptedRequest::FollowRedirect(
     const base::Optional<std::vector<std::string>>&
         to_be_removed_request_headers,
-    const base::Optional<net::HttpRequestHeaders>& modified_request_headers) {
+    const base::Optional<net::HttpRequestHeaders>& modified_request_headers,
+    const base::Optional<GURL>& new_url) {
   if (target_loader_) {
     target_loader_->FollowRedirect(to_be_removed_request_headers,
-                                   modified_request_headers);
+                                   modified_request_headers, new_url);
   }
 
   Restart();
@@ -313,6 +349,16 @@ void InterceptedRequest::PauseReadingBodyFromNet() {
 void InterceptedRequest::ResumeReadingBodyFromNet() {
   if (target_loader_)
     target_loader_->ResumeReadingBodyFromNet();
+}
+
+std::unique_ptr<AwContentsIoThreadClient>
+InterceptedRequest::GetIoThreadClient() {
+  // |process_id_| == 0 indicates this is a navigation, and so we should use the
+  // frame_tree_node_id API (with request_.render_frame_id).
+  return process_id_
+             ? AwContentsIoThreadClient::FromID(process_id_,
+                                                request_.render_frame_id)
+             : AwContentsIoThreadClient::FromID(request_.render_frame_id);
 }
 
 void InterceptedRequest::OnRequestError(

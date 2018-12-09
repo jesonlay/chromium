@@ -543,10 +543,24 @@ void ServiceWorkerSubresourceLoader::CommitResponseBody(
 
 void ServiceWorkerSubresourceLoader::CommitResponseBodyEmpty() {
   TransitionToStatus(Status::kSentBody);
-  mojo::DataPipe pipe;
-  url_loader_client_->OnStartLoadingResponseBody(
-      std::move(pipe.consumer_handle));
-  // pipe.producer_handle is closed here.
+
+  // TODO(arthursonzogni): As soon as https://crbug.com/905779 is fixed, switch
+  // back to using mojo::DataPipe instead of creating it manually.
+  MojoCreateDataPipeOptions options;
+  options.struct_size = sizeof(MojoCreateDataPipeOptions);
+  options.flags = MOJO_CREATE_DATA_PIPE_FLAG_NONE;
+  // Cannot use 0, because this means "default" in
+  // mojo::core::Core::CreateDataPipe.
+  options.element_num_bytes = 1;
+  options.capacity_num_bytes = 1;
+  mojo::ScopedDataPipeProducerHandle producer_handle;
+  mojo::ScopedDataPipeConsumerHandle consumer_handle;
+  MojoResult result =
+      CreateDataPipe(&options, &producer_handle, &consumer_handle);
+  CHECK_EQ(MOJO_RESULT_OK, result);
+
+  producer_handle.reset();  // The data pipe is empty.
+  url_loader_client_->OnStartLoadingResponseBody(std::move(consumer_handle));
 }
 
 void ServiceWorkerSubresourceLoader::CommitCompleted(int error_code) {
@@ -635,7 +649,8 @@ void ServiceWorkerSubresourceLoader::RecordTimingMetrics(bool handled) {
 void ServiceWorkerSubresourceLoader::FollowRedirect(
     const base::Optional<std::vector<std::string>>&
         to_be_removed_request_headers,
-    const base::Optional<net::HttpRequestHeaders>& modified_request_headers) {
+    const base::Optional<net::HttpRequestHeaders>& modified_request_headers,
+    const base::Optional<GURL>& new_url) {
   TRACE_EVENT_WITH_FLOW1(
       "ServiceWorker", "ServiceWorkerSubresourceLoader::FollowRedirect",
       TRACE_ID_WITH_SCOPE(kServiceWorkerSubresourceLoaderScope,
@@ -645,6 +660,8 @@ void ServiceWorkerSubresourceLoader::FollowRedirect(
   DCHECK(!modified_request_headers.has_value()) << "Redirect with modified "
                                                    "headers was not supported "
                                                    "yet. crbug.com/845683";
+  DCHECK(!new_url.has_value()) << "Redirect with modified URL was not "
+                                  "supported yet. crbug.com/845683";
   DCHECK(redirect_info_);
 
   bool should_clear_upload = false;

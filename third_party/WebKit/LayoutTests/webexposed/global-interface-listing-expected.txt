@@ -1087,6 +1087,16 @@ interface ConstantSourceNode : AudioScheduledSourceNode
     attribute @@toStringTag
     getter offset
     method constructor
+interface ContactInfo
+    attribute @@toStringTag
+    getter email
+    getter name
+    getter tel
+    method constructor
+interface ContactsManager
+    attribute @@toStringTag
+    method constructor
+    method select
 interface ConvolverNode : AudioNode
     attribute @@toStringTag
     getter buffer
@@ -2035,6 +2045,10 @@ interface Element : Node
     setter scrollLeft
     setter scrollTop
     setter slot
+interface ElementInternals
+    attribute @@toStringTag
+    getter form
+    method constructor
 interface EnterPictureInPictureEvent : Event
     attribute @@toStringTag
     getter pictureInPictureWindow
@@ -2656,6 +2670,7 @@ interface HTMLElement : Element
     getter tabIndex
     getter title
     getter translate
+    method attachInternals
     method blur
     method click
     method constructor
@@ -4268,12 +4283,6 @@ interface MediaCapabilities
     method constructor
     method decodingInfo
     method encodingInfo
-interface MediaCapabilitiesInfo
-    attribute @@toStringTag
-    getter powerEfficient
-    getter smooth
-    getter supported
-    method constructor
 interface MediaDeviceInfo
     attribute @@toStringTag
     getter deviceId
@@ -4693,6 +4702,7 @@ interface Navigator
     getter appVersion
     getter clipboard
     getter connection
+    getter contacts
     getter cookieEnabled
     getter credentials
     getter deviceMemory
@@ -5499,6 +5509,16 @@ interface RTCDataChannelEvent : Event
     attribute @@toStringTag
     getter channel
     method constructor
+interface RTCDtlsTransport : EventTarget
+    attribute @@toStringTag
+    getter iceTransport
+    getter onerror
+    getter onstatechange
+    getter state
+    method constructor
+    method getRemoteCertificates
+    setter onerror
+    setter onstatechange
 interface RTCIceCandidate
     attribute @@toStringTag
     getter candidate
@@ -5535,6 +5555,7 @@ interface RTCIceTransport : EventTarget
 interface RTCPeerConnection : EventTarget
     static method generateCertificate
     attribute @@toStringTag
+    getter connectionState
     getter currentLocalDescription
     getter currentRemoteDescription
     getter iceConnectionState
@@ -5542,6 +5563,7 @@ interface RTCPeerConnection : EventTarget
     getter id
     getter localDescription
     getter onaddstream
+    getter onconnectionstatechange
     getter ondatachannel
     getter onicecandidate
     getter oniceconnectionstatechange
@@ -5577,6 +5599,7 @@ interface RTCPeerConnection : EventTarget
     method setLocalDescription
     method setRemoteDescription
     setter onaddstream
+    setter onconnectionstatechange
     setter ondatachannel
     setter onicecandidate
     setter oniceconnectionstatechange
@@ -6153,11 +6176,22 @@ interface SVGEllipseElement : SVGGeometryElement
     method constructor
 interface SVGFEBlendElement : SVGElement
     attribute @@toStringTag
+    attribute SVG_FEBLEND_MODE_COLOR
+    attribute SVG_FEBLEND_MODE_COLOR_BURN
+    attribute SVG_FEBLEND_MODE_COLOR_DODGE
     attribute SVG_FEBLEND_MODE_DARKEN
+    attribute SVG_FEBLEND_MODE_DIFFERENCE
+    attribute SVG_FEBLEND_MODE_EXCLUSION
+    attribute SVG_FEBLEND_MODE_HARD_LIGHT
+    attribute SVG_FEBLEND_MODE_HUE
     attribute SVG_FEBLEND_MODE_LIGHTEN
+    attribute SVG_FEBLEND_MODE_LUMINOSITY
     attribute SVG_FEBLEND_MODE_MULTIPLY
     attribute SVG_FEBLEND_MODE_NORMAL
+    attribute SVG_FEBLEND_MODE_OVERLAY
+    attribute SVG_FEBLEND_MODE_SATURATION
     attribute SVG_FEBLEND_MODE_SCREEN
+    attribute SVG_FEBLEND_MODE_SOFT_LIGHT
     attribute SVG_FEBLEND_MODE_UNKNOWN
     getter height
     getter in1
@@ -10387,6 +10421,7 @@ interface webkitMediaStream : EventTarget
 interface webkitRTCPeerConnection : EventTarget
     static method generateCertificate
     attribute @@toStringTag
+    getter connectionState
     getter currentLocalDescription
     getter currentRemoteDescription
     getter iceConnectionState
@@ -10394,6 +10429,7 @@ interface webkitRTCPeerConnection : EventTarget
     getter id
     getter localDescription
     getter onaddstream
+    getter onconnectionstatechange
     getter ondatachannel
     getter onicecandidate
     getter oniceconnectionstatechange
@@ -10429,6 +10465,7 @@ interface webkitRTCPeerConnection : EventTarget
     method setLocalDescription
     method setRemoteDescription
     setter onaddstream
+    setter onconnectionstatechange
     setter ondatachannel
     setter onicecandidate
     setter oniceconnectionstatechange

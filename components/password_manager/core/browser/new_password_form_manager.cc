@@ -280,10 +280,36 @@ void NewPasswordFormManager::Save() {
         metrics_util::PASSWORD_USED);
   }
 
-  // TODO(https://crbug.com/831123): Implement updating Password Form Managers.
+  client_->UpdateFormManagers();
 }
 
 void NewPasswordFormManager::Update(const PasswordForm& credentials_to_update) {
+  metrics_util::LogPasswordAcceptedSaveUpdateSubmissionIndicatorEvent(
+      parsed_submitted_form_->submission_event);
+  metrics_recorder_->SetSubmissionIndicatorEvent(
+      parsed_submitted_form_->submission_event);
+
+  std::unique_ptr<PasswordForm> parsed_observed_form =
+      parser_.Parse(observed_form_, FormDataParser::Mode::kFilling);
+  FormStructure form_structure(credentials_to_update.form_data);
+  votes_uploader_.UploadPasswordVote(
+      *parsed_observed_form, *parsed_submitted_form_, autofill::NEW_PASSWORD,
+      form_structure.FormSignatureAsStr());
+
+  base::string16 password_to_save = pending_credentials_.password_value;
+  bool skip_zero_click = pending_credentials_.skip_zero_click;
+  pending_credentials_ = credentials_to_update;
+  pending_credentials_.password_value = password_to_save;
+  pending_credentials_.skip_zero_click = skip_zero_click;
+  pending_credentials_.preferred = true;
+  is_new_login_ = false;
+  ProcessUpdate();
+  std::vector<PasswordForm> more_credentials_to_update =
+      FindOtherCredentialsToUpdate();
+  form_saver_->Update(pending_credentials_, best_matches_,
+                      &more_credentials_to_update, nullptr);
+
+  client_->UpdateFormManagers();
 }
 
 void NewPasswordFormManager::UpdateUsername(
@@ -450,6 +476,12 @@ std::unique_ptr<NewPasswordFormManager> NewPasswordFormManager::Clone() {
   if (parser_.predictions())
     result->parser_.set_predictions(*parser_.predictions());
 
+  result->pending_credentials_ = pending_credentials_;
+  result->is_new_login_ = is_new_login_;
+  result->password_overridden_ = password_overridden_;
+  result->retry_password_form_password_update_ =
+      retry_password_form_password_update_;
+
   return result;
 }
 
@@ -491,7 +523,7 @@ void NewPasswordFormManager::ProcessMatches(
   }
 }
 
-bool NewPasswordFormManager::SetSubmittedFormIfIsManaged(
+bool NewPasswordFormManager::ProvisionallySaveIfIsManaged(
     const autofill::FormData& submitted_form,
     const PasswordManagerDriver* driver) {
   if (!DoesManage(submitted_form, driver))
@@ -647,6 +679,12 @@ void NewPasswordFormManager::CreatePendingCredentials() {
   // credentials are not received from the store yet.
   if (!parsed_submitted_form_)
     return;
+
+  // This function might be called multiple times so set variables that are
+  // changed in this function to initial states.
+  is_new_login_ = true;
+  SetPasswordOverridden(false);
+  retry_password_form_password_update_ = false;
 
   ValueElementPair password_to_save(PasswordToSave(*parsed_submitted_form_));
 

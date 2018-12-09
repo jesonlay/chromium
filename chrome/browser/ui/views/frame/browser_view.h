@@ -61,6 +61,7 @@ class ExclusiveAccessBubbleViews;
 class FullscreenControlHost;
 class InfoBarContainerView;
 class LocationBarView;
+class ReopenTabPromoController;
 class StatusBubbleViews;
 class TabStrip;
 class ToolbarButtonProvider;
@@ -342,6 +343,7 @@ class BrowserView : public BrowserWindow,
   void FocusToolbar() override;
   ToolbarActionsBar* GetToolbarActionsBar() override;
   void ToolbarSizeChanged(bool is_animating) override;
+  void TabDraggingStatusChanged(bool is_dragging) override;
   void FocusAppMenu() override;
   void FocusBookmarksToolbar() override;
   void FocusInactivePopupForAccessibility() override;
@@ -770,6 +772,13 @@ class BrowserView : public BrowserWindow,
   // jankiness.
   bool in_process_fullscreen_ = false;
 
+  // True if we're participating in a tab dragging process. The value can be
+  // true if the accociated browser is the dragged browser or the source browser
+  // that the drag tab(s) originates from. During tab dragging process, the
+  // dragged browser or the source browser's bounds may change, the fast resize
+  // strategy will be used to resize its web contents for smoother dragging.
+  bool in_tab_dragging_ = false;
+
   std::unique_ptr<ExclusiveAccessBubbleViews> exclusive_access_bubble_;
 
 #if defined(OS_WIN)
@@ -805,6 +814,10 @@ class BrowserView : public BrowserWindow,
   std::unique_ptr<BrowserWindowHistogramHelper> histogram_helper_;
 
   std::unique_ptr<FullscreenControlHost> fullscreen_control_host_;
+
+#if BUILDFLAG(ENABLE_DESKTOP_IN_PRODUCT_HELP)
+  std::unique_ptr<ReopenTabPromoController> reopen_tab_promo_controller_;
+#endif
 
   struct ResizeSession {
     // The time when user started resizing the window.

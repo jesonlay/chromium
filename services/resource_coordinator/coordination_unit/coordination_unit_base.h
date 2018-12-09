@@ -136,12 +136,11 @@ class CoordinationUnitInterface : public CoordinationUnitBase,
       const CoordinationUnitID cu_id) {
     DCHECK(cu_id.type == CoordinationUnitClass::Type());
     auto* cu = graph->GetCoordinationUnitByID(cu_id);
-    if (cu->id().type == CoordinationUnitClass::Type()) {
-      return static_cast<CoordinationUnitClass*>(cu);
-    } else {
-      NOTREACHED();
-    }
-    return nullptr;
+    if (!cu)
+      return nullptr;
+
+    CHECK_EQ(cu->id().type, CoordinationUnitClass::Type());
+    return static_cast<CoordinationUnitClass*>(cu);
   }
 
  private:

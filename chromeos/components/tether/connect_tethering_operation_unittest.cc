@@ -11,10 +11,8 @@
 #include "base/memory/ptr_util.h"
 #include "base/optional.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/test/simple_test_clock.h"
-#include "chromeos/chromeos_features.h"
 #include "chromeos/components/tether/fake_ble_connection_manager.h"
 #include "chromeos/components/tether/message_wrapper.h"
 #include "chromeos/components/tether/mock_tether_host_response_recorder.h"
@@ -125,8 +123,6 @@ class ConnectTetheringOperationTest : public testing::Test {
         test_device_(cryptauth::CreateRemoteDeviceRefListForTest(1)[0]) {}
 
   void SetUp() override {
-    scoped_feature_list_.InitAndDisableFeature(features::kMultiDeviceApi);
-
     fake_device_sync_client_ =
         std::make_unique<device_sync::FakeDeviceSyncClient>();
     fake_secure_channel_client_ =
@@ -138,7 +134,7 @@ class ConnectTetheringOperationTest : public testing::Test {
 
     operation_ = base::WrapUnique(new ConnectTetheringOperation(
         test_device_, fake_device_sync_client_.get(),
-        fake_secure_channel_client_.get(), fake_ble_connection_manager_.get(),
+        fake_secure_channel_client_.get(),
         mock_tether_host_response_recorder_.get(), false /* setup_required */));
     operation_->AddObserver(test_observer_.get());
 
@@ -223,7 +219,6 @@ class ConnectTetheringOperationTest : public testing::Test {
 
   const std::string connect_tethering_request_string_;
   const cryptauth::RemoteDeviceRef test_device_;
-  base::test::ScopedFeatureList scoped_feature_list_;
 
   std::unique_ptr<device_sync::FakeDeviceSyncClient> fake_device_sync_client_;
   std::unique_ptr<secure_channel::SecureChannelClient>
@@ -318,7 +313,7 @@ TEST_F(ConnectTetheringOperationTest, DISABLED_TestCannotConnect) {
 TEST_F(ConnectTetheringOperationTest, DISABLED_TestOperation_SetupRequired) {
   operation_ = base::WrapUnique(new ConnectTetheringOperation(
       test_device_, fake_device_sync_client_.get(),
-      fake_secure_channel_client_.get(), fake_ble_connection_manager_.get(),
+      fake_secure_channel_client_.get(),
       mock_tether_host_response_recorder_.get(), true /* setup_required */));
   VerifyResponseTimeoutSeconds(true /* setup_required */);
 }

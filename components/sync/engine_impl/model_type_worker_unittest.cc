@@ -192,18 +192,12 @@ class ModelTypeWorkerTest : public ::testing::Test {
     initial_state.mutable_progress_marker()->set_data_type_id(
         GetSpecificsFieldNumberFromModelType(model_type_));
 
-    InitializeWithState(model_type_, initial_state, UpdateResponseDataList());
+    InitializeWithState(model_type_, initial_state);
   }
 
   // Initializes with some existing data type state. Allows us to start
   // committing items right away.
   void NormalInitialize() {
-    InitializeWithPendingUpdates(UpdateResponseDataList());
-  }
-
-  // Initialize with some saved pending updates from the model thread.
-  void InitializeWithPendingUpdates(
-      const UpdateResponseDataList& initial_pending_updates) {
     ModelTypeState initial_state;
     initial_state.mutable_progress_marker()->set_data_type_id(
         GetSpecificsFieldNumberFromModelType(model_type_));
@@ -212,7 +206,7 @@ class ModelTypeWorkerTest : public ::testing::Test {
 
     initial_state.set_initial_sync_done(true);
 
-    InitializeWithState(model_type_, initial_state, initial_pending_updates);
+    InitializeWithState(model_type_, initial_state);
 
     nudge_handler()->ClearCounters();
   }
@@ -226,14 +220,11 @@ class ModelTypeWorkerTest : public ::testing::Test {
     ModelTypeState initial_state;
     initial_state.set_initial_sync_done(true);
 
-    InitializeWithState(USER_EVENTS, initial_state, UpdateResponseDataList());
+    InitializeWithState(USER_EVENTS, initial_state);
   }
 
   // Initialize with a custom initial ModelTypeState and pending updates.
-  void InitializeWithState(
-      const ModelType type,
-      const ModelTypeState& state,
-      const UpdateResponseDataList& initial_pending_updates) {
+  void InitializeWithState(const ModelType type, const ModelTypeState& state) {
     DCHECK(!worker());
 
     // We don't get to own this object. The |worker_| keeps a unique_ptr to it.
@@ -247,7 +238,6 @@ class ModelTypeWorkerTest : public ::testing::Test {
       cryptographer_copy = std::make_unique<Cryptographer>(*cryptographer_);
     }
 
-    // TODO(maxbogue): crbug.com/529498: Inject pending updates somehow.
     worker_ = std::make_unique<ModelTypeWorker>(
         type, state, !state.initial_sync_done(), std::move(cryptographer_copy),
         PassphraseType::IMPLICIT_PASSPHRASE, &mock_nudge_handler_,
@@ -1109,9 +1099,12 @@ TEST_F(ModelTypeWorkerTest, EncryptionBlocksUpdates) {
   AddPendingKey();
   EXPECT_EQ(0U, processor()->GetNumUpdateResponses());
 
-  // Update progress marker, should be blocked.
-  server()->SetProgressMarkerToken("token2");
-  DeliverRawUpdates(SyncEntityList());
+  // Receive an encrypted update with that new key, which we can't access.
+  SetUpdateEncryptionFilter(1);
+  TriggerUpdateFromServer(10, kTag1, kValue1);
+
+  // At this point, the cryptographer does not have access to the key, so the
+  // updates will be undecryptable. This should block all updates.
   EXPECT_EQ(0U, processor()->GetNumUpdateResponses());
 
   // Update local cryptographer, verify everything is pushed to processor.
@@ -1185,6 +1178,34 @@ TEST_F(ModelTypeWorkerTest, ReceiveDecryptableEntities) {
   EXPECT_EQ(kTag2, update2.entity->specifics.preference().name());
   EXPECT_EQ(kValue2, update2.entity->specifics.preference().value());
   EXPECT_FALSE(update2.encryption_key_name.empty());
+}
+
+// Test the receipt of decryptable entities, and that the worker will keep the
+// entities until the decryption key arrives.
+TEST_F(ModelTypeWorkerTest,
+       ReceiveDecryptableEntitiesShouldWaitTillKeyArrives) {
+  NormalInitialize();
+
+  // This next update will be encrypted using the second key.
+  SetUpdateEncryptionFilter(2);
+  TriggerUpdateFromServer(10, kTag1, kValue1);
+
+  // Worker cannot decrypt it.
+  EXPECT_FALSE(processor()->HasUpdateResponse(kHash1));
+
+  // Allow the cryptographer to decrypt using the first key.
+  AddPendingKey();
+  DecryptPendingKey();
+
+  // Worker still cannot decrypt it.
+  EXPECT_FALSE(processor()->HasUpdateResponse(kHash1));
+
+  // Allow the cryptographer to decrypt using the second key.
+  AddPendingKey();
+  DecryptPendingKey();
+
+  // The worker can now decrypt the update and forward it to the processor.
+  EXPECT_TRUE(processor()->HasUpdateResponse(kHash1));
 }
 
 // Test initializing a CommitQueue with a cryptographer at startup.
@@ -1268,7 +1289,7 @@ TEST_F(ModelTypeWorkerTest, ReceiveUndecryptableEntries) {
   // Receive a new foreign encryption key that we can't decrypt.
   AddPendingKey();
 
-  // Receive an encrypted with that new key, which we can't access.
+  // Receive an encrypted update with that new key, which we can't access.
   SetUpdateEncryptionFilter(1);
   TriggerUpdateFromServer(10, kTag1, kValue1);
 
@@ -1284,71 +1305,6 @@ TEST_F(ModelTypeWorkerTest, ReceiveUndecryptableEntries) {
   EXPECT_EQ(kTag1, update.entity->specifics.preference().name());
   EXPECT_EQ(kValue1, update.entity->specifics.preference().value());
   EXPECT_EQ(GetLocalCryptographerKeyName(), update.encryption_key_name);
-}
-
-// Test decryption of pending updates saved across a restart.
-TEST_F(ModelTypeWorkerTest, RestorePendingEntries) {
-  // Create a fake pending update.
-  EntityData entity;
-  entity.client_tag_hash = GenerateTagHash(kTag1);
-  entity.id = "SomeID";
-  entity.creation_time = Time::UnixEpoch() + TimeDelta::FromSeconds(10);
-  entity.modification_time = Time::UnixEpoch() + TimeDelta::FromSeconds(11);
-  entity.non_unique_name = "encrypted";
-  entity.specifics = GenerateSpecifics(kTag1, kValue1);
-  EncryptUpdate(GetNthKeyParams(1), &(entity.specifics));
-
-  UpdateResponseData update;
-  update.entity = entity.PassToPtr();
-  update.response_version = 100;
-
-  // Inject the update during CommitQueue initialization.
-  InitializeWithPendingUpdates({update});
-
-  // Update will be undecryptable at first.
-  EXPECT_EQ(0U, processor()->GetNumUpdateResponses());
-  EXPECT_FALSE(processor()->HasUpdateResponse(kHash1));
-
-  // Update the cryptographer so it can decrypt that update.
-  AddPendingKey();
-  DecryptPendingKey();
-
-  // Verify the item gets decrypted and sent back to the model thread.
-  // TODO(maxbogue): crbug.com/529498: Uncomment when pending updates are
-  // handled by the worker again.
-  // ASSERT_TRUE(processor()->HasUpdateResponse(kHash1));
-}
-
-// Test decryption of pending updates saved across a restart. This test
-// differs from the previous one in that the restored updates can be decrypted
-// immediately after the CommitQueue is constructed.
-TEST_F(ModelTypeWorkerTest, RestoreApplicableEntries) {
-  // Update the cryptographer so it can decrypt that update.
-  AddPendingKey();
-  DecryptPendingKey();
-
-  // Create a fake pending update.
-  EntityData entity;
-  entity.client_tag_hash = GenerateTagHash(kTag1);
-  entity.id = "SomeID";
-  entity.creation_time = Time::UnixEpoch() + TimeDelta::FromSeconds(10);
-  entity.modification_time = Time::UnixEpoch() + TimeDelta::FromSeconds(11);
-  entity.non_unique_name = "encrypted";
-
-  entity.specifics = GenerateSpecifics(kTag1, kValue1);
-  EncryptUpdate(GetNthKeyParams(1), &(entity.specifics));
-
-  UpdateResponseData update;
-  update.entity = entity.PassToPtr();
-  update.response_version = 100;
-
-  // Inject the update during CommitQueue initialization.
-  InitializeWithPendingUpdates({update});
-
-  // Verify the item gets decrypted and sent back to the model thread.
-  // TODO(maxbogue): crbug.com/529498: Uncomment when pending updates are
-  // handled by the worker again.
-  // ASSERT_TRUE(processor()->HasUpdateResponse(kHash1));
 }
 
 // Verify that corrupted encrypted updates don't cause crashes.
@@ -1789,6 +1745,43 @@ TEST_F(ModelTypeWorkerPasswordsTest, ReceiveDecryptablePasswordEntities) {
       update.entity->specifics.password().has_client_only_encrypted_data());
 }
 
+// Similar to ReceiveDecryptableEntities but for PASSWORDS, which have a custom
+// encryption mechanism.
+TEST_F(ModelTypeWorkerPasswordsTest,
+       ReceiveDecryptablePasswordShouldWaitTillKeyArrives) {
+  NormalInitialize();
+
+  // Receive an encrypted password, encrypted with the second ecnryption key.
+  sync_pb::PasswordSpecificsData unencrypted_password;
+  unencrypted_password.set_password_value(kPassword);
+  sync_pb::EntitySpecifics encrypted_specifics =
+      EncryptPasswordSpecifics(GetNthKeyParams(2), unencrypted_password);
+
+  SyncEntity entity = server()->UpdateFromServer(
+      /*version_offset=*/10, kHash1, encrypted_specifics);
+  worker()->ProcessGetUpdatesResponse(server()->GetProgress(),
+                                      server()->GetContext(), {&entity},
+                                      status_controller());
+  worker()->ApplyUpdates(status_controller());
+
+  // Worker cannot decrypt it.
+  EXPECT_FALSE(processor()->HasUpdateResponse(kHash1));
+
+  // Allow the cryptographer to decrypt using the first key.
+  AddPendingKey();
+  DecryptPendingKey();
+
+  // Worker still cannot decrypt it.
+  EXPECT_FALSE(processor()->HasUpdateResponse(kHash1));
+
+  // Allow the cryptographer to decrypt using the second key.
+  AddPendingKey();
+  DecryptPendingKey();
+
+  // The worker can now decrypt the update and forward it to the processor.
+  EXPECT_TRUE(processor()->HasUpdateResponse(kHash1));
+}
+
 // Analogous to ReceiveUndecryptableEntries but for PASSWORDS, which have a
 // custom encryption mechanism.
 TEST_F(ModelTypeWorkerPasswordsTest, ReceiveUndecryptablePasswordEntries) {
@@ -1802,7 +1795,7 @@ TEST_F(ModelTypeWorkerPasswordsTest, ReceiveUndecryptablePasswordEntries) {
   sync_pb::EntitySpecifics encrypted_specifics =
       EncryptPasswordSpecifics(GetNthKeyParams(1), unencrypted_password);
 
-  // Receive an encrypted with that new key, which we can't access.
+  // Receive an encrypted update with that new key, which we can't access.
   SyncEntity entity = server()->UpdateFromServer(
       /*version_offset=*/10, kHash1, encrypted_specifics);
   worker()->ProcessGetUpdatesResponse(server()->GetProgress(),

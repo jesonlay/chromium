@@ -15,18 +15,18 @@ import("//build/config/ui.gni")
 import("//components/nacl/features.gni")
 import("//device/vr/buildflags/buildflags.gni")
 import("//extensions/buildflags/buildflags.gni")
-import("//media/media_options.gni")
+import("//gpu/vulkan/features.gni")
 import("//media/gpu/args.gni")
+import("//media/media_options.gni")
 import("//remoting/remoting_enable.gni")
+import("//testing/test.gni")
 import("//third_party/openh264/openh264_args.gni")
 import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
 import("//ui/base/ui_features.gni")
-import("//ui/webui/webui_features.gni")
 import("//ui/ozone/ozone.gni")
+import("//ui/webui/webui_features.gni")
 import("//v8/gni/v8.gni")
 import("//v8/snapshot_toolchain.gni")
-import("//gpu/vulkan/features.gni")
-import("//testing/test.gni")
 
 if (is_android) {
   import("//build/config/android/config.gni")
@@ -304,6 +304,9 @@ group("gn_all") {
       "//content/public/android:content_junit_tests",
       "//content/shell/android:content_shell_apk",
       "//device:device_junit_tests",
+
+      # TODO(https://crbug.com/879065): remove once tests have been migrated to
+      # the video_decode_accelerator_tests target.
       "//media/gpu:video_decode_accelerator_unittest",
       "//net/android:net_junit_tests",
       "//services:service_junit_tests",
@@ -397,7 +400,6 @@ group("gn_all") {
       "//ash:ash_unittests",
       "//ash/app_list:app_list_demo",
       "//ash/app_list:app_list_unittests",
-      "//chrome/browser/resources/chromeos/zip_archiver/cpp:ziparchiver_unittests",
       "//chromeos:chromeos_unittests",
       "//chromeos/components:chromeos_components_unittests",
       "//chromeos/components/proximity_auth:proximity_auth_unittests",
@@ -553,7 +555,6 @@ group("gn_all") {
         "//media/cast:tap_proxy",
         "//skia:filter_fuzz_stub",
         "//skia:image_operations_bench",
-        "//third_party/sqlite:sqlite_shell",
         "//ui/snapshot:snapshot_unittests",
       ]
 
@@ -669,6 +670,10 @@ group("gn_all") {
     deps += [ "//third_party/perfetto:all" ]
   }
 
+  if (is_mac || is_linux) {
+    deps += [ "//third_party/sqlite:sqlite_shell" ]
+  }
+
   if (is_linux && !is_chromeos && !is_chromecast) {
     # TODO(GYP): Figure out if any of these should be in gn_all
     # and figure out how cross-platform they are
@@ -721,11 +726,17 @@ group("gn_all") {
       (is_win && (use_drfuzz || use_libfuzzer)) || (use_libfuzzer && is_mac)) {
     deps += [
       "//testing/libfuzzer/fuzzers",
-      "//testing/libfuzzer/tests:libfuzzer_tests",
       "//third_party/icu/fuzzers",
       "//third_party/qcms:fuzzers",
       "//third_party/zlib/contrib/tests/fuzzers",
     ]
+
+    # TODO(crbug.com/906751): Get the libFuzzer tests working on Windows.
+    # Disable them for now becaue they cause the Windows clang ToT builder to
+    # fail.
+    if (!is_win) {
+      deps += [ "//testing/libfuzzer/tests:libfuzzer_tests" ]
+    }
   }
 
   if (enable_nacl) {
@@ -777,6 +788,16 @@ group("gn_all") {
     deps += [
       "//tools/accessibility/inspect:ax_dump_events",
       "//tools/accessibility/inspect:ax_dump_tree",
+    ]
+  }
+}
+
+if ((is_linux || is_win) && enable_remoting && !use_ozone) {
+  # This group is used for network annotation check test.
+  group("shipped_binaries") {
+    deps = [
+      "//chrome:chrome",
+      "//remoting/host:host",
     ]
   }
 }
@@ -870,6 +891,10 @@ if (is_chromeos) {
 
     if (use_v4l2_codec || use_vaapi) {
       deps += [
+        "//media/gpu:video_decode_accelerator_tests",
+
+        # TODO(https://crbug.com/879065): remove once tests have been migrated
+        # to the above target.
         "//media/gpu:video_decode_accelerator_unittest",
         "//media/gpu:video_encode_accelerator_unittest",
       ]

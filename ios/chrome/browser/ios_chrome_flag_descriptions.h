@@ -41,6 +41,24 @@ extern const char
 extern const char kEnableAutofillSaveCreditCardUsesStrikeSystemName[];
 extern const char kEnableAutofillSaveCreditCardUsesStrikeSystemDescription[];
 
+extern const char kSyncPseudoUSSFaviconsName[];
+extern const char kSyncPseudoUSSFaviconsDescription[];
+
+extern const char kSyncPseudoUSSHistoryDeleteDirectivesName[];
+extern const char kSyncPseudoUSSHistoryDeleteDirectivesDescription[];
+
+extern const char kSyncPseudoUSSPasswordsName[];
+extern const char kSyncPseudoUSSPasswordsDescription[];
+
+extern const char kSyncPseudoUSSPreferencesName[];
+extern const char kSyncPseudoUSSPreferencesDescription[];
+
+extern const char kSyncPseudoUSSPriorityPreferencesName[];
+extern const char kSyncPseudoUSSPriorityPreferencesDescription[];
+
+extern const char kSyncPseudoUSSSupervisedUsersName[];
+extern const char kSyncPseudoUSSSupervisedUsersDescription[];
+
 // Title and description for the flag to control if Chrome Sync should use the
 // sandbox servers.
 extern const char kSyncSandboxName[];
@@ -102,6 +120,11 @@ extern const char kAutofillShowAllSuggestionsOnPrefilledFormsDescription[];
 // to checkout flows.
 extern const char kAutofillRestrictUnownedFieldsToFormlessCheckoutName[];
 extern const char kAutofillRestrictUnownedFieldsToFormlessCheckoutDescription[];
+
+// Title and description for the flag to enable rich autofill queries on
+// Canary/Dev.
+extern const char kAutofillRichMetadataQueriesName[];
+extern const char kAutofillRichMetadataQueriesDescription[];
 
 // Title and description for the flag to control GPay branding in credit card
 // upstream infobar.

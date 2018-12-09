@@ -640,8 +640,6 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     self.Flaky('conformance/textures/image/' +
                'tex-2d-rgb-rgb-unsigned_byte.html',
                ['linux', 'nvidia'], bug=596622)
-    self.Flaky('conformance2/context/methods-2.html',
-               ['linux', 'nvidia'], bug=906212)
 
     # NVIDIA P400 OpenGL
     self.Fail('conformance/limits/gl-max-texture-dimensions.html',
@@ -709,6 +707,9 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     self.Skip('conformance/textures/misc/texture-npot-video.html',
         ['android', 'android-webview-instrumentation', 'no_passthrough'],
               bug=352645)
+    self.Flaky('conformance/textures/video/' +
+        'tex-2d-rgba-rgba-unsigned_short_5_5_5_1.html',
+        ['android', 'release'], bug=907512)
 
     # These video tests appear to be flaky.
     self.Flaky('conformance/textures/video/' +
@@ -896,9 +897,6 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     self.Flaky('conformance/textures/image_bitmap_from_video/' +
         'tex-2d-rgb-rgb-unsigned_short_5_6_5.html', ['android', 'nvidia'],
         bug=891456)
-    self.Flaky('conformance/textures/video/' +
-        'tex-2d-rgba-rgba-unsigned_short_5_5_5_1.html',
-        ['android', 'release', 'nvidia'], bug=906158)
 
     # Flaky timeout on android_n5x_swarming_rel and
     # android-marshmallow-arm64-rel.

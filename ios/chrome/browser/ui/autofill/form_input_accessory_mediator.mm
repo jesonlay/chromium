@@ -14,6 +14,7 @@
 #import "components/autofill/ios/form_util/form_activity_observer_bridge.h"
 #include "components/autofill/ios/form_util/form_activity_params.h"
 #import "ios/chrome/browser/autofill/form_input_accessory_consumer.h"
+#import "ios/chrome/browser/autofill/form_input_accessory_view.h"
 #import "ios/chrome/browser/autofill/form_input_accessory_view_handler.h"
 #import "ios/chrome/browser/autofill/form_input_suggestions_provider.h"
 #import "ios/chrome/browser/autofill/form_suggestion_tab_helper.h"
@@ -33,10 +34,11 @@
 #error "This file requires ARC support."
 #endif
 
-@interface FormInputAccessoryMediator ()<FormActivityObserver,
-                                         CRWWebStateObserver,
-                                         KeyboardObserverHelperDelegate,
-                                         WebStateListObserving>
+@interface FormInputAccessoryMediator () <FormActivityObserver,
+                                          FormInputAccessoryViewDelegate,
+                                          CRWWebStateObserver,
+                                          KeyboardObserverHelperDelegate,
+                                          WebStateListObserving>
 
 // The JS manager for interacting with the underlying form.
 @property(nonatomic, weak) JsSuggestionManager* JSSuggestionManager;
@@ -70,6 +72,10 @@
 // The WebState this instance is observing. Can be null.
 @property(nonatomic, assign) web::WebState* webState;
 
+// Track the use of hardware keyboard, when there's a notification of keyboard
+// use but no keyboard on the screen.
+@property(nonatomic, assign) BOOL hardwareKeyboard;
+
 @end
 
 @implementation FormInputAccessoryMediator {
@@ -96,6 +102,7 @@
   self = [super init];
   if (self) {
     _consumer = consumer;
+    _consumer.navigationDelegate = self;
     if (webStateList) {
       _webStateList = webStateList;
       _webStateListObserver =
@@ -148,7 +155,6 @@
     _webState->RemoveObserver(_webStateObserverBridge.get());
     _webStateObserverBridge.reset();
     _webState = nullptr;
-    _formActivityObserverBridge.reset();
   }
   if (_webStateList) {
     _webStateList->RemoveObserver(_webStateListObserver.get());
@@ -206,10 +212,27 @@
     return;
   }
 
-  [_formInputAccessoryHandler
+  [self.formInputAccessoryHandler
       setLastFocusFormActivityWebFrameID:base::SysUTF8ToNSString(
                                              params.frame_id)];
+  [self synchronizeNavigationControls];
   [self retrieveSuggestionsForForm:params webState:webState];
+}
+
+#pragma mark - FormInputAccessoryViewDelegate
+
+- (void)formInputAccessoryViewDidTapNextButton:(FormInputAccessoryView*)sender {
+  [self.formInputAccessoryHandler selectNextElementWithButtonPress];
+}
+
+- (void)formInputAccessoryViewDidTapPreviousButton:
+    (FormInputAccessoryView*)sender {
+  [self.formInputAccessoryHandler selectPreviousElementWithButtonPress];
+}
+
+- (void)formInputAccessoryViewDidTapCloseButton:
+    (FormInputAccessoryView*)sender {
+  [self.formInputAccessoryHandler closeKeyboardWithButtonPress];
 }
 
 #pragma mark - CRWWebStateObserver
@@ -260,7 +283,6 @@
 
 - (void)disableSuggestions {
   self.suggestionsDisabled = YES;
-  [self updateWithProvider:nil suggestions:nil];
 }
 
 - (void)enableSuggestions {
@@ -279,10 +301,23 @@
   }
   [_currentProvider inputAccessoryViewControllerDidReset];
   _currentProvider = currentProvider;
-  [_currentProvider setAccessoryViewDelegate:self.formInputAccessoryHandler];
+  _currentProvider.formInputNavigator = self.formInputAccessoryHandler;
 }
 
 #pragma mark - Private
+
+// Update the status of the consumer form navigation buttons to match the
+// handler state.
+- (void)synchronizeNavigationControls {
+  __weak __typeof(self) weakSelf = self;
+  [self.formInputAccessoryHandler
+      fetchPreviousAndNextElementsPresenceWithCompletionHandler:^(
+          BOOL previousButtonEnabled, BOOL nextButtonEnabled) {
+        weakSelf.consumer.formInputNextButtonEnabled = nextButtonEnabled;
+        weakSelf.consumer.formInputPreviousButtonEnabled =
+            previousButtonEnabled;
+      }];
+}
 
 // Updates the accessory mediator with the passed web state, its JS suggestion
 // manager and the registered providers. If NULL is passed it will instead clear
@@ -402,23 +437,27 @@ queryViewBlockForProvider:(id<FormInputSuggestionsProvider>)provider
   // If the suggestions are disabled, post this view with no suggestions to the
   // consumer. This allows the navigation buttons be in sync.
   if (self.suggestionsDisabled) {
-    [self.consumer showAccessorySuggestions:@[]
-                           suggestionClient:provider
-                         navigationDelegate:self.formInputAccessoryHandler];
+    return;
   } else {
     // If suggestions are enabled update |currentProvider|.
     self.currentProvider = provider;
+    // Post it to the consumer.
+    [self.consumer showAccessorySuggestions:suggestions
+                           suggestionClient:provider
+                         isHardwareKeyboard:self.hardwareKeyboard];
   }
-  // Post it to the consumer.
-  [self.consumer showAccessorySuggestions:suggestions
-                         suggestionClient:provider
-                       navigationDelegate:self.formInputAccessoryHandler];
 }
 
 #pragma mark - Keyboard Notifications
 
 // When the keyboard is shown, send the last suggestions to the consumer.
 - (void)handleKeyboardWillShow:(NSNotification*)notification {
+  NSDictionary* userInfo = [notification userInfo];
+  CGRect keyboardFrame =
+      [[userInfo objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue];
+  self.hardwareKeyboard =
+      !CGRectContainsRect([UIScreen mainScreen].bounds, keyboardFrame);
+
   if (self.lastSuggestions) {
     [self updateWithProvider:self.lastProvider
                  suggestions:self.lastSuggestions];

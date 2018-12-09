@@ -372,7 +372,10 @@ void CheckSecureConnectionExplanation(
 
   // The description should summarize the settings.
   EXPECT_NE(std::string::npos, explanation.description.find(protocol));
-  EXPECT_NE(std::string::npos, explanation.description.find(key_exchange));
+  if (key_exchange == nullptr)
+    EXPECT_TRUE(is_tls13);
+  else
+    EXPECT_NE(std::string::npos, explanation.description.find(key_exchange));
   EXPECT_NE(std::string::npos,
             explanation.description.find(key_exchange_group));
   EXPECT_NE(std::string::npos, explanation.description.find(cipher));
@@ -2229,6 +2232,13 @@ IN_PROC_BROWSER_TEST_P(SecurityStateTabHelperIncognitoTest,
 // TODO(estark): add console messages for the |kMarkHttpAsParameterWarning|
 // configuration of |kMarkHttpAsFeature| and update this test accordingly.
 // https://crbug.com/802921
+#if defined(OS_WIN)
+#define MAYBE_ConsoleMessageNotPrintedForAbortedNavigation \
+  DISABLED_ConsoleMessageNotPrintedForAbortedNavigation
+#else
+#define MAYBE_ConsoleMessageNotPrintedForAbortedNavigation \
+  ConsoleMessageNotPrintedForAbortedNavigation
+#endif
 IN_PROC_BROWSER_TEST_P(SecurityStateTabHelperIncognitoTest,
                        ConsoleMessageNotPrintedForAbortedNavigation) {
   base::test::ScopedFeatureList scoped_feature_list;

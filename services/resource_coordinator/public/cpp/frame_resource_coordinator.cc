@@ -70,22 +70,22 @@ void FrameResourceCoordinator::ConnectToService(
 void FrameResourceCoordinator::SetProcessByID(
     const CoordinationUnitID& process_id) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  DCHECK(service_);
-  service_->SetProcess(process_id);
+  if (service_)
+    service_->SetProcess(process_id);
 }
 
 void FrameResourceCoordinator::AddChildFrameByID(
     const CoordinationUnitID& child_id) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  DCHECK(service_);
-  service_->AddChildFrame(child_id);
+  if (service_)
+    service_->AddChildFrame(child_id);
 }
 
 void FrameResourceCoordinator::RemoveChildFrameByID(
     const CoordinationUnitID& child_id) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  DCHECK(service_);
-  service_->RemoveChildFrame(child_id);
+  if (service_)
+    service_->RemoveChildFrame(child_id);
 }
 
 }  // namespace resource_coordinator

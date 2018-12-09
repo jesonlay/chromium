@@ -159,14 +159,15 @@ EventHandler::EventHandler(LocalFrame& frame)
       mouse_event_manager_(new MouseEventManager(frame, *scroll_manager_)),
       mouse_wheel_event_manager_(new MouseWheelEventManager(frame)),
       keyboard_event_manager_(
-          new KeyboardEventManager(frame, *scroll_manager_)),
+          MakeGarbageCollected<KeyboardEventManager>(frame, *scroll_manager_)),
       pointer_event_manager_(
           new PointerEventManager(frame, *mouse_event_manager_)),
-      gesture_manager_(new GestureManager(frame,
-                                          *scroll_manager_,
-                                          *mouse_event_manager_,
-                                          *pointer_event_manager_,
-                                          *selection_controller_)),
+      gesture_manager_(
+          MakeGarbageCollected<GestureManager>(frame,
+                                               *scroll_manager_,
+                                               *mouse_event_manager_,
+                                               *pointer_event_manager_,
+                                               *selection_controller_)),
       active_interval_timer_(frame.GetTaskRunner(TaskType::kUserInteraction),
                              this,
                              &EventHandler::ActiveIntervalTimerFired) {}
@@ -807,6 +808,7 @@ void EventHandler::HandleMouseLeaveEvent(const WebMouseEvent& event) {
   HandleMouseMoveOrLeaveEvent(event, Vector<WebMouseEvent>(),
                               Vector<WebMouseEvent>(), nullptr, nullptr, false,
                               true);
+  pointer_event_manager_->RemoveLastMousePosition();
 }
 
 WebInputEventResult EventHandler::HandleMouseMoveOrLeaveEvent(
@@ -1899,7 +1901,7 @@ WebInputEventResult EventHandler::SendContextMenuEvent(
   return mouse_event_manager_->DispatchMouseEvent(
       EffectiveMouseEventTargetNode(target_node),
       event_type_names::kContextmenu, event,
-      mev.GetHitTestResult().CanvasRegionId(), nullptr);
+      mev.GetHitTestResult().CanvasRegionId(), nullptr, nullptr);
 }
 
 static bool ShouldShowContextMenuAtSelection(const FrameSelection& selection) {

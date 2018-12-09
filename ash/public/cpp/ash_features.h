@@ -63,6 +63,13 @@ ASH_PUBLIC_EXPORT extern const base::Feature kNotificationExpansionAnimation;
 // Enables notification scroll bar in UnifiedSystemTray.
 ASH_PUBLIC_EXPORT extern const base::Feature kNotificationScrollBar;
 
+// Enables rounded corners for the Picture-in-picture window.
+ASH_PUBLIC_EXPORT extern const base::Feature kPipRoundedCorners;
+
+// Enables displaying separate network icons for different networks types.
+// https://crbug.com/902409
+ASH_PUBLIC_EXPORT extern const base::Feature kSeparateNetworkIcons;
+
 // Enables trilinear filtering.
 ASH_PUBLIC_EXPORT extern const base::Feature kTrilinearFiltering;
 
@@ -90,6 +97,10 @@ ASH_PUBLIC_EXPORT bool IsNightLightEnabled();
 ASH_PUBLIC_EXPORT bool IsNotificationExpansionAnimationEnabled();
 
 ASH_PUBLIC_EXPORT bool IsNotificationScrollBarEnabled();
+
+ASH_PUBLIC_EXPORT bool IsPipRoundedCornersEnabled();
+
+ASH_PUBLIC_EXPORT bool IsSeparateNetworkIconsEnabled();
 
 ASH_PUBLIC_EXPORT bool IsTrilinearFilteringEnabled();
 

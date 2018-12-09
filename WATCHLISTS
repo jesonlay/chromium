@@ -130,6 +130,10 @@
     'arc_fileapi': {
       'filepath': 'chrome/browser/chromeos/arc/fileapi'
     },
+    'arc_ime': {
+      'filepath': 'chrome/browser/chromeos/arc/input_method_manager/'\
+                  '|components/arc/ime/'
+    },
     'arc_kiosk': {
       'filepath': 'chrome/browser/chromeos/app_mode/arc/'\
                   '|components/arc/kiosk/'\
@@ -1493,10 +1497,6 @@
                   '|third_party/hunspell/'\
                   '|third_party/hunspell_dictionaries/',
     },
-    'stack_sampling_profiler': {
-      'filepath': 'components/metrics/*call_stack_profile*'\
-                  '|base/profiler/',
-    },
     'startup': {
       'filepath': 'chrome/browser/ui/startup/',
     },
@@ -1813,6 +1813,7 @@
     'arc_auth': ['khmel+watch@chromium.org'],
     'arc_common': ['hashimoto+watch@chromium.org'],
     'arc_fileapi': ['nya+watch@chromium.org'],
+    'arc_ime': ['yhanada+watch@chromium.org'],
     'arc_kiosk': ['poromov+watch@chromium.org'],
     'arc_net': ['abhishekbh@chromium.org',
                 'cernekee@chromium.org',
@@ -2407,7 +2408,6 @@
     'spellcheck': ['rlp+watch@chromium.org',
                    'rouslan+spell@chromium.org',
                    'timvolodine@chromium.org'],
-    'stack_sampling_profiler': ['chengx+watch@chromium.org'],
     'startup': ['grt+watch@chromium.org',
                 'pastarmovj+watch@chromium.org'],
     'streams': ['zork+watch@chromium.org'],

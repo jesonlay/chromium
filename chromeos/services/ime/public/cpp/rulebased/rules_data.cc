@@ -101,6 +101,21 @@ static const std::map<std::string, RawDataEntry> kRawData = {
                                  kn_phone::kTransformsLen,
                                  kn_phone::kHistoryPrune)},
     {lo::kId, RawDataEntry(lo::kKeyMap, lo::kIs102)},
+    {ml_phone::kId, RawDataEntry(us::kKeyMap,
+                                 us::kIs102,
+                                 ml_phone::kTransforms,
+                                 ml_phone::kTransformsLen,
+                                 ml_phone::kHistoryPrune)},
+    {my::kId, RawDataEntry(my::kKeyMap,
+                           my::kIs102,
+                           my::kTransforms,
+                           my::kTransformsLen,
+                           my::kHistoryPrune)},
+    {my_myansan::kId, RawDataEntry(my_myansan::kKeyMap,
+                                   my_myansan::kIs102,
+                                   my_myansan::kTransforms,
+                                   my_myansan::kTransformsLen,
+                                   my_myansan::kHistoryPrune)},
     {ne_inscript::kId, RawDataEntry(ne_inscript::kKeyMap, ne_inscript::kIs102)},
     {ne_phone::kId, RawDataEntry(ne_phone::kKeyMap, ne_phone::kIs102)},
     {ru_phone_aatseel::kId,
@@ -162,7 +177,7 @@ static const std::map<std::string, RawDataEntry> kRawData = {
 
 static const char* k101Keys[] = {
     // Row #1
-    "BackQuote", "Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6",
+    "Backquote", "Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6",
     "Digit7", "Digit8", "Digit9", "Digit0", "Minus", "Equal",
     // Row #2
     "KeyQ", "KeyW", "KeyE", "KeyR", "KeyT", "KeyY", "KeyU", "KeyI", "KeyO",
@@ -178,7 +193,7 @@ static const char* k101Keys[] = {
 
 static const char* k102Keys[] = {
     // Row #1
-    "BackQuote", "Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6",
+    "Backquote", "Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6",
     "Digit7", "Digit8", "Digit9", "Digit0", "Minus", "Equal",
     // Row #2
     "KeyQ", "KeyW", "KeyE", "KeyR", "KeyT", "KeyY", "KeyU", "KeyI", "KeyO",

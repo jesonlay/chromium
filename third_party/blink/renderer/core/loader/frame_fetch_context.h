@@ -74,6 +74,7 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
 
   static void ProvideDocumentToContext(FetchContext&, Document*);
 
+  FrameFetchContext(DocumentLoader*, Document*);
   ~FrameFetchContext() override;
 
   bool IsFrameFetchContext() override { return true; }
@@ -114,9 +115,9 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
                                   ResourceResponseType) override;
   void DispatchDidReceiveData(unsigned long identifier,
                               const char* data,
-                              int data_length) override;
+                              size_t data_length) override;
   void DispatchDidReceiveEncodedData(unsigned long identifier,
-                                     int encoded_data_length) override;
+                                     size_t encoded_data_length) override;
   void DispatchDidDownloadToBlob(unsigned long identifier,
                                  BlobDataHandle*) override;
   void DispatchDidFinishLoading(unsigned long identifier,
@@ -191,8 +192,6 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
   struct FrozenState;
 
   static ResourceFetcher* CreateFetcher(DocumentLoader*, Document*);
-
-  FrameFetchContext(DocumentLoader*, Document*);
 
   // Convenient accessors below can be used to transparently access the
   // relevant document loader or frame in either cases without null-checks.

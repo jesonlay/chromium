@@ -662,6 +662,13 @@ class OrderfileGenerator(object):
       self._orderfile_updater.UploadToCloudStorage(
           filename, use_debug_location=False)
 
+  def UploadReadyOrderfiles(self):
+    self._step_recorder.BeginStep('Upload Ready Orderfiles')
+    for file_name in [self._GetUnpatchedOrderfileFilename(),
+        self._GetPathToOrderfile()]:
+      self._orderfile_updater.UploadToCloudStorage(
+          file_name, use_debug_location=False)
+
   def _GetHashFilePathAndContents(self, base_file):
     """Gets the name and content of the hash file created from uploading the
     given file.
@@ -719,7 +726,7 @@ class OrderfileGenerator(object):
       with file(self._options.manual_symbol_offsets) as f:
         symbol_offsets = [int(x) for x in f.xreadlines()]
       processor = process_profiles.SymbolOffsetProcessor(
-          self._options.manual_libname)
+          self._compiler.manual_libname)
       generator = cyglog_to_orderfile.OffsetOrderfileGenerator(
           processor, cyglog_to_orderfile.ObjectFileProcessor(
               self._options.manual_objdir))
@@ -846,6 +853,11 @@ def CreateArgumentParser():
                       help=('Directory to save any profiles created. These can '
                             'be used with --pregenerated-profiles.  Cannot be '
                             'used with --skip-profiles.'))
+  parser.add_argument('--upload-ready-orderfiles', action='store_true',
+                      help=('Skip orderfile generation and manually upload '
+                            'orderfiles (both patched and unpatched) from '
+                            'their normal location in the tree to the cloud '
+                            'storage. DANGEROUS! USE WITH CARE!'))
 
   profile_android_startup.AddProfileCollectionArguments(parser)
   return parser
@@ -868,6 +880,8 @@ def CreateOrderfile(options, orderfile_updater_class):
   try:
     if options.verify:
       generator._VerifySymbolOrder()
+    elif options.upload_ready_orderfiles:
+      return generator.UploadReadyOrderfiles()
     else:
       return generator.Generate()
   finally:

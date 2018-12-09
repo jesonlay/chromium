@@ -92,6 +92,13 @@ class BackgroundFetchDelegateProxy::Core
       std::unique_ptr<BackgroundFetchDescription> fetch_description) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
+    // If there are multiple clients created we might have registered the wrong
+    // one with the delegate by overwriting it. This check makes sure that we
+    // register the correct client until multiple clients are supported.
+    // TODO(crbug.com/907075): Support multiple clients.
+    if (delegate_ && delegate_->client().get() != this)
+      delegate_->SetDelegateClient(GetWeakPtrOnUI());
+
     if (delegate_)
       delegate_->CreateDownloadJob(std::move(fetch_description));
   }
@@ -156,9 +163,12 @@ class BackgroundFetchDelegateProxy::Core
       headers.SetHeader("Origin", origin.Serialize());
     }
 
+    // TODO(crbug.com/774054): Update |has_request_body| after the cache storage
+    // supports request bodies.
     delegate_->DownloadUrl(job_unique_id, request->download_guid(),
                            fetch_request.method, fetch_request.url,
-                           traffic_annotation, headers);
+                           traffic_annotation, headers,
+                           /* has_request_body= */ false);
   }
 
   void Abort(const std::string& job_unique_id) {
@@ -201,6 +211,10 @@ class BackgroundFetchDelegateProxy::Core
       std::unique_ptr<content::BackgroundFetchResponse> response) override;
   void OnUIActivated(const std::string& unique_id) override;
   void OnDelegateShutdown() override;
+  void GetUploadData(
+      const std::string& job_unique_id,
+      const std::string& download_guid,
+      BackgroundFetchDelegate::GetUploadDataCallback callback) override;
 
  private:
   // Weak reference to the IO thread outer class that owns us.
@@ -271,6 +285,31 @@ void BackgroundFetchDelegateProxy::Core::OnUIActivated(
 
 void BackgroundFetchDelegateProxy::Core::OnDelegateShutdown() {
   delegate_ = nullptr;
+}
+
+void BackgroundFetchDelegateProxy::Core::GetUploadData(
+    const std::string& job_unique_id,
+    const std::string& download_guid,
+    BackgroundFetchDelegate::GetUploadDataCallback callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  // Pass this to the IO thread for processing, but wrap |callback|
+  // to be posted back to the UI thread when executed.
+  BackgroundFetchDelegate::GetUploadDataCallback wrapped_callback =
+      base::BindOnce(
+          [](BackgroundFetchDelegate::GetUploadDataCallback callback,
+             scoped_refptr<network::ResourceRequestBody> body) {
+            base::PostTaskWithTraits(
+                FROM_HERE, {BrowserThread::UI},
+                base::BindOnce(std::move(callback), std::move(body)));
+          },
+          std::move(callback));
+
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::IO},
+      base::BindOnce(&BackgroundFetchDelegateProxy::GetUploadData, io_parent_,
+                     job_unique_id, download_guid,
+                     std::move(wrapped_callback)));
 }
 
 BackgroundFetchDelegateProxy::JobDetails::JobDetails(
@@ -493,6 +532,19 @@ void BackgroundFetchDelegateProxy::OnDownloadComplete(
 
   if (job_details.controller)
     job_details.controller->DidCompleteRequest(request_info);
+}
+
+void BackgroundFetchDelegateProxy::GetUploadData(
+    const std::string& job_unique_id,
+    const std::string& download_guid,
+    BackgroundFetchDelegate::GetUploadDataCallback callback) {
+  auto& job_details = job_details_map_.find(job_unique_id)->second;
+  DCHECK(job_details.controller);
+
+  const auto& request =
+      job_details.current_request_map[download_guid]->fetch_request_ptr();
+  job_details.controller->GetUploadData(
+      BackgroundFetchSettledFetch::CloneRequest(request), std::move(callback));
 }
 
 }  // namespace content

@@ -184,6 +184,7 @@ const base::Feature kWebXrGamepadSupport{"WebXRGamepadSupport",
 
 // Causes the implementations of guests (inner WebContents) to use
 // out-of-process iframes.
+// TODO(533069): Remove once BrowserPlugin is removed.
 const base::Feature kGuestViewCrossProcessFrames{
     "GuestViewCrossProcessFrames", base::FEATURE_ENABLED_BY_DEFAULT};
 
@@ -618,6 +619,10 @@ const base::Feature kWorkStealingInScriptRunner{
 // Enabled scheduler use for script streaming.
 const base::Feature kScheduledScriptStreaming{
     "ScheduledScriptStreaming", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Start streaming scripts on script preload.
+const base::Feature kScriptStreamingOnPreload{
+    "ScriptStreamingOnPreload", base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if defined(OS_ANDROID)
 // Autofill Accessibility in Android.

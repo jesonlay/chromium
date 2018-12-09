@@ -111,7 +111,7 @@ static BodyStreamBuffer* ExtractBody(ScriptState* script_state,
     // is potentially unsafe.
     DOMArrayBuffer* array_buffer = V8ArrayBuffer::ToImpl(body.As<v8::Object>());
     return_buffer = new BodyStreamBuffer(
-        script_state, new FormDataBytesConsumer(array_buffer),
+        script_state, MakeGarbageCollected<FormDataBytesConsumer>(array_buffer),
         nullptr /* AbortSignal */);
   } else if (body->IsArrayBufferView()) {
     // Avoid calling into V8 from the following constructor parameters, which
@@ -119,7 +119,8 @@ static BodyStreamBuffer* ExtractBody(ScriptState* script_state,
     DOMArrayBufferView* array_buffer_view =
         V8ArrayBufferView::ToImpl(body.As<v8::Object>());
     return_buffer = new BodyStreamBuffer(
-        script_state, new FormDataBytesConsumer(array_buffer_view),
+        script_state,
+        MakeGarbageCollected<FormDataBytesConsumer>(array_buffer_view),
         nullptr /* AbortSignal */);
   } else if (V8FormData::hasInstance(body, isolate)) {
     scoped_refptr<EncodedFormData> form_data =
@@ -128,17 +129,19 @@ static BodyStreamBuffer* ExtractBody(ScriptState* script_state,
     // FormDataEncoder::generateUniqueBoundaryString.
     content_type = AtomicString("multipart/form-data; boundary=") +
                    form_data->Boundary().data();
-    return_buffer = new BodyStreamBuffer(
-        script_state,
-        new FormDataBytesConsumer(execution_context, std::move(form_data)),
-        nullptr /* AbortSignal */);
+    return_buffer =
+        new BodyStreamBuffer(script_state,
+                             MakeGarbageCollected<FormDataBytesConsumer>(
+                                 execution_context, std::move(form_data)),
+                             nullptr /* AbortSignal */);
   } else if (V8URLSearchParams::hasInstance(body, isolate)) {
     scoped_refptr<EncodedFormData> form_data =
         V8URLSearchParams::ToImpl(body.As<v8::Object>())->ToEncodedFormData();
-    return_buffer = new BodyStreamBuffer(
-        script_state,
-        new FormDataBytesConsumer(execution_context, std::move(form_data)),
-        nullptr /* AbortSignal */);
+    return_buffer =
+        new BodyStreamBuffer(script_state,
+                             MakeGarbageCollected<FormDataBytesConsumer>(
+                                 execution_context, std::move(form_data)),
+                             nullptr /* AbortSignal */);
     content_type = "application/x-www-form-urlencoded;charset=UTF-8";
   } else {
     String string = NativeValueTraits<IDLUSVString>::NativeValue(
@@ -146,9 +149,9 @@ static BodyStreamBuffer* ExtractBody(ScriptState* script_state,
     if (exception_state.HadException())
       return nullptr;
 
-    return_buffer =
-        new BodyStreamBuffer(script_state, new FormDataBytesConsumer(string),
-                             nullptr /* AbortSignal */);
+    return_buffer = new BodyStreamBuffer(
+        script_state, MakeGarbageCollected<FormDataBytesConsumer>(string),
+        nullptr /* AbortSignal */);
     content_type = "text/plain;charset=UTF-8";
   }
 
@@ -619,9 +622,16 @@ Request* Request::Create(ScriptState* script_state, FetchRequestData* request) {
 
 Request* Request::Create(ScriptState* script_state,
                          const WebServiceWorkerRequest& web_request) {
-  FetchRequestData* request =
-      FetchRequestData::Create(script_state, web_request);
-  return new Request(script_state, request);
+  FetchRequestData* data = FetchRequestData::Create(script_state, web_request);
+  return new Request(script_state, data);
+}
+
+Request* Request::Create(
+    ScriptState* script_state,
+    const mojom::blink::FetchAPIRequest& fetch_api_request) {
+  FetchRequestData* data =
+      FetchRequestData::Create(script_state, fetch_api_request);
+  return new Request(script_state, data);
 }
 
 bool Request::ParseCredentialsMode(
@@ -883,35 +893,50 @@ bool Request::HasBody() const {
   return BodyBuffer();
 }
 
-void Request::PopulateWebServiceWorkerRequest(
-    WebServiceWorkerRequest& web_request) const {
-  web_request.SetMethod(method());
-  web_request.SetMode(request_->Mode());
-  web_request.SetCredentialsMode(request_->Credentials());
-  web_request.SetCacheMode(request_->CacheMode());
-  web_request.SetRedirectMode(request_->Redirect());
-  web_request.SetIntegrity(request_->Integrity());
-  web_request.SetIsHistoryNavigation(request_->IsHistoryNavigation());
-  web_request.SetRequestContext(request_->Context());
+mojom::blink::FetchAPIRequestPtr Request::CreateFetchAPIRequest() const {
+  auto fetch_api_request = mojom::blink::FetchAPIRequest::New();
+  fetch_api_request->method = method();
+  fetch_api_request->mode = request_->Mode();
+  fetch_api_request->credentials_mode = request_->Credentials();
+  fetch_api_request->cache_mode = request_->CacheMode();
+  fetch_api_request->redirect_mode = request_->Redirect();
+  fetch_api_request->integrity = request_->Integrity();
+  fetch_api_request->is_history_navigation = request_->IsHistoryNavigation();
+  fetch_api_request->request_context_type = request_->Context();
 
-  // Strip off the fragment part of URL. So far, all users of
-  // WebServiceWorkerRequest expect the fragment to be excluded.
+  // Strip off the fragment part of URL. So far, all callers expect the fragment
+  // to be excluded.
   KURL url(request_->Url());
   if (request_->Url().HasFragmentIdentifier())
     url.RemoveFragmentIdentifier();
-  web_request.SetURL(url);
+  fetch_api_request->url = url;
 
-  const FetchHeaderList* header_list = headers_->HeaderList();
-  for (const auto& header : header_list->List()) {
-    web_request.AppendHeader(header.first, header.second);
+  HTTPHeaderMap headers;
+  for (const auto& header : headers_->HeaderList()->List()) {
+    if (DeprecatedEqualIgnoringCase(header.first, "referer"))
+      continue;
+    AtomicString key(header.first);
+    AtomicString value(header.second);
+    HTTPHeaderMap::AddResult result = headers.Add(key, value);
+    if (!result.is_new_entry) {
+      result.stored_value->value =
+          result.stored_value->value + ", " + String(value);
+    }
   }
+  for (const auto& pair : headers)
+    fetch_api_request->headers.insert(pair.key, pair.value);
 
-  web_request.SetReferrer(request_->ReferrerString(),
-                          static_cast<network::mojom::ReferrerPolicy>(
-                              request_->GetReferrerPolicy()));
+  if (!request_->ReferrerString().IsEmpty()) {
+    fetch_api_request->referrer =
+        mojom::blink::Referrer::New(KURL(NullURL(), request_->ReferrerString()),
+                                    static_cast<network::mojom::ReferrerPolicy>(
+                                        request_->GetReferrerPolicy()));
+    DCHECK(fetch_api_request->referrer->url.IsValid());
+  }
   // FIXME: How can we set isReload properly? What is the correct place to load
   // it in to the Request object? We should investigate the right way to plumb
   // this information in to here.
+  return fetch_api_request;
 }
 
 String Request::MimeType() const {

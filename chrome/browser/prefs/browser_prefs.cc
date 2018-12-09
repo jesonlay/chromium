@@ -257,6 +257,7 @@
 #include "chrome/browser/chromeos/policy/device_status_collector.h"
 #include "chrome/browser/chromeos/policy/dm_token_storage.h"
 #include "chrome/browser/chromeos/policy/policy_cert_service_factory.h"
+#include "chrome/browser/chromeos/power/auto_screen_brightness/metrics_reporter.h"
 #include "chrome/browser/chromeos/power/power_metrics_reporter.h"
 #include "chrome/browser/chromeos/preferences.h"
 #include "chrome/browser/chromeos/printing/cups_printers_manager.h"
@@ -381,6 +382,10 @@ const char kReverseAutologinEnabled[] = "reverse_autologin.enabled";
 // Deprecated 11/2018.
 const char kNetworkQualities[] = "net.network_qualities";
 const char kForceSessionSync[] = "settings.history_recorded";
+const char kOnboardDuringNUX[] = "browser.onboard_during_nux";
+// This pref is particularly large, taking up 15+% of the prefs file, so should
+// perhaps be kept around longer than the others.
+const char kHttpServerProperties[] = "net.http_server_properties";
 
 // Register prefs used only for migration (clearing or moving to a new key).
 void RegisterProfilePrefsForMigration(
@@ -410,6 +415,9 @@ void RegisterProfilePrefsForMigration(
 
   registry->RegisterDictionaryPref(kNetworkQualities, PrefRegistry::LOSSY_PREF);
   registry->RegisterBooleanPref(kForceSessionSync, false);
+  registry->RegisterBooleanPref(kOnboardDuringNUX, false);
+  registry->RegisterDictionaryPref(kHttpServerProperties,
+                                   PrefRegistry::LOSSY_PREF);
 }
 
 }  // namespace
@@ -502,6 +510,8 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
   chromeos::MultiProfileUserController::RegisterPrefs(registry);
   chromeos::NetworkThrottlingObserver::RegisterPrefs(registry);
   chromeos::PowerMetricsReporter::RegisterLocalStatePrefs(registry);
+  chromeos::power::auto_screen_brightness::MetricsReporter::
+      RegisterLocalStatePrefs(registry);
   chromeos::Preferences::RegisterPrefs(registry);
   chromeos::ResetScreen::RegisterPrefs(registry);
   chromeos::ResourceReporter::RegisterPrefs(registry);
@@ -873,4 +883,6 @@ void MigrateObsoleteProfilePrefs(Profile* profile) {
   // Added 11/2018.
   profile_prefs->ClearPref(kNetworkQualities);
   profile_prefs->ClearPref(kForceSessionSync);
+  profile_prefs->ClearPref(kOnboardDuringNUX);
+  profile_prefs->ClearPref(kHttpServerProperties);
 }

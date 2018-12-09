@@ -26,6 +26,7 @@
 #include "media/base/scopedfd_helper.h"
 #include "media/base/unaligned_shared_memory.h"
 #include "media/base/video_types.h"
+#include "media/base/video_frame_layout.h"
 #include "media/gpu/gpu_video_encode_accelerator_helpers.h"
 #include "media/gpu/v4l2/v4l2_image_processor.h"
 #include "media/video/h264_parser.h"
@@ -209,22 +210,32 @@ bool V4L2VideoEncodeAccelerator::Initialize(const Config& config,
       return false;
     }
 
-    scoped_refptr<V4L2Device> device = V4L2Device::Create();
-    image_processor_.reset(
-        new V4L2ImageProcessor(device, V4L2_MEMORY_USERPTR, V4L2_MEMORY_MMAP));
+    auto input_layout =
+        VideoFrameLayout::Create(config.input_format, visible_size_);
+    if (!input_layout) {
+      VLOGF(1) << "Invalid image processor input layout";
+      return false;
+    }
+    auto output_layout =
+        VideoFrameLayout::Create(device_input_format_, input_allocated_size_);
+    if (!output_layout) {
+      VLOGF(1) << "Invalid image processor output layout";
+      return false;
+  }
 
     // Convert from |config.input_format| to |device_input_format_|, keeping the
     // size at |visible_size_| and requiring the output buffers to be of at
     // least |input_allocated_size_|. Unretained is safe because |this| owns
     // image processor and there will be no callbacks after processor destroys.
-    if (!image_processor_->Initialize(
-            config.input_format, device_input_format_, visible_size_,
-            visible_size_, visible_size_, input_allocated_size_,
-            kImageProcBufferCount,
-            base::Bind(&V4L2VideoEncodeAccelerator::ImageProcessorError,
-                       base::Unretained(this)))) {
-      VLOGF(1) << "Failed initializing image processor";
-      return false;
+  image_processor_ = V4L2ImageProcessor::Create(
+      V4L2Device::Create(), V4L2_MEMORY_USERPTR, V4L2_MEMORY_MMAP,
+      *input_layout, *output_layout, visible_size_, visible_size_,
+      kImageProcBufferCount,
+      base::Bind(&V4L2VideoEncodeAccelerator::ImageProcessorError,
+                 base::Unretained(this)));
+  if (!image_processor_) {
+    VLOGF(1) << "Failed initializing image processor";
+    return false;
     }
     // The output of image processor is the input of encoder. Output coded
     // width of processor must be the same as input coded width of encoder.

@@ -233,28 +233,20 @@ struct AutocompleteMatch {
   // - If the match's keyword is known, it can be provided in |keyword|.
   //   Otherwise, it can be left empty and the template URL (if any) is
   //   determined from the destination's hostname.
-  // - If |additional_query_params| is provided, these will be added to the
-  //   resulting URL in the cases where a template URL is used. This is used to
-  //   distinguish cases such as entity suggestions where the response contains
-  //   additional meaningful parameters beyond the search terms themselves.
-  static GURL GURLToStrippedGURL(
-      const GURL& url,
-      const AutocompleteInput& input,
-      const TemplateURLService* template_url_service,
-      const base::string16& keyword,
-      const std::string& additional_query_params = "");
+  static GURL GURLToStrippedGURL(const GURL& url,
+                                 const AutocompleteInput& input,
+                                 const TemplateURLService* template_url_service,
+                                 const base::string16& keyword);
 
-  // Sets the |match_in_scheme|, |match_in_subdomain|, and |match_after_host|
-  // flags based on the provided |url| and list of substring |match_positions|.
-  // |match_positions| is the [begin, end) positions of a match within the
-  // unstripped URL spec.
+  // Sets the |match_in_scheme| and |match_in_subdomain| flags based on the
+  // provided |url| and list of substring |match_positions|. |match_positions|
+  // is the [begin, end) positions of a match within the unstripped URL spec.
   using MatchPosition = std::pair<size_t, size_t>;
   static void GetMatchComponents(
       const GURL& url,
       const std::vector<MatchPosition>& match_positions,
       bool* match_in_scheme,
-      bool* match_in_subdomain,
-      bool* match_after_host);
+      bool* match_in_subdomain);
 
   // Gets the formatting flags used for display of suggestions. This method
   // encapsulates the return of experimental flags too, so any URLs displayed
@@ -263,12 +255,10 @@ struct AutocompleteMatch {
   // This function returns flags that may destructively format the URL, and
   // therefore should never be used for the |fill_into_edit| field.
   //
-  // |preserve_scheme|, |preserve_subdomain|, and |preserve_after_host| indicate
-  // that these URL components are important (part of the match), and should
-  // not be trimmed or elided.
+  // |preserve_scheme| and |preserve_subdomain| indicate that these URL
+  // components are important (part of the match), and should not be trimmed.
   static url_formatter::FormatUrlTypes GetFormatTypes(bool preserve_scheme,
-                                                      bool preserve_subdomain,
-                                                      bool preserve_after_host);
+                                                      bool preserve_subdomain);
 
   // Computes the stripped destination URL (via GURLToStrippedGURL()) and
   // stores the result in |stripped_destination_url|.  |input| is used for the
@@ -493,9 +483,6 @@ struct AutocompleteMatch {
   // accesses it must perform any necessary sanity checks before blindly using
   // it!
   base::string16 keyword;
-
-  // Set in matches originating from keyword results.
-  bool from_keyword;
 
   // Set to a matching pedal if appropriate.  The pedal is not owned, and the
   // owning OmniboxPedalProvider must outlive this.

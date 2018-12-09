@@ -440,7 +440,7 @@ extern const char kHasSeenWelcomePage[];
 #if defined(OS_WIN)
 extern const char kHasSeenWin10PromoPage[];
 #if defined(GOOGLE_CHROME_BUILD)
-extern const char kOnboardDuringNUX[];
+extern const char kNuxOnboardGroup[];
 #endif  // defined(GOOGLE_CHROME_BUILD)
 #endif  // defined(OS_WIN)
 
@@ -640,6 +640,11 @@ extern const char kArcAppInstallEventLoggingEnabled[];
 extern const char kRemoveUsersRemoteCommand[];
 extern const char kCameraMediaConsolidated[];
 extern const char kVpnConfigAllowed[];
+extern const char kAutoScreenBrightnessMetricsDailySample[];
+extern const char kAutoScreenBrightnessMetricsNoAlsUserAdjustmentCount[];
+extern const char kAutoScreenBrightnessMetricsSupportedAlsUserAdjustmentCount[];
+extern const char
+    kAutoScreenBrightnessMetricsUnsupportedAlsUserAdjustmentCount[];
 #endif  // defined(OS_CHROMEOS)
 
 extern const char kClearPluginLSODataEnabled[];

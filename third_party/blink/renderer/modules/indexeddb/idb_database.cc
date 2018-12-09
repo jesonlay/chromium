@@ -49,7 +49,6 @@
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/histogram.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
-#include "third_party/blink/renderer/platform/wtf/atomics.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 
 #include <limits>
@@ -100,7 +99,8 @@ IDBDatabase* IDBDatabase::Create(ExecutionContext* context,
                                  std::unique_ptr<WebIDBDatabase> database,
                                  IDBDatabaseCallbacks* callbacks,
                                  v8::Isolate* isolate) {
-  return new IDBDatabase(context, std::move(database), callbacks, isolate);
+  return MakeGarbageCollected<IDBDatabase>(context, std::move(database),
+                                           callbacks, isolate);
 }
 
 IDBDatabase::IDBDatabase(ExecutionContext* context,

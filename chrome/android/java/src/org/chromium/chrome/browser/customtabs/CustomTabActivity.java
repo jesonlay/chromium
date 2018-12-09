@@ -110,6 +110,7 @@ import org.chromium.chrome.browser.util.UrlUtilities;
 import org.chromium.chrome.browser.webapps.WebappCustomTabTimeSpentLogger;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.NavigationEntry;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.PageTransition;
@@ -203,6 +204,15 @@ public class CustomTabActivity extends ChromeActivity<CustomTabActivityComponent
     private LoadModuleCallback mModuleCallback;
 
     private ActivityTabTaskDescriptionHelper mTaskDescriptionHelper;
+
+    // Default visibility of the Toolbar prior to any header customization.
+    // The value is either View.VISIBLE, View.INVISIBLE, or View.GONE.
+    private int mDefaultToolbarVisibility;
+    // Default visibility of the Toolbar shadow prior to any header customization.
+    // The value is either View.VISIBLE, View.INVISIBLE, or View.GONE.
+    private int mDefaultToolbarShadowVisibility;
+    // Whether the progress bar is enabled prior to any header customization.
+    private boolean mDefaultIsProgressBarEnabled;
 
     /**
      * Return true when the activity has been launched in a separate task. The default behavior is
@@ -334,6 +344,9 @@ public class CustomTabActivity extends ChromeActivity<CustomTabActivityComponent
         moduleLoader.loadModule();
         mModuleCallback = new LoadModuleCallback();
         moduleLoader.addCallbackAndIncrementUseCount(mModuleCallback);
+
+        getComponent().resolveCloseButtonNavigator()
+                .setLandingPageCriteria(this::isModuleManagedUrl);
     }
 
     private boolean isModuleLoading() {
@@ -368,6 +381,12 @@ public class CustomTabActivity extends ChromeActivity<CustomTabActivityComponent
             maybeInitialiseDynamicModulePostMessageHandler(
                     new ActivityDelegatePostMessageBackend());
         }
+    }
+
+    @Nullable
+    private NavigationController getNavigationController() {
+        WebContents webContents = getActivityTab().getWebContents();
+        return webContents == null ? null : webContents.getNavigationController();
     }
 
     @VisibleForTesting
@@ -423,8 +442,7 @@ public class CustomTabActivity extends ChromeActivity<CustomTabActivityComponent
 
     public void setTopBarContentView(View view) {
         mTopBarDelegate.setTopBarContentView(view);
-        mTopBarDelegate.showTopBarIfNecessary(
-                isModuleManagedUrl(mIntentDataProvider.getUrlToLoad()));
+        maybeUpdateCctHeaderVisibility(mIntentDataProvider.getUrlToLoad());
     }
 
     /**
@@ -502,6 +520,9 @@ public class CustomTabActivity extends ChromeActivity<CustomTabActivityComponent
                 getFullscreenManager());
         mBottomBarDelegate.showBottomBarIfNecessary();
         mTopBarDelegate = new CustomTabTopBarDelegate(this);
+        mDefaultToolbarVisibility = getToolbarManager().getToolbarVisibility();
+        mDefaultToolbarShadowVisibility = getToolbarManager().getToolbarShadowVisibility();
+        mDefaultIsProgressBarEnabled = getToolbarManager().isProgressBarEnabled();
     }
 
     @Override
@@ -527,9 +548,7 @@ public class CustomTabActivity extends ChromeActivity<CustomTabActivityComponent
     }
 
     private CustomTabDelegateFactory createCustomTabDelegateFactory() {
-        return new CustomTabDelegateFactory(mIntentDataProvider.shouldEnableUrlBarHiding(),
-                mIntentDataProvider.isOpenedByChrome(),
-                getComponent().resolveControlsVisibilityDelegate());
+        return getComponent().resolveTabDelegateFactory();
     }
 
     @Override
@@ -591,6 +610,12 @@ public class CustomTabActivity extends ChromeActivity<CustomTabActivityComponent
                         RecordUserAction.record("CustomTabs.CloseButtonClicked");
                         if (mIntentDataProvider.shouldEnableEmbeddedMediaExperience()) {
                             RecordUserAction.record("CustomTabs.CloseButtonClicked.DownloadsUI");
+                        }
+                        if (getComponent().resolveCloseButtonNavigator()
+                                .navigateOnClose(getNavigationController())) {
+                            RecordUserAction.record(
+                                    "CustomTabs.CloseButtonClicked.GoToModuleManagedUrl");
+                            return;
                         }
                         recordClientConnectionStatus();
                         finishAndClose(false);
@@ -841,7 +866,7 @@ public class CustomTabActivity extends ChromeActivity<CustomTabActivityComponent
             private boolean mTriggeredPreviewChange;
 
             @Override
-            public void onPageLoadFinished(Tab tab) {
+            public void onPageLoadFinished(Tab tab, String url) {
                 // Update the color when the page load finishes.
                 updateColor(tab);
             }
@@ -856,7 +881,7 @@ public class CustomTabActivity extends ChromeActivity<CustomTabActivityComponent
             public void onUrlUpdated(Tab tab) {
                 // Update the color on every new URL.
                 updateColor(tab);
-                mTopBarDelegate.showTopBarIfNecessary(isModuleManagedUrl(tab.getUrl()));
+                maybeUpdateCctHeaderVisibility(tab.getUrl());
             }
 
             /**
@@ -1059,9 +1084,9 @@ public class CustomTabActivity extends ChromeActivity<CustomTabActivityComponent
         // Manually generating metrics in case the hidden tab has completely finished loading.
         if (mUsingHiddenTab && !tab.isLoading() && !tab.isShowingErrorPage()) {
             mTabObserver.onPageLoadStarted(tab, params.getUrl());
-            mTabObserver.onPageLoadFinished(tab);
+            mTabObserver.onPageLoadFinished(tab, params.getUrl());
             mTabNavigationEventObserver.onPageLoadStarted(tab, params.getUrl());
-            mTabNavigationEventObserver.onPageLoadFinished(tab);
+            mTabNavigationEventObserver.onPageLoadFinished(tab, params.getUrl());
         }
 
         // No actual load to do if tab already has the exact correct url.
@@ -1481,7 +1506,7 @@ public class CustomTabActivity extends ChromeActivity<CustomTabActivityComponent
     protected void initializeToolbar() {
         super.initializeToolbar();
         if (mIntentDataProvider.isMediaViewer()) {
-            getToolbarManager().disableShadow();
+            getToolbarManager().setToolbarShadowVisibility(View.GONE);
 
             // The media viewer has no default menu items, so if there are also no custom items, we
             // should hide the menu button altogether.
@@ -1607,7 +1632,27 @@ public class CustomTabActivity extends ChromeActivity<CustomTabActivityComponent
     }
 
     private boolean isModuleManagedUrl(String url) {
+        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.CCT_MODULE)) {
+            return false;
+        }
         Pattern urlsPattern = mIntentDataProvider.getExtraModuleManagedUrlsPattern();
         return !TextUtils.isEmpty(url) && urlsPattern != null && urlsPattern.matcher(url).matches();
+    }
+
+    private void maybeUpdateCctHeaderVisibility(String url) {
+        // TODO(crbug.com/882404) Show CCT top bar if module fails to load.
+        boolean isModuleManagedUrl = isModuleManagedUrl(url);
+        mTopBarDelegate.showTopBarIfNecessary(isModuleManagedUrl);
+
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.CCT_MODULE)
+                && ChromeFeatureList.isEnabled(ChromeFeatureList.CCT_MODULE_CUSTOM_HEADER)
+                && mIntentDataProvider.shouldHideCctHeaderOnModuleManagedUrls()) {
+            getToolbarManager().setToolbarVisibility(
+                    isModuleManagedUrl ? View.GONE : mDefaultToolbarVisibility);
+            getToolbarManager().setToolbarShadowVisibility(
+                    isModuleManagedUrl ? View.GONE : mDefaultToolbarShadowVisibility);
+            getToolbarManager().setProgressBarEnabled(
+                    isModuleManagedUrl ? false : mDefaultIsProgressBarEnabled);
+        }
     }
 }

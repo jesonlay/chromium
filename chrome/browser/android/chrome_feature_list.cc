@@ -49,6 +49,7 @@ namespace {
 // this array may either refer to features defined in the header of this file or
 // in other locations in the code base (e.g. chrome/, components/, etc).
 const base::Feature* kFeaturesExposedToJava[] = {
+    &autofill::features::kAutofillKeyboardAccessory,
     &autofill::features::kAutofillManualFallbackAndroid,
     &autofill::features::kAutofillRefreshStyleAndroid,
     &autofill::features::kAutofillEnableCompanyName,
@@ -85,8 +86,8 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kCCTExternalLinkHandling,
     &kCCTModule,
     &kCCTModuleCache,
+    &kCCTModuleCustomHeader,
     &kCCTModulePostMessage,
-    &kCCTParallelRequest,
     &kCCTPostMessageAPI,
     &kCCTRedirectPreconnect,
     &kCCTReportParallelRequestStatus,
@@ -229,11 +230,11 @@ const base::Feature kCCTModule{"CCTModule", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kCCTModuleCache{"CCTModuleCache",
                                     base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kCCTModuleCustomHeader{"CCTModuleCustomHeader",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kCCTModulePostMessage{"CCTModulePostMessage",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kCCTParallelRequest{"CCTParallelRequest",
-                                        base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kCCTPostMessageAPI{"CCTPostMessageAPI",
                                        base::FEATURE_ENABLED_BY_DEFAULT};
@@ -404,9 +405,6 @@ const base::Feature kSpecialLocaleFeature{"SpecialLocale",
 
 const base::Feature kSpecialLocaleWrapper{"SpecialLocaleWrapper",
                                           base::FEATURE_ENABLED_BY_DEFAULT};
-
-const base::Feature kTabModalJsDialog{"TabModalJsDialog",
-                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kTabReparenting{"TabReparenting",
                                     base::FEATURE_ENABLED_BY_DEFAULT};

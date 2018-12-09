@@ -104,7 +104,7 @@ uploading your change for review.
 
 <histogram name="Accessibility.CrosChromeVoxAfterSwitchAccess"
     enum="BooleanEnabled">
-  <owner>zhelfins@chromium.org</owner>
+  <owner>anastasi@google.com</owner>
   <owner>dtseng@chromium.org</owner>
   <summary>
     When ChromeVox is enabled, true if Switch Access was previously enabled.
@@ -130,7 +130,7 @@ uploading your change for review.
 </histogram>
 
 <histogram name="Accessibility.CrosDictation" enum="BooleanEnabled">
-  <owner>zhelfins@chromium.org</owner>
+  <owner>anastasi@google.com</owner>
   <owner>dtseng@chromium.org</owner>
   <summary>
     Whether the ChromeOS dictation feature is enabled (checked once 45 secs
@@ -140,7 +140,7 @@ uploading your change for review.
 
 <histogram name="Accessibility.CrosDictation.ToggleDictationMethod"
     enum="CrosDictationToggleDictationMethod">
-  <owner>zhelfins@chromium.org</owner>
+  <owner>anastasi@google.com</owner>
   <owner>dtseng@chromium.org</owner>
   <summary>Records how users invoke Dictation.</summary>
 </histogram>
@@ -284,7 +284,7 @@ uploading your change for review.
 
 <histogram name="Accessibility.CrosSwitchAccessAfterChromeVox"
     enum="BooleanEnabled">
-  <owner>zhelfins@chromium.org</owner>
+  <owner>anastasi@google.com</owner>
   <owner>dtseng@chromium.org</owner>
   <summary>
     When Switch Access is enabled, true if ChromeVox was previously enabled.
@@ -3982,6 +3982,40 @@ uploading your change for review.
   </summary>
 </histogram>
 
+<histogram name="Arc.EngagementTime.Background" units="seconds">
+  <owner>maajid@google.com</owner>
+  <owner>shaochuan@google.com</owner>
+  <owner>shihuis@google.com</owner>
+  <summary>
+    Times when user is engaged and ARC++ apps are running in the background, but
+    the user isn't focusing on an ARC++ app window. See Arc.EngagementTime.Total
+    for definition of engagement and details.
+  </summary>
+</histogram>
+
+<histogram name="Arc.EngagementTime.Foreground" units="seconds">
+  <owner>maajid@google.com</owner>
+  <owner>shaochuan@google.com</owner>
+  <owner>shihuis@google.com</owner>
+  <summary>
+    Times when user is engaged and focuses on an ARC++ app window. See
+    Arc.EngagementTime.Total for definition of engagement and details.
+  </summary>
+</histogram>
+
+<histogram name="Arc.EngagementTime.Total" units="seconds">
+  <owner>maajid@google.com</owner>
+  <owner>shaochuan@google.com</owner>
+  <owner>shihuis@google.com</owner>
+  <summary>
+    Total user session time (from login to logout) excluding times when user
+    &quot;disengages&quot;: screen is locked or dims down due to user idle.
+    Engagement time metrics, along with foreground and background time, are only
+    collected on users with ARC++ enabled. All three metrics are accumulated and
+    recorded to UMA once a day.
+  </summary>
+</histogram>
+
 <histogram name="Arc.FirstAppLaunchDelay.TimeDelta" units="ms">
   <owner>yusukes@google.com</owner>
   <owner>khmel@google.com</owner>
@@ -5585,6 +5619,18 @@ uploading your change for review.
   <owner>xiaohuic@chromium.org</owner>
   <owner>meilinw@chromium.org</owner>
   <summary>Number of queries fired for each entry point.</summary>
+</histogram>
+
+<histogram name="Assistant.ServiceEnabledUserCount" enum="BooleanEnabled"
+    expires_after="2019-11-13">
+  <owner>xiaohuic@chromium.org</owner>
+  <owner>meilinw@chromium.org</owner>
+  <summary>
+    Among eligible users, whether the user has the Assistant service enabled.
+    Recorded once for every UMA upload. The set of eligible users includes all
+    users with profiles that can allow Assistant service to be enabled
+    (AssistantAllowedState is limited by locale, policy, etc).
+  </summary>
 </histogram>
 
 <histogram name="Assistant.ServiceStartTime" units="ms">
@@ -7776,6 +7822,16 @@ uploading your change for review.
   </summary>
 </histogram>
 
+<histogram name="Autofill.SaveCardRequestExpirationDateReason"
+    enum="AutofillSaveCardRequestExpirationDateReason">
+  <owner>hozhng@google.com</owner>
+  <owner>jsaul@google.com</owner>
+  <summary>
+    Records the reason expiration date was explicitly requested from the user
+    during credit card save.
+  </summary>
+</histogram>
+
 <histogram name="Autofill.SaveCardWithFirstAndLastNameComplete" enum="Boolean">
   <owner>sebsg@chromium.org</owner>
 <!-- Name completed by histogram_suffixes name="AutofillCreditCardType" -->
@@ -7954,6 +8010,16 @@ uploading your change for review.
     Records the number of &quot;strikes&quot; a given card has, when a user
     dismisses a prompt to save a new credit card. The strike count is
     incremented each time the user dismisses the prompt.
+  </summary>
+</histogram>
+
+<histogram name="Autofill.StrikeDatabase.StrikeDatabaseInitFailed"
+    units="attempts" expires_after="2019-03-18">
+  <owner>jsaul@google.com</owner>
+  <owner>annelim@google.com</owner>
+  <summary>
+    When a StrikeDatabase fails to initialize, records the number of consecutive
+    failed initialization attempts.
   </summary>
 </histogram>
 
@@ -8352,6 +8418,61 @@ uploading your change for review.
   <summary>Whether the user changed autofilled field.</summary>
 </histogram>
 
+<histogram name="AutoScreenBrightness.AlsReaderStatus"
+    enum="AutoScreenBrightnessAlsReaderStatus">
+  <owner>tby@chromium.org</owner>
+  <summary>Whether the ALS is enabled or the error otherwise.</summary>
+</histogram>
+
+<histogram name="AutoScreenBrightness.BrightnessMonitorStatus"
+    enum="AutoScreenBrightnessBrightnessMonitorStatus">
+  <owner>tby@chromium.org</owner>
+  <summary>
+    Whether the brightness monitor is enabled or the error otherwise.
+  </summary>
+</histogram>
+
+<histogram name="AutoScreenBrightness.DailyUserAdjustment.NoAls" units="count">
+  <owner>jiameng@chromium.org</owner>
+  <summary>
+    Number of times that a user has made brightness adjustments on a device
+    without an ambient sensor. Reported daily. The count is accumulated through
+    the day, spanning reboots, and sent once the system clock indicates that a
+    full day or more has passed since the last report. If the system is
+    suspended or off for more than a day, the current count will be reported
+    immediately the next time the system boots, but the skipped days will not be
+    reported. Chrome OS only.
+  </summary>
+</histogram>
+
+<histogram name="AutoScreenBrightness.DailyUserAdjustment.SupportedAls"
+    units="count">
+  <owner>jiameng@chromium.org</owner>
+  <summary>
+    Number of times that a user has made brightness adjustments on a device with
+    an ambient sensor that is supported by the auto screen brightness model.
+    Reported daily. The count is accumulated through the day, spanning reboots,
+    and sent once the system clock indicates that a full day or more has passed
+    since the last report. If the system is suspended or off for more than a
+    day, the current count will be reported immediately the next time the system
+    boots, but the skipped days will not be reported. Chrome OS only.
+  </summary>
+</histogram>
+
+<histogram name="AutoScreenBrightness.DailyUserAdjustment.UnsupportedAls"
+    units="count">
+  <owner>jiameng@chromium.org</owner>
+  <summary>
+    Number of times that a user has made brightness adjustments on a device with
+    an ambient sensor that is not supported by the auto screen brightness model.
+    Reported daily. The count is accumulated through the day, spanning reboots,
+    and sent once the system clock indicates that a full day or more has passed
+    since the last report. If the system is suspended or off for more than a
+    day, the current count will be reported immediately the next time the system
+    boots, but the skipped days will not be reported. Chrome OS only.
+  </summary>
+</histogram>
+
 <histogram name="AutoScreenBrightness.DataError"
     enum="AutoScreenBrightnessDataError">
   <owner>jiameng@chromium.org</owner>
@@ -8361,8 +8482,16 @@ uploading your change for review.
   </summary>
 </histogram>
 
+<histogram name="AutoScreenBrightness.PersonalCurveValid" enum="BooleanValid">
+  <owner>tby@chromium.org</owner>
+  <summary>Whether the user's personal brightness curve is valid.</summary>
+</histogram>
+
 <histogram name="AutoScreenBrightness.UserAdjustment"
     enum="AutoScreenBrightnessUserAdjustment">
+  <obsolete>
+    Deprecated as of 11/2018. It has been replaced by DailyUserAdjustment.
+  </obsolete>
   <owner>jiameng@chromium.org</owner>
   <summary>Type of user manual screen brightness adjustment.</summary>
 </histogram>
@@ -13235,6 +13364,15 @@ uploading your change for review.
   </summary>
 </histogram>
 
+<histogram name="ChromeElf.ApplyHookResult" enum="NTSTATUS">
+  <owner>pmonette@chromium.org</owner>
+  <summary>
+    Records the NTSTATUS result that was returned when attempting to hook
+    NtMapViewOfSection during chrome_elf.dll initialization. Emitted
+    asynchronously shortly after startup.
+  </summary>
+</histogram>
+
 <histogram name="ChromeElf.ThirdPartyStatus" enum="ThirdPartyStatus">
   <owner>pmonette@chromium.org</owner>
   <summary>
@@ -17251,6 +17389,15 @@ uploading your change for review.
   </summary>
 </histogram>
 
+<histogram name="Crostini.DiskImageSize" units="GiB" expires_after="2019-11-20">
+  <owner>sidereal@google.com</owner>
+  <owner>nverne@chromium.org</owner>
+  <summary>
+    The maximum space allowed for a VM disk image, as set at install time. This
+    is recorded each time a disk image is successfully created.
+  </summary>
+</histogram>
+
 <histogram name="Crostini.SetupResult" enum="CrostiniSetupResult">
   <owner>benwells@chromium.org</owner>
   <owner>tbuckley@chromium.org</owner>
@@ -17928,7 +18075,7 @@ uploading your change for review.
 </histogram>
 
 <histogram base="true" name="CustomTabs.ResourcePrefetch.Duration" units="ms"
-    expires_after="M72">
+    expires_after="M73">
   <owner>alexilin@chromium.org</owner>
   <summary>
     Time between the start of a detached resource request for resource prefetch
@@ -17937,7 +18084,7 @@ uploading your change for review.
 </histogram>
 
 <histogram name="CustomTabs.ResourcePrefetch.FinalStatus" enum="NetErrorCodes"
-    expires_after="M72">
+    expires_after="M73">
   <owner>alexilin@chromium.org</owner>
   <summary>
     Reports the final status of the detached request for resource prefetch,
@@ -20038,6 +20185,18 @@ uploading your change for review.
   </summary>
 </histogram>
 
+<histogram name="DemoMode.UniqueAppsLaunched" expires_after="2019-11-13">
+  <owner>danan@chromium.org</owner>
+  <owner>michaelpg@chromium.org</owner>
+  <summary>
+    Records how many unique apps have been launched by a user using the device
+    during Demo mode. The sample is recorded when the DemoMode session is idle
+    for a defined period, implying that a user has finished using the device in
+    Demo mode, or if and when there have been any app launches between the time
+    the last recording occurred and the time the DemoMode session closes.
+  </summary>
+</histogram>
+
 <histogram name="DeprecatedInvalidatorRegistrar.CrashStatus"
     enum="HandlerOwnerType" expires_after="M75">
   <owner>melandory@chromium.org</owner>
@@ -21161,8 +21320,10 @@ uploading your change for review.
   </summary>
 </histogram>
 
-<histogram base="true" name="DisplayScheduler.ShouldNotDraw" enum="Boolean"
-    expires_after="M72">
+<histogram base="true" name="DisplayScheduler.ShouldNotDraw" enum="Boolean">
+  <obsolete>
+    Deprecated after M72 since no longer needed.
+  </obsolete>
 <!-- Name completed by histogram_suffixes
      name="DisplaySchedulerNotDrawReason" -->
 
@@ -24540,8 +24701,8 @@ uploading your change for review.
 </histogram>
 
 <histogram name="Drive.DeltaFeedLoadTime" units="ms" expires_after="2019-01-01">
+  <owner>slangley@chromium.org</owner>
   <owner>weifangsun@chromium.org</owner>
-  <owner>sashab@chromium.org</owner>
   <summary>
     Time spent to load the delta change list information from the server.
   </summary>
@@ -24549,8 +24710,8 @@ uploading your change for review.
 
 <histogram name="Drive.DirectoryFeedLoadTime" units="ms"
     expires_after="2019-01-01">
+  <owner>slangley@chromium.org</owner>
   <owner>weifangsun@chromium.org</owner>
-  <owner>sashab@chromium.org</owner>
   <summary>
     Time spent to load the list of files in a single directory from Google Drive
     server.
@@ -24615,8 +24776,8 @@ uploading your change for review.
 </histogram>
 
 <histogram name="Drive.FullFeedLoadTime" units="ms" expires_after="2019-01-01">
+  <owner>slangley@chromium.org</owner>
   <owner>weifangsun@chromium.org</owner>
-  <owner>sashab@chromium.org</owner>
   <summary>
     Time spent to load the entire file system information from the server
   </summary>
@@ -25691,6 +25852,15 @@ uploading your change for review.
   </summary>
 </histogram>
 
+<histogram name="Enterprise.EnrollmentConfiguration"
+    enum="EnterpriseEnrollmentType">
+  <owner>antrim@chromium.org</owner>
+  <summary>
+    Events related to Chrome OS enterprise enrollment automated by OOBE
+    configuration.
+  </summary>
+</histogram>
+
 <histogram name="Enterprise.EnrollmentForced" enum="EnterpriseEnrollmentType">
   <owner>tnagel@chromium.org</owner>
   <summary>
@@ -25704,6 +25874,36 @@ uploading your change for review.
   <summary>
     Events related to attestation-based re-enrollment (Auto RE) of Chrome OS
     devices.
+  </summary>
+</histogram>
+
+<histogram name="Enterprise.EnrollmentForcedInitial"
+    enum="EnterpriseEnrollmentType" expires_after="2020-05-02">
+  <owner>drcrash@chromium.org</owner>
+  <owner>pmarko@chromium.org</owner>
+  <summary>
+    Events related to forced initial enrollment of Chrome OS devices during the
+    first startup of a device.
+  </summary>
+</histogram>
+
+<histogram name="Enterprise.EnrollmentForcedInitialAttestationBased"
+    enum="EnterpriseEnrollmentType" expires_after="2020-05-02">
+  <owner>drcrash@chromium.org</owner>
+  <owner>pmarko@chromium.org</owner>
+  <summary>
+    Events related to attestation-based initial enrollment (Zero-Touch) of
+    Chrome OS devices during the first startup of a device.
+  </summary>
+</histogram>
+
+<histogram name="Enterprise.EnrollmentForcedInitialManualFallback"
+    enum="EnterpriseEnrollmentType" expires_after="2020-05-02">
+  <owner>drcrash@chromium.org</owner>
+  <owner>pmarko@chromium.org</owner>
+  <summary>
+    Events related to manual fallback from attestation-based initial enrollment
+    (Zero-Touch) of Chrome OS devices during the first startup of a device.
   </summary>
 </histogram>
 
@@ -30432,7 +30632,10 @@ uploading your change for review.
 </histogram>
 
 <histogram name="Extensions.BookmarkApp.Icon.HttpStatusCodeClassOnCreate"
-    enum="HttpStatusCodeClass">
+    enum="HttpStatusCodeClass" expires_after="2020-01-01">
+  <obsolete>
+    Deprecated 11/2018 in favor of WebApp.Icon.HttpStatusCodeClassOnCreate.
+  </obsolete>
   <owner>alancutter@chromium.org</owner>
   <owner>mgiuca@chromium.org</owner>
   <summary>
@@ -31513,7 +31716,7 @@ uploading your change for review.
 </histogram>
 
 <histogram name="Extensions.ExtensionUpdaterFirstUpdateCheckErrorsGoogleUrl"
-    enum="CombinedHttpResponseAndNetErrorCode" expires_after="M72">
+    enum="CombinedHttpResponseAndNetErrorCode" expires_after="M75">
   <owner>mxnguyen@chromium.org</owner>
   <summary>
     Records the error codes of the extension updater update check errors. These
@@ -31524,7 +31727,7 @@ uploading your change for review.
 </histogram>
 
 <histogram name="Extensions.ExtensionUpdaterFirstUpdateCheckErrorsNonGoogleUrl"
-    enum="CombinedHttpResponseAndNetErrorCode" expires_after="M72">
+    enum="CombinedHttpResponseAndNetErrorCode" expires_after="M75">
   <owner>mxnguyen@chromium.org</owner>
   <summary>
     Records the error codes of the extension updater update check errors. These
@@ -33673,12 +33876,28 @@ uploading your change for review.
 
 <histogram name="Extensions.WebRequest.InitiatorAccess" enum="InitiatorAccess"
     expires_after="2018-12-31">
+  <obsolete>
+    Deprecated November 2018. Replaced with
+    Extensions.WebRequest.InitiatorAccess2.
+  </obsolete>
   <owner>karandeepb@chromium.org</owner>
   <owner>rdevlin.cronin@chromium.org</owner>
   <summary>
     Describes the different cases pertaining to host permissions check for the
     initiator URL of a network request. This is emitted whenever an extension is
     found to have access to a request url, when checked by the WebRequest API.
+  </summary>
+</histogram>
+
+<histogram name="Extensions.WebRequest.InitiatorAccess2"
+    enum="InitiatorAccess2" expires_after="2019-04-30">
+  <owner>karandeepb@chromium.org</owner>
+  <owner>rdevlin.cronin@chromium.org</owner>
+  <summary>
+    Describes the different cases pertaining to host permissions check for the
+    initiator URL of a network request. This is emitted whenever an extension is
+    found to have access to a request url for the WebRequest or Declarative Net
+    Request API.
   </summary>
 </histogram>
 
@@ -34284,8 +34503,8 @@ uploading your change for review.
 
 <histogram name="FileBrowser.ChangeDirectory.RootType"
     enum="FileManagerRootType">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS File Browser: Counts the number of directory-changed events,
     bucketed by the RootType of the directory newly displayed.
@@ -34294,8 +34513,8 @@ uploading your change for review.
 
 <histogram name="FileBrowser.CloudImport.UserAction"
     enum="CloudImportUserAction">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS File Browser - Specific actions taken by user such initiating
     cloud import, canceling import, selecting a directory, or opting-in to
@@ -34316,8 +34535,8 @@ uploading your change for review.
 </histogram>
 
 <histogram name="FileBrowser.Create" enum="FileDialogType">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>Chrome OS File Browser opening mode.</summary>
 </histogram>
 
@@ -34340,8 +34559,8 @@ uploading your change for review.
 </histogram>
 
 <histogram name="FileBrowser.DirectoryScan" units="ms">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS File Browser: time to scan a directory. Measured on every File
     Browser directory change.
@@ -34350,8 +34569,8 @@ uploading your change for review.
 
 <histogram name="FileBrowser.DownloadDestination.IsGoogleDrive.Changed"
     enum="BooleanEnabled">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Tracks whether download destination is set to a Google Drive folder when the
     download destination is changed by the user in the settings page.
@@ -34360,8 +34579,8 @@ uploading your change for review.
 
 <histogram name="FileBrowser.DownloadDestination.IsGoogleDrive.Started"
     enum="BooleanEnabled">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Tracks whether download destination is set to a Google Drive folder on
     startup.
@@ -34369,8 +34588,8 @@ uploading your change for review.
 </histogram>
 
 <histogram name="FileBrowser.DownloadsCount">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS File Browser: number of files and directories in the Downloads
     directory (not including the contents of nested directories). Computed every
@@ -34378,9 +34597,29 @@ uploading your change for review.
   </summary>
 </histogram>
 
+<histogram name="FileBrowser.DriveDuplicateFinder.LongComputeHash" units="ms"
+    expires_after="M79">
+  <owner>slangley@gchromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
+  <summary>
+    The time taken to calculate the hash of a file, only recorded if the time
+    exceeds a local threshold that is currenty 5 seconds.
+  </summary>
+</histogram>
+
+<histogram name="FileBrowser.DriveDuplicateFinder.LongSearchByHash" units="ms"
+    expires_after="M79">
+  <owner>slangley@gchromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
+  <summary>
+    The time taken to search for a file using it's hash value, only recorded if
+    the time exceeds a local threshold that is currently 1 second.
+  </summary>
+</histogram>
+
 <histogram name="FileBrowser.FolderShortcut.Add">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS File Browser: this is recorded when the user adds a folder
     shortcut.
@@ -34388,8 +34627,8 @@ uploading your change for review.
 </histogram>
 
 <histogram name="FileBrowser.FolderShortcut.Count">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS File Browser: number of saved folder shorcuts. This is recorded
     when the Files app is launched.
@@ -34397,8 +34636,8 @@ uploading your change for review.
 </histogram>
 
 <histogram name="FileBrowser.FolderShortcut.Navigate">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS File Browser: this is recorded when the user clicks or selects a
     folder shortcut and is navigated to the target folder.
@@ -34406,8 +34645,8 @@ uploading your change for review.
 </histogram>
 
 <histogram name="FileBrowser.FolderShortcut.Remove">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS File Browser: this is recorded when the user removes a folder
     shortcut.
@@ -34419,8 +34658,8 @@ uploading your change for review.
   <obsolete>
     The bug which the UMA was investigating got fixed.
   </obsolete>
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS File Browser: time from the SuspendDone event to the DiskRemoved
     event. The UMA is added temporarily for crbug.com/433734.
@@ -34432,8 +34671,8 @@ uploading your change for review.
   <obsolete>
     The bug which the UMA was investigating got fixed.
   </obsolete>
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS File Browser: time from the DiskRemoved event to the Suspend
     event. The UMA is added temporarily for crbug.com/433734.
@@ -34458,8 +34697,8 @@ uploading your change for review.
 </histogram>
 
 <histogram name="FileBrowser.Load" units="ms">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS File Browser is an built-in extension without a background page.
     Its main.html file is loaded every time the user opens a File Browser tab or
@@ -34470,8 +34709,8 @@ uploading your change for review.
 
 <histogram name="FileBrowser.Location.OnEntryExpandedOrCollapsed.NonTopLevel"
     enum="FileManagerRootType">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS Files App: The locations (root types) of non-top-level entries
     when they are expanded or collapsed (expand icon clicked) in the directory
@@ -34481,8 +34720,8 @@ uploading your change for review.
 
 <histogram name="FileBrowser.Location.OnEntryExpandedOrCollapsed.TopLevel"
     enum="FileManagerRootType">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS Files App: The locations (root types) of top-level entries (root
     entries) when they are expanded or collapsed (expand icon clicked) in the
@@ -34492,8 +34731,8 @@ uploading your change for review.
 
 <histogram name="FileBrowser.Location.OnEntrySelected.NonTopLevel"
     enum="FileManagerRootType">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS Files App: The locations (root types) of non-top-level entries
     when they are clicked in the directory tree.
@@ -34502,8 +34741,8 @@ uploading your change for review.
 
 <histogram name="FileBrowser.Location.OnEntrySelected.TopLevel"
     enum="FileManagerRootType">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS Files App: The locations (root types) of top-level entries (root
     entries) when they are clicked in the directory tree.
@@ -34564,8 +34803,8 @@ uploading your change for review.
 </histogram>
 
 <histogram name="FileBrowser.MenuItemSelected" enum="FileManagerMenuCommands">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>wiefangsun@chromium.org</owner>
   <summary>
     Chrome OS Files App: The commands selected in the menu by the files app.
   </summary>
@@ -34574,7 +34813,8 @@ uploading your change for review.
 <histogram name="FileBrowser.MountCrostiniContainer" units="ms"
     expires_after="2019-05-30">
   <owner>joelhockey@google.com</owner>
-  <owner>sashab@google.com</owner>
+  <owner>slangley@chromium.org</owner>
+  <owner>wiefangsun@chromium.org</owner>
   <summary>
     Chrome OS File Browser: time to start and mount the crostini container in
     order to show Linux Files.
@@ -34582,8 +34822,8 @@ uploading your change for review.
 </histogram>
 
 <histogram name="FileBrowser.OpenFiles.RootType" enum="FileManagerRootType">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>wiefangsun@chromium.org</owner>
   <summary>
     Chrome OS File Browser: The locations (root types) of files which are opened
     by the file picker.
@@ -34594,14 +34834,14 @@ uploading your change for review.
   <obsolete>
     Deprecated 4/2013, and replaced by FileBrowser.ViewingFileType.
   </obsolete>
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>File types that were tried to be opened through browser.</summary>
 </histogram>
 
 <histogram name="FileBrowser.PhotoEditor.DisplayTime" units="ms">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS Photo Editor: time to display an image. Measured from the moment
     the user selected the image till the moment it is displayed (not counting
@@ -34610,41 +34850,41 @@ uploading your change for review.
 </histogram>
 
 <histogram name="FileBrowser.PhotoEditor.FileType" enum="PhotoEditorFileType">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>Chrome OS Photo Editor: the type of the file opened.</summary>
 </histogram>
 
 <histogram name="FileBrowser.PhotoEditor.LoadMode" enum="PhotoEditorLoadMode">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>Chrome OS Photo Editor: the way the image has been loaded.</summary>
 </histogram>
 
 <histogram name="FileBrowser.PhotoEditor.LoadTime" units="ms">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>Chrome OS Photo Editor: time to load an image from a file.</summary>
 </histogram>
 
 <histogram name="FileBrowser.PhotoEditor.SaveResult"
     enum="PhotoEditorSaveResult">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS Photo Editor: the result of a file save operation.
   </summary>
 </histogram>
 
 <histogram name="FileBrowser.PhotoEditor.SaveTime" units="ms">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>Chrome OS Photo Editor: time to save an image to a file.</summary>
 </histogram>
 
 <histogram name="FileBrowser.PhotoEditor.Size.MB" units="MBytes">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS Photo Editor: size of an image file in megabytes. Measured on
     every image load.
@@ -34652,8 +34892,8 @@ uploading your change for review.
 </histogram>
 
 <histogram name="FileBrowser.PhotoEditor.Size.MPix" units="MPixels">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS Photo Editor: size of an image in megapixels. Measured on every
     image load.
@@ -34661,8 +34901,8 @@ uploading your change for review.
 </histogram>
 
 <histogram name="FileBrowser.PhotoEditor.Tool" enum="PhotoEditorToolType">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>Chrome OS Photo Editor: the button which the user clicked.</summary>
 </histogram>
 
@@ -34670,8 +34910,8 @@ uploading your change for review.
   <obsolete>
     Code seems to have been removed at an unknown time.
   </obsolete>
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS Photo Import flow: action chosen in the Action Choice dialog for
     the external device.
@@ -34682,8 +34922,8 @@ uploading your change for review.
   <obsolete>
     Code seems to have been removed at an unknown time.
   </obsolete>
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS Photo Import flow: the number of photos imported. Measured on
     every successfull import operation.
@@ -34694,8 +34934,8 @@ uploading your change for review.
   <obsolete>
     Code seems to have been removed at an unknown time.
   </obsolete>
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS Photo Import flow: the percent of photos imported among all the
     photos on the device. Measured on every successfull import operation.
@@ -34706,8 +34946,8 @@ uploading your change for review.
   <obsolete>
     Code seems to have been removed at an unknown time.
   </obsolete>
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS Photo Import flow: time to load the action dialog. Measured
     between the moment window appears and the moment user see all available
@@ -34719,49 +34959,49 @@ uploading your change for review.
   <obsolete>
     Code seems to have been removed at an unknown time.
   </obsolete>
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS Photo Import flow: time to scan the external device.
   </summary>
 </histogram>
 
 <histogram name="FileBrowser.QuickView.DialogType" enum="FileDialogType">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     File dialog type (e.g. Full page, Save as file) when quick view is launched.
   </summary>
 </histogram>
 
 <histogram name="FileBrowser.QuickView.FileType" enum="ViewFileType">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>File types that were tried to be opened with quick view.</summary>
 </histogram>
 
 <histogram name="FileBrowser.QuickView.FileTypeOnLaunch" enum="ViewFileType">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>File types that were selected when quick view is launched.</summary>
 </histogram>
 
 <histogram name="FileBrowser.QuickView.VolumeType" enum="FileManagerVolumeType">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>The volume type where quick view is opened.</summary>
 </histogram>
 
 <histogram name="FileBrowser.QuickView.WayToOpen"
     enum="FileManagerQuickViewWayToOpen">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>How quick view was opened.</summary>
 </histogram>
 
 <histogram name="FileBrowser.Recent.LoadArcMedia" units="ms">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Time to load a recently modified file list from Media Views. It is triggered
     when the user opens or reloads Recent view in the Files app.
@@ -34769,8 +35009,8 @@ uploading your change for review.
 </histogram>
 
 <histogram name="FileBrowser.Recent.LoadDownloads" units="ms">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Time to load a recently modified file list from Downloads. It is triggered
     when the user opens or reloads Recent view in the Files app.
@@ -34778,8 +35018,8 @@ uploading your change for review.
 </histogram>
 
 <histogram name="FileBrowser.Recent.LoadDrive" units="ms">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Time to load a recently modified file list from Drive. It is triggered when
     the user opens or reloads Recent view in the Files app.
@@ -34787,8 +35027,8 @@ uploading your change for review.
 </histogram>
 
 <histogram name="FileBrowser.Recent.LoadTotal" units="ms">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Time to load a recently modified file list from all sources. It is triggered
     when the user opens or reloads Recent view in the Files app.
@@ -34797,8 +35037,8 @@ uploading your change for review.
 
 <histogram name="FileBrowser.SuggestApps.CloseDialog"
     enum="SuggestAppsDialogCloseReason">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS File Browser: the reason why the suggest apps dialog was closed.
   </summary>
@@ -34806,8 +35046,8 @@ uploading your change for review.
 
 <histogram name="FileBrowser.SuggestApps.Install"
     enum="SuggestAppsDialogInstall">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS File Browser: whether the Webstore item user selected was
     successfully installed or not.
@@ -34815,8 +35055,8 @@ uploading your change for review.
 </histogram>
 
 <histogram name="FileBrowser.SuggestApps.Load" enum="SuggestAppsDialogLoad">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS File Browser: whether the initialization of the dialog succeeded
     or not.
@@ -34824,8 +35064,8 @@ uploading your change for review.
 </histogram>
 
 <histogram name="FileBrowser.SuggestApps.LoadTime" units="ms">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS File Browser: time to load the suggest apps dialog. Measured
     between the moment window appears and the moment all the contents in the
@@ -34835,8 +35075,8 @@ uploading your change for review.
 
 <histogram name="FileBrowser.TeamDrivesCount" units="Team Drives"
     expires_after="M75">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS File Browser: number of Team Drives a user has available in the
     Files app. Computed every time the File Browser is opened (including file
@@ -34846,8 +35086,8 @@ uploading your change for review.
 </histogram>
 
 <histogram name="FileBrowser.ToggleFileListType" enum="FileManagerListType">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS Files App: Recorded when the Grid View/List View toggle menu icon
     is selected.
@@ -34855,34 +35095,101 @@ uploading your change for review.
 </histogram>
 
 <histogram name="FileBrowser.ViewingFileType" enum="ViewFileType">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     File types that were tried to be viewed through browser. This is recorded
     when the user tries to view a file from the Files app.
   </summary>
 </histogram>
 
-<histogram name="FileBrowser.ViewingRootType" enum="FileManagerRootType">
-  <owner>sashab@chromium.org</owner>
+<histogram name="FileBrowser.ViewingFileType.Offline" enum="ViewFileType"
+    expires_after="2019-12-31">
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
+  <summary>
+    File types that were tried to be viewed through browser while the user is
+    offline. This is recorded when the user tries to view a file from the Files
+    app.
+  </summary>
+</histogram>
+
+<histogram name="FileBrowser.ViewingFileType.Online" enum="ViewFileType"
+    expires_after="2019-12-31">
+  <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
+  <summary>
+    File types that were tried to be viewed through browser while the user is
+    online. This is recorded when the user tries to view a file from the Files
+    app.
+  </summary>
+</histogram>
+
+<histogram name="FileBrowser.ViewingRootType" enum="FileManagerRootType">
+  <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS File Browser: The locations (root types) of files which are opened
     in stand-alone mode. This does not include files opened in file picker mode.
   </summary>
 </histogram>
 
-<histogram name="FileBrowser.ViewingTaskType" enum="FileManagerTaskType">
-  <owner>sashab@chromium.org</owner>
+<histogram name="FileBrowser.ViewingRootType.Offline"
+    enum="FileManagerRootType" expires_after="2019-12-31">
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
+  <summary>
+    Chrome OS File Browser: The locations (root types) of files which are opened
+    in stand-alone mode while the user is offline. This does not include files
+    opened in file picker mode.
+  </summary>
+</histogram>
+
+<histogram name="FileBrowser.ViewingRootType.Online" enum="FileManagerRootType"
+    expires_after="2019-12-31">
+  <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
+  <summary>
+    Chrome OS File Browser: The locations (root types) of files which are opened
+    in stand-alone mode while the user is online. This does not include files
+    opened in file picker mode.
+  </summary>
+</histogram>
+
+<histogram name="FileBrowser.ViewingTaskType" enum="FileManagerTaskType">
+  <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS File Browser: The type of the handler to be used to open files.
+    This is recorded when the user tries to view a file from the Files app.
+  </summary>
+</histogram>
+
+<histogram name="FileBrowser.ViewingTaskType.Offline"
+    enum="FileManagerTaskType" expires_after="2019-12-31">
+  <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
+  <summary>
+    Chrome OS File Browser: The type of the handler to be used to open files
+    when the user is offline. This is recorded when the user tries to view a
+    file from the Files app.
+  </summary>
+</histogram>
+
+<histogram name="FileBrowser.ViewingTaskType.Online" enum="FileManagerTaskType"
+    expires_after="2019-12-31">
+  <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
+  <summary>
+    Chrome OS File Browser: The type of the handler to be used to open files
+    when the user is online. This is recorded when the user tries to view a file
+    from the Files app.
   </summary>
 </histogram>
 
 <histogram name="FileBrowser.VolumeType" enum="FileManagerVolumeType">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS File Browser: counts the number of times volumes are mounted for
     each volume type.
@@ -34890,8 +35197,8 @@ uploading your change for review.
 </histogram>
 
 <histogram name="FileBrowser.ZipFileTask" enum="FileManagerZipHandlerType">
-  <owner>sashab@chromium.org</owner>
   <owner>slangley@chromium.org</owner>
+  <owner>weifangsun@chromium.org</owner>
   <summary>
     Chrome OS File Browser: counts the number of times ZIP file was opened or
     created, categorized by component extensions and its operation types.
@@ -51191,6 +51498,14 @@ uploading your change for review.
   </summary>
 </histogram>
 
+<histogram name="MobileOmnibox.PopupOpenDuration" units="ms">
+  <owner>stkhapugin@chromium.org</owner>
+  <summary>
+    Recorded when the omnibox popup is closed. Indicates the duration it was
+    open.
+  </summary>
+</histogram>
+
 <histogram name="MobileOmnibox.PressedClipboardSuggestionAge" units="ms">
   <owner>jif@chromium.org</owner>
   <owner>mpearson@chromium.org</owner>
@@ -52043,6 +52358,36 @@ uploading your change for review.
 </histogram>
 
 <histogram
+    name="MultiDevice.SecureChannel.BLE.Performance.ConnectionToAuthenticationDuration.Background"
+    units="ms">
+  <owner>hansberry@chromium.org</owner>
+  <summary>
+    A time histogram measuring the time from the moment a GATT connection is
+    made to the remote device, to the moment that an authenticated channel is
+    established with the remote device.
+
+    In this context, &quot;background&quot; refers to the BLE advertising scheme
+    under which the remote device is persistently advertising &quot;in the
+    background&quot; at low power.
+  </summary>
+</histogram>
+
+<histogram
+    name="MultiDevice.SecureChannel.BLE.Performance.ReceiveAdvertisementToConnectionDuration.Background"
+    units="ms">
+  <owner>hansberry@chromium.org</owner>
+  <summary>
+    A time histogram measuring the time from the moment a background
+    advertisement is received, to the moment that a GATT connection is made to
+    the remote device.
+
+    In this context, &quot;background&quot; refers to the BLE advertising scheme
+    under which the remote device is persistently advertising &quot;in the
+    background&quot; at low power.
+  </summary>
+</histogram>
+
+<histogram
     name="MultiDevice.SecureChannel.BLE.Performance.StartScanToAuthenticationDuration.Background"
     units="ms">
   <owner>hansberry@chromium.org</owner>
@@ -52051,6 +52396,36 @@ uploading your change for review.
     to a remote device, from the moment a SecureChannelService client asks for a
     new connection (start scanning), to the moment that an authenticated channel
     is established with the remote device.
+
+    In this context, &quot;background&quot; refers to the BLE advertising scheme
+    under which the remote device is persistently advertising &quot;in the
+    background&quot; at low power.
+  </summary>
+</histogram>
+
+<histogram
+    name="MultiDevice.SecureChannel.BLE.Performance.StartScanToConnectionDuration.Background"
+    units="ms">
+  <owner>hansberry@chromium.org</owner>
+  <summary>
+    A time histogram measuring the time it from the moment SecureChannelService
+    starts scanning for a background advertisement, to the moment that it
+    establishes a GATT connection to the remote device.
+
+    In this context, &quot;background&quot; refers to the BLE advertising scheme
+    under which the remote device is persistently advertising &quot;in the
+    background&quot; at low power.
+  </summary>
+</histogram>
+
+<histogram
+    name="MultiDevice.SecureChannel.BLE.Performance.StartScanToReceiveAdvertisementDuration.Background"
+    units="ms">
+  <owner>hansberry@chromium.org</owner>
+  <summary>
+    A time histogram measuring the time it from the moment SecureChannelService
+    starts scanning for a background advertisement, to the moment that it
+    receives an advertisement from the expected remote device.
 
     In this context, &quot;background&quot; refers to the BLE advertising scheme
     under which the remote device is persistently advertising &quot;in the
@@ -53322,23 +53697,21 @@ uploading your change for review.
   </summary>
 </histogram>
 
-<histogram name="NavigationPredictor.OnDSE.ActionTaken"
-    enum="NavigationPredictorActionTaken">
+<histogram base="true" name="NavigationPredictor.AccuracyActionTaken"
+    enum="NavigationPredictorAccuracyActionTaken">
   <owner>tbansal@chromium.org</owner>
   <summary>
-    Tracks action taken by navigation predictor. Recorded at the time of page
-    load. Recorded only for pages whose URL matches the URL of the search
-    results page of the user's default search engine.
+    Tracks the accuracy of the action taken by navigation predictor. Recorded at
+    the time of page click.
   </summary>
 </histogram>
 
-<histogram name="NavigationPredictor.OnNonDSE.ActionTaken"
+<histogram base="true" name="NavigationPredictor.ActionTaken"
     enum="NavigationPredictorActionTaken">
   <owner>tbansal@chromium.org</owner>
   <summary>
     Tracks action taken by navigation predictor. Recorded at the time of page
-    load. Recorded only for pages whose URL does not match the URL of the search
-    results page of the user's default search engine.
+    load.
   </summary>
 </histogram>
 
@@ -72299,6 +72672,9 @@ uploading your change for review.
 </histogram>
 
 <histogram name="OSCrypt.EncryptionKeyOverwritingPreventions">
+  <obsolete>
+    Obsolete as of Chrome 72.
+  </obsolete>
   <owner>tsabolcec@google.com</owner>
   <owner>vasilii@chromium.com</owner>
   <summary>
@@ -72308,7 +72684,7 @@ uploading your change for review.
 </histogram>
 
 <histogram name="OSCrypt.GetEncryptionKeyAction" enum="GetEncryptionKeyAction">
-  <owner>tsabolcec@google.com</owner>
+  <owner>cfroussios@chromium.org</owner>
   <owner>vasilii@chromium.com</owner>
   <summary>
     Action taken when retrieving the encryption key from the Keychain. This
@@ -72385,6 +72761,9 @@ uploading your change for review.
 </histogram>
 
 <histogram name="OSX.Fullscreen.ToolbarStyle" enum="OSXFullscreenToolbarStyle">
+  <obsolete>
+    Deprecated as of 11/2018.
+  </obsolete>
   <owner>spqchan@chromium.org</owner>
   <summary>
     This event is recorded each time a user triggers fullscreen and when the
@@ -76416,8 +76795,23 @@ uploading your change for review.
   </summary>
 </histogram>
 
+<histogram name="PasswordManager.HttpCredentials"
+    enum="PasswordManagerHttpCredentialType">
+  <owner>jdoerrie@chromium.org</owner>
+  <owner>vasilii@chromium.org</owner>
+  <summary>
+    Breakdown of HTTP credentials with regard to the existence of a HTTPS
+    credential with the same username and whether the corresponding website has
+    HSTS enabled. Recorded once for each HTTP credential of the profile on
+    startup.
+  </summary>
+</histogram>
+
 <histogram name="PasswordManager.HttpCredentialsWithConflictingHttpsCredential"
     units="saved credentials" expires_after="M72">
+  <obsolete>
+    Deprecated as of M72. Superseded by PasswordManager.HttpCredentials.
+  </obsolete>
   <owner>gemene@google.com</owner>
   <owner>jdoerrie@chromium.org</owner>
   <summary>
@@ -76429,6 +76823,9 @@ uploading your change for review.
 
 <histogram name="PasswordManager.HttpCredentialsWithEquivalentHttpsCredential"
     units="saved credentials" expires_after="M72">
+  <obsolete>
+    Deprecated as of M72. Superseded by PasswordManager.HttpCredentials.
+  </obsolete>
   <owner>gemene@google.com</owner>
   <owner>jdoerrie@chromium.org</owner>
   <summary>
@@ -76440,6 +76837,9 @@ uploading your change for review.
 
 <histogram name="PasswordManager.HttpCredentialsWithoutMatchingHttpsCredential"
     units="saved credentials" expires_after="M72">
+  <obsolete>
+    Deprecated as of M72. Superseded by PasswordManager.HttpCredentials.
+  </obsolete>
   <owner>gemene@google.com</owner>
   <owner>jdoerrie@chromium.org</owner>
   <summary>
@@ -84986,6 +85386,34 @@ uploading your change for review.
   </summary>
 </histogram>
 
+<histogram name="Previews.ServerLitePage.NotReportedNavigationRestartPenalty"
+    units="ms">
+  <owner>robertogden@chromium.org</owner>
+  <summary>
+    Every time a navigation is restarted on account of this preview we attempt
+    to report the cumulative total penalty to page load metrics. This histogram
+    tracks penalties that were not successfully reported. The penalty is the
+    amount of time between the navigation start of the original (i.e.:
+    user-initiated) navigation and the current navigation when this histogram is
+    reported. This histogram is reported at the start of every navigation for
+    every navigation seen by the Lite Page Redirect Navigation Throttle.
+  </summary>
+</histogram>
+
+<histogram name="Previews.ServerLitePage.ReportedNavigationRestartPenalty"
+    units="ms">
+  <owner>robertogden@chromium.org</owner>
+  <summary>
+    Every time a navigation is restarted on account of this preview we attempt
+    to report the cumulative total penalty to page load metrics. This histogram
+    tracks penalties that were successfully reported. The penalty is the amount
+    of time between the navigation start of the original (i.e.: user-initiated)
+    navigation and the current navigation when this histogram is reported. This
+    histogram is reported at the start of every navigation for every navigation
+    seen by the Lite Page Redirect Navigation Throttle.
+  </summary>
+</histogram>
+
 <histogram name="Previews.ServerLitePage.ServerResponse"
     enum="PreviewsServerLitePageServerResponse">
   <owner>robertogden@chromium.org</owner>
@@ -89977,6 +90405,19 @@ uploading your change for review.
   </summary>
 </histogram>
 
+<histogram
+    name="ResourceLoadingHints.ResourcePatternsAvailableAtCommitForRedirect"
+    enum="BooleanAvailable">
+  <owner>tbansal@chromium.org</owner>
+  <owner>dougarnett@chromium.org</owner>
+  <summary>
+    Records if the resource patterns were available at the time of page commit
+    if the committed previews type was RESOURCE_LOADING_HINTS and the navigation
+    was redirected. This is a subset of the ResourcePatternsAvailableAtCommit
+    histogram.
+  </summary>
+</histogram>
+
 <histogram name="ResourcePrefetchPredictor.CachePattern"
     enum="HttpCachePattern">
   <obsolete>
@@ -90521,6 +90962,9 @@ uploading your change for review.
 </histogram>
 
 <histogram name="ResourcePrefetchPredictor.PrefetchingDuration" units="ms">
+  <obsolete>
+    Deprecated at M72. No longer recorded.
+  </obsolete>
   <owner>alexilin@chromium.org</owner>
   <summary>
     Amount of time available for prefetching. Specifically, this is a time
@@ -90582,6 +91026,9 @@ uploading your change for review.
 
 <histogram name="ResourcePrefetchPredictor.ReportingEvent"
     enum="ResourcePrefetchPredictorReportingEvent">
+  <obsolete>
+    Deprecated at M72. No longer recorded.
+  </obsolete>
   <owner>alexilin@chromium.org</owner>
   <summary>
     Records stats about various interesting events such as - when partial or all
@@ -100570,6 +101017,14 @@ uploading your change for review.
   </summary>
 </histogram>
 
+<histogram name="SessionStorageContext.OnConnectionDestroyed" enum="Boolean">
+  <owner>dmurph@chromium.org</owner>
+  <owner>dullweber@chromium.org</owner>
+  <summary>
+    Recorded when the database connection is closed unexpectedly.
+  </summary>
+</histogram>
+
 <histogram name="SessionStorageContext.OpenError" enum="LocalStorageOpenError">
   <owner>dmurph@chromium.org</owner>
   <summary>
@@ -101547,6 +102002,24 @@ uploading your change for review.
   </summary>
 </histogram>
 
+<histogram name="Setup.Install.ServiceInstallResult"
+    enum="SetupInstallServiceInstallResult" expires_after="2020-12-30">
+  <owner>ganesh@chromium.org</owner>
+  <owner>sorin@chromium.org</owner>
+  <owner>xiaolingbao@chromium.org</owner>
+  <summary>The outcome of attempting to install a service on Windows.</summary>
+</histogram>
+
+<histogram name="Setup.Install.ServiceRollbackResult"
+    enum="SetupInstallServiceRollbackResult" expires_after="2020-12-30">
+  <owner>ganesh@chromium.org</owner>
+  <owner>sorin@chromium.org</owner>
+  <owner>xiaolingbao@chromium.org</owner>
+  <summary>
+    The outcome of attempting to rollback an install of a service on Windows.
+  </summary>
+</histogram>
+
 <histogram name="Setup.Install.SingletonAcquisitionResult"
     enum="SetupSingletonAcquisitionResult">
   <owner>fdoray@chromium.org</owner>
@@ -101593,6 +102066,16 @@ uploading your change for review.
     The elapsed time to unpack the uncompressed chrome.7z archive. This
     histogram applies to all installs and updates.
   </summary>
+</histogram>
+
+<histogram base="true" name="Setup.Install.Win32ApiError"
+    enum="WinGetLastError" expires_after="2020-12-30">
+<!-- Name completed by histogram_suffixes name="SetupInstallWin32Apis". -->
+
+  <owner>ganesh@chromium.org</owner>
+  <owner>sorin@chromium.org</owner>
+  <owner>xiaolingbao@chromium.org</owner>
+  <summary>Win32 APIs that error out during setup.</summary>
 </histogram>
 
 <histogram name="SharedMemory.CreateError" enum="SharedMemoryCreateError"
@@ -102044,6 +102527,13 @@ uploading your change for review.
   <summary>
     The time it takes to seed accounts before proceeding to the account
     confirmation screen.
+  </summary>
+</histogram>
+
+<histogram name="Signin.AndroidGetAccountIdsTime" units="ms">
+  <owner>bsazonov@chromium.org</owner>
+  <summary>
+    The time it takes to retrieve Gaia ids for all accounts from GoogleAuthUtil.
   </summary>
 </histogram>
 
@@ -109628,6 +110118,20 @@ uploading your change for review.
   </summary>
 </histogram>
 
+<histogram base="true" name="Sync.ModelTypeConfigurationTime.Ephemeral"
+    units="ms" expires_after="2020-05-01">
+  <owner>jkrcal@chromium.org</owner>
+  <owner>mastiz@chromium.org</owner>
+  <summary>
+    Recorded once per activation of an ephemeral (in-memory) data type; the
+    value is the duration of the setup (time from the start of the configuration
+    of sync until the data type receives all its sync data and the data is ready
+    for the user). This metric is used for monitoring general health of sync
+    client-side code. Note: This is only recorded with a data type suffix. The
+    base version is never recorded.
+  </summary>
+</histogram>
+
 <histogram name="Sync.ModelTypeCount" units="entries">
   <obsolete>
     Deprecated as of 7/2018. Replaced by Sync.ModelTypeCount2 which does record
@@ -113240,6 +113744,37 @@ uploading your change for review.
   </summary>
 </histogram>
 
+<histogram name="ThirdPartyModules.Heartbeat.BlockedModulesCount"
+    units="modules">
+  <owner>pmonette@chromium.org</owner>
+  <summary>
+    Records the number of modules that were blocked from loading into the
+    browser process by the third-party DLL blocking feature. This is recorded
+    every 5 minutes.
+  </summary>
+</histogram>
+
+<histogram
+    name="ThirdPartyModules.Heartbeat.PrintingWorkaround.BlockingEnabled"
+    enum="BooleanEnabled">
+  <owner>pmonette@chromium.org</owner>
+  <summary>
+    Records whether or not Chrome is still blocking third-party DLLs. This is a
+    bit that turns to false when the in-process printing is invoked. Recorded
+    every 5 minutes.
+  </summary>
+</histogram>
+
+<histogram name="ThirdPartyModules.Heartbeat.UniqueBlockedModulesCount"
+    units="modules">
+  <owner>pmonette@chromium.org</owner>
+  <summary>
+    Records the number of unique modules that were blocked from loading into the
+    browser process by the third-party DLL blocking feature. This is recorded
+    every 5 minutes.
+  </summary>
+</histogram>
+
 <histogram name="ThirdPartyModules.InputMethodEditorsCount" units="counts">
   <owner>pmonette@chromium.org</owner>
   <summary>
@@ -113666,6 +114201,15 @@ uploading your change for review.
   <summary>
     Tracks how often a gesture event is or is not dropped due to the current
     allowed touch action state not matching the gesture event.
+  </summary>
+</histogram>
+
+<histogram name="TouchAction.GestureEventFilterResults"
+    enum="GestureEventFilterResults">
+  <owner>xidachen@chromium.org</owner>
+  <owner>nzolghadr@chromium.org</owner>
+  <summary>
+    Track whether a gesture event is allowed or filtered or deferred.
   </summary>
 </histogram>
 
@@ -119739,6 +120283,19 @@ uploading your change for review.
   </summary>
 </histogram>
 
+<histogram name="WebApp.Icon.HttpStatusCodeClassOnCreate"
+    enum="HttpStatusCodeClass" expires_after="2021-01-01">
+  <owner>alancutter@chromium.org</owner>
+  <owner>mgiuca@chromium.org</owner>
+  <owner>loyso@chromium.org</owner>
+  <summary>
+    The HTTP status code class returned for each icon loaded during a WebApp's
+    creation. See corresponding
+    Extensions.BookmarkApp.Icon.HttpStatusCodeClassOnCreate histogram for legacy
+    extension-based system.
+  </summary>
+</histogram>
+
 <histogram name="Webapp.Install.DisplayMode" enum="WebAppDisplayMode">
   <owner>piotrs@chromium.org</owner>
   <summary>
@@ -124837,6 +125394,9 @@ uploading your change for review.
 </histogram>
 
 <histogram name="websql.Async.OpenTime.Error" units="ms">
+  <obsolete>
+    Deprecated 12/2018. We're no longer monitoring WebSQL performance.
+  </obsolete>
   <owner>cmumford@chromium.org</owner>
   <summary>
     The time required to try (and fail) to open a Web SQL database.
@@ -124844,6 +125404,9 @@ uploading your change for review.
 </histogram>
 
 <histogram name="websql.Async.OpenTime.Success" units="ms">
+  <obsolete>
+    Deprecated 12/2018. We're no longer monitoring WebSQL performance.
+  </obsolete>
   <owner>cmumford@chromium.org</owner>
   <summary>The time required to successfully open a Web SQL database.</summary>
 </histogram>
@@ -128356,6 +128919,9 @@ uploading your change for review.
 </histogram_suffixes>
 
 <histogram_suffixes name="DisplaySchedulerNotDrawReason" separator=".">
+  <obsolete>
+    Deprecated after M72 since no longer needed.
+  </obsolete>
   <suffix name="DrawNotNeeded" label="DrawNotNeeded"/>
   <suffix name="NotVisible" label="NotVisible"/>
   <suffix name="OutputSurfaceLost" label="OutputSurfaceLost"/>
@@ -130932,6 +131498,18 @@ uploading your change for review.
   <affected-histogram name="Navigation.StartToCommit.CrossProcess"/>
   <affected-histogram name="Navigation.StartToCommit.SameProcess"/>
   <affected-histogram name="Navigation.TimeToReadyToCommit"/>
+</histogram_suffixes>
+
+<histogram_suffixes name="NavigationPredictor.DSEAffix" separator="."
+    ordering="prefix">
+  <suffix name="OnDSE"
+      label="Recorded only for pages whose URL matches the URL of the search
+             results page of the user's default search engine."/>
+  <suffix name="OnNonDSE"
+      label="Recorded only for pages whose URL does not match the URL of the
+             search results page of the user's default search engine."/>
+  <affected-histogram name="NavigationPredictor.AccuracyActionTaken"/>
+  <affected-histogram name="NavigationPredictor.ActionTaken"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="NavigationPreloadEnabled" separator="_">
@@ -137018,6 +137596,14 @@ uploading your change for review.
   <affected-histogram name="Setup.Install.UnpackFullArchiveTime"/>
 </histogram_suffixes>
 
+<histogram_suffixes name="SetupInstallWin32Apis" separator=".">
+  <suffix name="ChangeServiceConfig"/>
+  <suffix name="CreateService"/>
+  <suffix name="DeleteService"/>
+  <suffix name="OpenSCManager"/>
+  <affected-histogram name="Setup.Install.Win32ApiError"/>
+</histogram_suffixes>
+
 <histogram_suffixes name="ShillCumulativeTimeOnline" separator=".">
   <suffix name="Any" label="Any connection type"/>
   <suffix name="Cellular" label="Cellular connection"/>
@@ -137635,6 +138221,7 @@ uploading your change for review.
   <affected-histogram
       name="Sync.DuplicateClientTagHashWithDifferentServerIdsInApplyPendingUpdates"/>
   <affected-histogram name="Sync.DuplicateServerIdInApplyPendingUpdates"/>
+  <affected-histogram name="Sync.ModelTypeConfigurationTime.Ephemeral"/>
   <affected-histogram name="Sync.ModelTypeCount">
     <obsolete>
       Deprecated 7/2018. Replaced by Sync.ModelTypeCount2.

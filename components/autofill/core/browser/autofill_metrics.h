@@ -205,6 +205,19 @@ class AutofillMetrics {
     NUM_UPLOAD_ACCEPTED_CARD_ORIGIN_METRICS,
   };
 
+  // Represents requesting expiration date reason.
+  enum class SaveCardRequestExpirationDateReasonMetric {
+    // Submitted card has empty month.
+    kMonthMissingOnly,
+    // Submitted card has empty year.
+    kYearMissingOnly,
+    // Submitted card has both empty month and year.
+    kMonthAndYearMissing,
+    // Submitted card has expired expiration date.
+    kExpirationDatePresentButExpired,
+    kMaxValue = kExpirationDatePresentButExpired,
+  };
+
   // Metrics to measure user interaction with the save credit card prompt.
   //
   // SAVE_CARD_PROMPT_DISMISS_FOCUS is not stored explicitly, but can be
@@ -617,7 +630,7 @@ class AutofillMetrics {
     FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_WRONG_SIZE_CARD,
     FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_FAIL_LUHN_CHECK_CARD,
 
-    // The form was changed dynamically.
+    // The form was changed dynamically. This value has been deprecated.
     FORM_EVENT_DID_SEE_DYNAMIC_FORM,
     // The form was changed dynamically and was fillable.
     FORM_EVENT_DID_SEE_FILLABLE_DYNAMIC_FORM,
@@ -915,6 +928,8 @@ class AutofillMetrics {
       bool is_uploading,
       int previous_save_credit_card_prompt_user_decision);
   static void LogCreditCardFillingInfoBarMetric(InfoBarMetric metric);
+  static void LogSaveCardRequestExpirationDateReasonMetric(
+      SaveCardRequestExpirationDateReasonMetric metric);
   static void LogSaveCardPromptMetric(
       SaveCardPromptMetric metric,
       bool is_uploading,
@@ -1255,8 +1270,6 @@ class AutofillMetrics {
                          const CardNumberStatus card_number_status);
 
     void SetBankNameAvailable();
-
-    void OnDidSeeDynamicForm();
 
     void OnDidSeeFillableDynamicForm();
 

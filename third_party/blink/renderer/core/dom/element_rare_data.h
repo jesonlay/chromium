@@ -49,15 +49,17 @@
 namespace blink {
 
 class Element;
+class HTMLElement;
 class ResizeObservation;
 class ResizeObserver;
 
 class ElementRareData : public NodeRareData {
  public:
   static ElementRareData* Create(NodeRenderingData* node_layout_data) {
-    return new ElementRareData(node_layout_data);
+    return MakeGarbageCollected<ElementRareData>(node_layout_data);
   }
 
+  explicit ElementRareData(NodeRenderingData*);
   ~ElementRareData();
 
   void SetPseudoElement(PseudoId, PseudoElement*);
@@ -155,6 +157,9 @@ class ElementRareData : public NodeRareData {
   }
   void SetIsValue(const AtomicString& is_value) { is_value_ = is_value; }
   const AtomicString& IsValue() const { return is_value_; }
+  void SetDidAttachInternals() { did_attach_internals_ = true; }
+  bool DidAttachInternals() const { return did_attach_internals_; }
+  ElementInternals& EnsureElementInternals(HTMLElement& target);
 
   AccessibleNode* GetAccessibleNode() const { return accessible_node_.Get(); }
   AccessibleNode* EnsureAccessibleNode(Element* owner_element) {
@@ -176,7 +181,8 @@ class ElementRareData : public NodeRareData {
   }
   ElementIntersectionObserverData& EnsureIntersectionObserverData() {
     if (!intersection_observer_data_) {
-      intersection_observer_data_ = new ElementIntersectionObserverData();
+      intersection_observer_data_ =
+          MakeGarbageCollected<ElementIntersectionObserverData>();
     }
     return *intersection_observer_data_;
   }
@@ -229,14 +235,14 @@ class ElementRareData : public NodeRareData {
   Member<V0CustomElementDefinition> v0_custom_element_definition_;
   Member<CustomElementDefinition> custom_element_definition_;
   AtomicString is_value_;
+  TraceWrapperMember<ElementInternals> element_internals_;
 
   Member<PseudoElementData> pseudo_element_data_;
 
   TraceWrapperMember<AccessibleNode> accessible_node_;
 
   WeakMember<DisplayLockContext> display_lock_context_;
-
-  explicit ElementRareData(NodeRenderingData*);
+  bool did_attach_internals_ = false;
 };
 
 inline LayoutSize DefaultMinimumSizeForResizing() {

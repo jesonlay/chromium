@@ -111,6 +111,16 @@ void UiControllerAndroid::ShowStatusMessage(const std::string& message) {
       base::android::ConvertUTF8ToJavaString(env, message));
 }
 
+std::string UiControllerAndroid::GetStatusMessage() {
+  JNIEnv* env = AttachCurrentThread();
+  std::string status;
+  base::android::ScopedJavaLocalRef<jstring> message =
+      Java_AutofillAssistantUiController_onGetStatusMessage(
+          env, java_autofill_assistant_ui_controller_);
+  base::android::ConvertJavaStringToUTF8(env, message.obj(), &status);
+  return status;
+}
+
 void UiControllerAndroid::ShowOverlay() {
   Java_AutofillAssistantUiController_onShowOverlay(
       AttachCurrentThread(), java_autofill_assistant_ui_controller_);
@@ -131,8 +141,8 @@ void UiControllerAndroid::ShutdownGracefully() {
       AttachCurrentThread(), java_autofill_assistant_ui_controller_);
 }
 
-void UiControllerAndroid::CloseCustomTab() {
-  Java_AutofillAssistantUiController_onCloseCustomTab(
+void UiControllerAndroid::Close() {
+  Java_AutofillAssistantUiController_onClose(
       AttachCurrentThread(), java_autofill_assistant_ui_controller_);
 }
 
@@ -180,28 +190,40 @@ void UiControllerAndroid::OnScriptSelected(
   ui_delegate_->OnScriptSelected(script_path);
 }
 
+void UiControllerAndroid::OnChoice(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& jcaller,
+    const JavaParamRef<jbyteArray>& jserver_payload) {
+  if (!choice_callback_)  // possibly duplicate call
+    return;
+
+  std::string server_payload;
+  base::android::JavaByteArrayToString(env, jserver_payload, &server_payload);
+  std::move(choice_callback_).Run(server_payload);
+}
+
 void UiControllerAndroid::OnAddressSelected(
     JNIEnv* env,
     const JavaParamRef<jobject>& jcaller,
     const JavaParamRef<jstring>& jaddress_guid) {
-  if (!address_or_card_callback_)  // possibly duplicate call
+  if (!choice_callback_)  // possibly duplicate call
     return;
 
   std::string guid;
   base::android::ConvertJavaStringToUTF8(env, jaddress_guid, &guid);
-  std::move(address_or_card_callback_).Run(guid);
+  std::move(choice_callback_).Run(guid);
 }
 
 void UiControllerAndroid::OnCardSelected(
     JNIEnv* env,
     const JavaParamRef<jobject>& jcaller,
     const JavaParamRef<jstring>& jcard_guid) {
-  if (!address_or_card_callback_)  // possibly duplicate call
+  if (!choice_callback_)  // possibly duplicate call
     return;
 
   std::string guid;
   base::android::ConvertJavaStringToUTF8(env, jcard_guid, &guid);
-  std::move(address_or_card_callback_).Run(guid);
+  std::move(choice_callback_).Run(guid);
 }
 
 void UiControllerAndroid::OnGetPaymentInformation(
@@ -226,11 +248,21 @@ void UiControllerAndroid::OnGetPaymentInformation(
       payment_info->card = std::make_unique<autofill::CreditCard>();
       autofill::PersonalDataManagerAndroid::PopulateNativeCreditCardFromJava(
           jcard, env, payment_info->card.get());
+
+      auto guid = payment_info->card->billing_address_id();
+      if (!guid.empty()) {
+        autofill::AutofillProfile* profile =
+            GetPersonalDataManager()->GetProfileByGUID(guid);
+        if (profile != nullptr)
+          payment_info->billing_address =
+              std::make_unique<autofill::AutofillProfile>(*profile);
+      }
     }
     if (jaddress != nullptr) {
-      payment_info->address = std::make_unique<autofill::AutofillProfile>();
+      payment_info->shipping_address =
+          std::make_unique<autofill::AutofillProfile>();
       autofill::PersonalDataManagerAndroid::PopulateNativeProfileFromJava(
-          jaddress, env, payment_info->address.get());
+          jaddress, env, payment_info->shipping_address.get());
     }
     if (jpayer_name != nullptr) {
       base::android::ConvertJavaStringToUTF8(env, jpayer_name,
@@ -284,10 +316,43 @@ UiControllerAndroid::OnRequestDebugContext(
   return base::android::ConvertUTF8ToJavaString(env, GetDebugContext());
 }
 
+void UiControllerAndroid::Choose(
+    const std::vector<UiController::Choice>& choices,
+    base::OnceCallback<void(const std::string&)> callback) {
+  DCHECK(!choice_callback_);
+  choice_callback_ = std::move(callback);
+
+  std::vector<std::string> names;
+  std::vector<std::string> server_payload;
+  bool highlights[choices.size()];
+  int i = 0;
+  for (const auto& choice : choices) {
+    names.emplace_back(choice.name);
+    server_payload.emplace_back(choice.server_payload);
+    highlights[i++] = choice.highlight;
+  }
+  JNIEnv* env = AttachCurrentThread();
+  Java_AutofillAssistantUiController_onChoose(
+      env, java_autofill_assistant_ui_controller_,
+      base::android::ToJavaArrayOfStrings(env, names),
+      base::android::ToJavaArrayOfByteArray(env, server_payload),
+      base::android::ToJavaBooleanArray(env, highlights, choices.size()));
+}
+
+void UiControllerAndroid::ForceChoose(const std::string& result) {
+  if (!choice_callback_)
+    return;
+
+  JNIEnv* env = AttachCurrentThread();
+  Java_AutofillAssistantUiController_onForceChoose(
+      env, java_autofill_assistant_ui_controller_);
+  std::move(choice_callback_).Run(result);
+}
+
 void UiControllerAndroid::ChooseAddress(
     base::OnceCallback<void(const std::string&)> callback) {
-  DCHECK(!address_or_card_callback_);
-  address_or_card_callback_ = std::move(callback);
+  DCHECK(!choice_callback_);
+  choice_callback_ = std::move(callback);
   JNIEnv* env = AttachCurrentThread();
   Java_AutofillAssistantUiController_onChooseAddress(
       env, java_autofill_assistant_ui_controller_);
@@ -295,8 +360,8 @@ void UiControllerAndroid::ChooseAddress(
 
 void UiControllerAndroid::ChooseCard(
     base::OnceCallback<void(const std::string&)> callback) {
-  DCHECK(!address_or_card_callback_);
-  address_or_card_callback_ = std::move(callback);
+  DCHECK(!choice_callback_);
+  choice_callback_ = std::move(callback);
   JNIEnv* env = AttachCurrentThread();
   Java_AutofillAssistantUiController_onChooseCard(
       env, java_autofill_assistant_ui_controller_);
@@ -340,8 +405,9 @@ void UiControllerAndroid::ShowDetails(const DetailsProto& details,
       env, java_autofill_assistant_ui_controller_,
       base::android::ConvertUTF8ToJavaString(env, details.title()),
       base::android::ConvertUTF8ToJavaString(env, details.url()),
-      base::android::ConvertUTF8ToJavaString(env, details.description()), year,
-      month, day, hour, minute, second);
+      base::android::ConvertUTF8ToJavaString(env, details.description()),
+      base::android::ConvertUTF8ToJavaString(env, details.m_id()), year, month,
+      day, hour, minute, second);
 }
 
 void UiControllerAndroid::ShowProgressBar(int progress,

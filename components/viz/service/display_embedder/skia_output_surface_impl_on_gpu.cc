@@ -30,6 +30,7 @@
 #include "ui/gfx/skia_util.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
+#include "ui/gl/gl_gl_api_implementation.h"
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/gl_version_info.h"
 #include "ui/gl/init/gl_factory.h"
@@ -330,6 +331,13 @@ void SkiaOutputSurfaceImplOnGpu::FulfillPromiseTexture(
     return;
   }
 
+  if (gpu_service_->is_using_vulkan()) {
+    // Probably this texture is created with wrong inteface (GLES2Interface).
+    DLOG(ERROR) << "Failed to fulfill the promise texture whose backend is not "
+                   "compitable with vulkan.";
+    return;
+  }
+
   auto* mailbox_manager = gpu_service_->mailbox_manager();
   auto* texture_base = mailbox_manager->ConsumeTexture(metadata.mailbox);
   if (!texture_base) {
@@ -337,8 +345,11 @@ void SkiaOutputSurfaceImplOnGpu::FulfillPromiseTexture(
     return;
   }
   BindOrCopyTextureIfNecessary(texture_base);
-  GetGrBackendTexture(*gl_version_info(), *texture_base, metadata.color_type,
-                      backend_texture);
+  gpu::GetGrBackendTexture(texture_base->target(), metadata.size,
+                           *metadata.backend_format.getGLFormat(),
+                           *metadata.driver_backend_format.getGLFormat(),
+                           texture_base->service_id(), metadata.color_type,
+                           backend_texture);
 }
 
 void SkiaOutputSurfaceImplOnGpu::FulfillPromiseTexture(

@@ -79,6 +79,10 @@ const base::Feature kHideSteadyStateUrlPathQueryAndRef {
 #endif
 };
 
+// Feature used to undo all omnibox elisions on a single click or focus action.
+const base::Feature kOneClickUnelide{"OmniboxOneClickUnelide",
+                                     base::FEATURE_DISABLED_BY_DEFAULT};
+
 // This feature simplifies the security indiciator UI for https:// pages. The
 // exact UI treatment is dependent on the parameter 'treatment' which can have
 // the following value:
@@ -196,26 +200,6 @@ const base::Feature kUIExperimentMaxAutocompleteMatches{
 // when the user is on the search results page of the default search provider.
 const base::Feature kQueryInOmnibox{"QueryInOmnibox",
                                     base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Feature used for eliding the suggestion URL after the host as a UI
-// experiment.
-const base::Feature kUIExperimentElideSuggestionUrlAfterHost{
-    "OmniboxUIExperimentElideSuggestionUrlAfterHost",
-    base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Feature used to jog the Omnibox textfield to align with the dropdown
-// suggestions text when the popup is opened. When this feature is disabled, the
-// textfield is always aligned with the suggestions text, and a separator fills
-// the gap.
-const base::Feature kUIExperimentJogTextfieldOnPopup{
-    "OmniboxUIExperimentJogTextfieldOnPopup",
-    base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Feature used for showing the URL suggestion favicons as a UI experiment,
-// currently only used on desktop platforms.
-const base::Feature kUIExperimentShowSuggestionFavicons{
-    "OmniboxUIExperimentShowSuggestionFavicons",
-    base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Feature used to always swap the title and URL.
 const base::Feature kUIExperimentSwapTitleAndUrl{
@@ -808,11 +792,6 @@ OmniboxFieldTrial::GetPedalSuggestionMode() {
   return omnibox::pedal_suggestion_mode.Get();
 }
 
-bool OmniboxFieldTrial::IsJogTextfieldOnPopupEnabled() {
-  return base::FeatureList::IsEnabled(
-      omnibox::kUIExperimentJogTextfieldOnPopup);
-}
-
 bool OmniboxFieldTrial::IsHideSteadyStateUrlSchemeEnabled() {
   return base::FeatureList::IsEnabled(omnibox::kHideSteadyStateUrlScheme) ||
          base::FeatureList::IsEnabled(features::kExperimentalUi);
@@ -821,12 +800,6 @@ bool OmniboxFieldTrial::IsHideSteadyStateUrlSchemeEnabled() {
 bool OmniboxFieldTrial::IsHideSteadyStateUrlTrivialSubdomainsEnabled() {
   return base::FeatureList::IsEnabled(
              omnibox::kHideSteadyStateUrlTrivialSubdomains) ||
-         base::FeatureList::IsEnabled(features::kExperimentalUi);
-}
-
-bool OmniboxFieldTrial::IsShowSuggestionFaviconsEnabled() {
-  return base::FeatureList::IsEnabled(
-             omnibox::kUIExperimentShowSuggestionFavicons) ||
          base::FeatureList::IsEnabled(features::kExperimentalUi);
 }
 

@@ -428,7 +428,7 @@ void PaintLayerScrollableArea::UpdateScrollOffset(
   bool is_root_layer = Layer()->IsRootLayer();
 
   TRACE_EVENT1("devtools.timeline", "ScrollLayer", "data",
-               InspectorScrollLayerEvent::Data(GetLayoutBox()));
+               inspector_scroll_layer_event::Data(GetLayoutBox()));
 
   // FIXME(420741): Resolve circular dependency between scroll offset and
   // compositing state, and remove this disabler.
@@ -511,6 +511,11 @@ void PaintLayerScrollableArea::InvalidatePaintForScrollOffsetChange() {
     box->SetShouldDoFullPaintInvalidation();
     box->SetSubtreeShouldCheckForPaintInvalidation();
   }
+
+  // TODO(chrishtr): remove this slow path once crbug.com/906885 is fixed.
+  // See also https://bugs.chromium.org/p/chromium/issues/detail?id=903287#c10.
+  if (Layer()->EnclosingPaginationLayer())
+    box->SetSubtreeShouldCheckForPaintInvalidation();
 
   // If not composited, background always paints into the main graphics layer.
   bool background_paint_in_graphics_layer = true;
@@ -972,7 +977,7 @@ void PaintLayerScrollableArea::UpdateAfterLayout() {
           in_overflow_relayout_ = true;
           SubtreeLayoutScope layout_scope(*GetLayoutBox());
           layout_scope.SetNeedsLayout(
-              GetLayoutBox(), LayoutInvalidationReason::kScrollbarChanged);
+              GetLayoutBox(), layout_invalidation_reason::kScrollbarChanged);
           if (GetLayoutBox()->IsLayoutBlock()) {
             LayoutBlock* block = ToLayoutBlock(GetLayoutBox());
             block->ScrollbarsChanged(horizontal_scrollbar_should_change,
@@ -1234,7 +1239,7 @@ void PaintLayerScrollableArea::UpdateAfterOverflowRecalc() {
       (GetLayoutBox()->HasAutoVerticalScrollbar() &&
        vertical_scrollbar_should_change)) {
     GetLayoutBox()->SetNeedsLayoutAndFullPaintInvalidation(
-        LayoutInvalidationReason::kUnknown);
+        layout_invalidation_reason::kUnknown);
   }
 
   ClampScrollOffsetAfterOverflowChange();
@@ -2161,11 +2166,6 @@ void PaintLayerScrollableArea::UpdateCompositingLayersAfterScroll() {
           kCompositingUpdateAfterGeometryChange);
     }
 
-    // Sticky constraints and paint property nodes need to be updated
-    // to the new sticky locations.
-    if (HasStickyDescendants())
-      InvalidateAllStickyConstraints();
-
     // If we have fixed elements and we scroll the root layer we might
     // change compositing since the fixed elements might now overlap a
     // composited layer.
@@ -2496,7 +2496,7 @@ PaintLayerScrollableArea::PreventRelayoutScope::~PreventRelayoutScope() {
         DCHECK(scrollable_area->NeedsRelayout());
         LayoutBox* box = scrollable_area->GetLayoutBox();
         layout_scope_->SetNeedsLayout(
-            box, LayoutInvalidationReason::kScrollbarChanged);
+            box, layout_invalidation_reason::kScrollbarChanged);
         if (box->IsLayoutBlock()) {
           bool horizontal_scrollbar_changed =
               scrollable_area->HasHorizontalScrollbar() !=

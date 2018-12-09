@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/ios/ios_util.h"
+#include "base/metrics/histogram_macros.h"
 #import "ios/chrome/browser/ui/omnibox/image_retriever.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_util.h"
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_row.h"
@@ -27,7 +28,7 @@
 namespace {
 const int kRowCount = 6;
 const CGFloat kRowHeight = 48.0;
-const CGFloat kShortcutsRowHeight = 320;
+const CGFloat kShortcutsRowHeight = 220;
 const CGFloat kAnswerRowHeight = 64.0;
 const CGFloat kTopAndBottomPadding = 8.0;
 UIColor* BackgroundColorTablet() {
@@ -76,6 +77,10 @@ UIColor* BackgroundColorIncognito() {
 // The cell with shortcuts to display when no results are available (only if
 // this is enabled with |shortcutsEnabled|). Lazily instantiated.
 @property(nonatomic, strong) UITableViewCell* shortcutsCell;
+
+// Time the view appeared on screen. Used to record a metric of how long this
+// view controller was on screen.
+@property(nonatomic, assign) base::TimeTicks viewAppearanceTime;
 
 @end
 
@@ -206,6 +211,19 @@ UIColor* BackgroundColorIncognito() {
     [self layoutRows];
   }
                                completion:nil];
+}
+
+#pragma mark - View lifecycle
+
+- (void)viewDidAppear:(BOOL)animated {
+  [super viewDidAppear:animated];
+  self.viewAppearanceTime = base::TimeTicks::Now();
+}
+
+- (void)viewWillDisappear:(BOOL)animated {
+  [super viewWillDisappear:animated];
+  UMA_HISTOGRAM_MEDIUM_TIMES("MobileOmnibox.PopupOpenDuration",
+                             base::TimeTicks::Now() - self.viewAppearanceTime);
 }
 
 #pragma mark - Properties accessors

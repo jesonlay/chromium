@@ -20,6 +20,7 @@
 namespace autofill_assistant {
 using ::testing::_;
 using ::testing::ElementsAre;
+using ::testing::Eq;
 using ::testing::Field;
 using ::testing::IsEmpty;
 using ::testing::NiceMock;
@@ -33,16 +34,17 @@ class ScriptTrackerTest : public testing::Test,
  public:
   void SetUp() override {
     ON_CALL(mock_web_controller_,
-            OnElementCheck(kExistenceCheck, ElementsAre("exists"), _))
+            OnElementCheck(kExistenceCheck, Eq(Selector({"exists"})), _))
         .WillByDefault(RunOnceCallback<2>(true));
-    ON_CALL(mock_web_controller_,
-            OnElementCheck(kExistenceCheck, ElementsAre("does_not_exist"), _))
+    ON_CALL(
+        mock_web_controller_,
+        OnElementCheck(kExistenceCheck, Eq(Selector({"does_not_exist"})), _))
         .WillByDefault(RunOnceCallback<2>(false));
     ON_CALL(mock_web_controller_, GetUrl()).WillByDefault(ReturnRef(url_));
 
     // Scripts run, but have no actions.
-    ON_CALL(mock_service_, OnGetActions(_, _, _))
-        .WillByDefault(RunOnceCallback<2>(true, ""));
+    ON_CALL(mock_service_, OnGetActions(_, _, _, _, _))
+        .WillByDefault(RunOnceCallback<4>(true, ""));
   }
 
  protected:
@@ -69,6 +71,9 @@ class ScriptTrackerTest : public testing::Test,
   }
 
   content::WebContents* GetWebContents() override { return nullptr; }
+
+  virtual void SetTouchableElementArea(
+      const std::vector<Selector>& elements) override {}
 
   // Overrides ScriptTracker::Listener
   void OnRunnableScriptsChanged(
@@ -163,6 +168,40 @@ TEST_F(ScriptTrackerTest, SomeRunnableScripts) {
   ASSERT_THAT(runnable_scripts(), SizeIs(1));
   EXPECT_EQ("runnable name", runnable_scripts()[0].name);
   EXPECT_EQ("runnable path", runnable_scripts()[0].path);
+}
+
+TEST_F(ScriptTrackerTest, DoNotCheckInterruptWithNoName) {
+  SupportsScriptResponseProto scripts;
+
+  // The interrupt's preconditions would all be met, but it won't be reported
+  // since it doesn't have a name.
+  auto* no_name = AddScript(&scripts, "", "path1", "exists");
+  no_name->mutable_presentation()->set_interrupt(true);
+
+  // The interrupt's preconditions are met and it will be reported as a normal
+  // script.
+  auto* with_name = AddScript(&scripts, "with name", "path2", "exists");
+  with_name->mutable_presentation()->set_interrupt(true);
+
+  SetAndCheckScripts(scripts);
+
+  EXPECT_EQ(1, runnable_scripts_changed_);
+  ASSERT_THAT(runnable_scripts(), SizeIs(1));
+  EXPECT_EQ("with name", runnable_scripts()[0].name);
+}
+
+TEST_F(ScriptTrackerTest, ReportInterruptToAutostart) {
+  SupportsScriptResponseProto scripts;
+
+  // The interrupt's preconditions are met and it will be reported as runnable
+  // for autostart.
+  auto* autostart = AddScript(&scripts, "", "path2", "exists");
+  autostart->mutable_presentation()->set_interrupt(true);
+  autostart->mutable_presentation()->set_autostart(true);
+  SetAndCheckScripts(scripts);
+
+  EXPECT_EQ(1, runnable_scripts_changed_);
+  ASSERT_THAT(runnable_scripts(), SizeIs(1));
 }
 
 TEST_F(ScriptTrackerTest, OrderScriptsByPriority) {
@@ -260,8 +299,9 @@ TEST_F(ScriptTrackerTest, CheckScriptsAgainAfterScriptEnd) {
 }
 
 TEST_F(ScriptTrackerTest, CheckScriptsAfterDOMChange) {
-  EXPECT_CALL(mock_web_controller_,
-              OnElementCheck(kExistenceCheck, ElementsAre("maybe_exists"), _))
+  EXPECT_CALL(
+      mock_web_controller_,
+      OnElementCheck(kExistenceCheck, Eq(Selector({"maybe_exists"})), _))
       .WillOnce(RunOnceCallback<2>(false));
 
   SupportsScriptResponseProto scripts;
@@ -272,8 +312,9 @@ TEST_F(ScriptTrackerTest, CheckScriptsAfterDOMChange) {
   EXPECT_THAT(runnable_scripts(), IsEmpty());
 
   // DOM has changed; OnElementExists now returns true.
-  EXPECT_CALL(mock_web_controller_,
-              OnElementCheck(kExistenceCheck, ElementsAre("maybe_exists"), _))
+  EXPECT_CALL(
+      mock_web_controller_,
+      OnElementCheck(kExistenceCheck, Eq(Selector({"maybe_exists"})), _))
       .WillOnce(RunOnceCallback<2>(true));
   tracker_.CheckScripts(base::TimeDelta::FromSeconds(0));
 

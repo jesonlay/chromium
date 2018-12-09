@@ -60,7 +60,6 @@ namespace syncer {
 class BackendMigrator;
 class DeviceInfoSyncBridge;
 class DeviceInfoTracker;
-class ModelTypeControllerDelegate;
 class NetworkResources;
 class SyncTypePreferenceProvider;
 class TypeDebugInfoObserver;
@@ -208,7 +207,6 @@ class ProfileSyncService : public syncer::SyncService,
     network::NetworkConnectionTracker* network_connection_tracker = nullptr;
     std::string debug_identifier;
     version_info::Channel channel = version_info::Channel::UNKNOWN;
-    bool user_events_separate_pref_group = false;
 
    private:
     DISALLOW_COPY_AND_ASSIGN(InitParams);
@@ -291,10 +289,6 @@ class ProfileSyncService : public syncer::SyncService,
   const syncer::LocalDeviceInfoProvider* GetLocalDeviceInfoProvider() const;
 
   syncer::LocalDeviceInfoProvider* GetLocalDeviceInfoProviderForTest();
-
-  // Returns the ModelTypeControllerDelegate for syncer::DEVICE_INFO.
-  base::WeakPtr<syncer::ModelTypeControllerDelegate>
-  GetDeviceInfoSyncControllerDelegate();
 
   // Returns synced devices tracker.
   // Virtual for testing.
@@ -597,10 +591,6 @@ class ProfileSyncService : public syncer::SyncService,
 
   // This specifies where to find the sync server.
   const GURL sync_service_url_;
-
-  // Whether USER_EVENTS model type has a separate pref group instead of
-  // being bundled with the TYPED_URLS model type.
-  const bool user_events_separate_pref_group_;
 
   // A utility object containing logic and state relating to encryption.
   syncer::SyncServiceCrypto crypto_;

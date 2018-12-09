@@ -487,10 +487,6 @@
 #include "extensions/common/switches.h"
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
-#if BUILDFLAG(ENABLE_MUS)
-#include "services/ws/public/mojom/constants.mojom.h"
-#endif
-
 #if BUILDFLAG(ENABLE_PLUGINS)
 #include "chrome/browser/plugins/chrome_content_browser_client_plugins_part.h"
 #include "chrome/browser/plugins/flash_download_interception.h"
@@ -2166,29 +2162,23 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
 void ChromeContentBrowserClient::AdjustUtilityServiceProcessCommandLine(
     const service_manager::Identity& identity,
     base::CommandLine* command_line) {
-#if BUILDFLAG(ENABLE_MUS)
-  bool copy_switches = false;
-  if (identity.name() == ws::mojom::kServiceName) {
-    command_line->AppendSwitch(switches::kMessageLoopTypeUi);
-    copy_switches = true;
-  }
 #if defined(OS_CHROMEOS)
+  bool copy_switches = false;
   if (identity.name() == ash::mojom::kServiceName) {
-    command_line->AppendSwitch(switches::kMessageLoopTypeUi);
     copy_switches = true;
+    command_line->AppendSwitch(switches::kMessageLoopTypeUi);
   }
   if (ash_service_registry::IsAshRelatedServiceName(identity.name())) {
+    // Ash services also need command line flags, as some flags are used to
+    // configure the compositor.
+    copy_switches = true;
     command_line->AppendSwitchASCII(switches::kMashServiceName,
                                     identity.name());
   }
+  // TODO(crbug.com/906954): whitelist flags to copy.
+  for (const auto& sw : base::CommandLine::ForCurrentProcess()->GetSwitches())
+    command_line->AppendSwitchNative(sw.first, sw.second);
 #endif
-  // TODO(sky): move to a whitelist, but currently the set of flags is rather
-  // sprawling.
-  if (copy_switches) {
-    for (const auto& sw : base::CommandLine::ForCurrentProcess()->GetSwitches())
-      command_line->AppendSwitchNative(sw.first, sw.second);
-  }
-#endif  // BUILDFLAG(ENABLE_MUS)
 
 #if defined(OS_MACOSX)
   // On Mac, the video-capture and audio services require a CFRunLoop, provided
@@ -3627,9 +3617,11 @@ void ChromeContentBrowserClient::ExposeInterfacesToRenderer(
       ui_task_runner);
 #endif
 #if defined(OS_ANDROID)
+  Profile* profile =
+      Profile::FromBrowserContext(render_process_host->GetBrowserContext());
   registry->AddInterface(
       base::BindRepeating(&android::AvailableOfflineContentProvider::Create,
-                          render_process_host->GetBrowserContext()),
+                          profile),
       base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::UI}));
 #endif
 
@@ -3724,14 +3716,6 @@ void ChromeContentBrowserClient::RegisterInProcessServices(
     services->insert(
         std::make_pair(prefs::mojom::kLocalStateServiceName, info));
   }
-  service_manager::EmbeddedServiceInfo info;
-#if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
-  {
-    service_manager::EmbeddedServiceInfo info;
-    info.factory = base::Bind(&media::CreateMediaService);
-    services->insert(std::make_pair(media::mojom::kMediaServiceName, info));
-  }
-#endif
 
 #if defined(OS_ANDROID)
   {
@@ -3881,6 +3865,17 @@ void ChromeContentBrowserClient::RegisterOutOfProcessServices(
       base::FeatureList::IsEnabled(network::features::kNetworkService)) {
     (*services)[mirroring::mojom::kServiceName] =
         base::BindRepeating(&base::ASCIIToUTF16, "Mirroring Service");
+  }
+#endif
+}
+
+void ChromeContentBrowserClient::HandleServiceRequest(
+    const std::string& service_name,
+    service_manager::mojom::ServiceRequest request) {
+#if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
+  if (service_name == media::mojom::kMediaServiceName) {
+    service_manager::Service::RunUntilTermination(
+        media::CreateMediaService(std::move(request)));
   }
 #endif
 }
@@ -5050,10 +5045,11 @@ content::PreviewsState ChromeContentBrowserClient::DetermineAllowedPreviews(
   // Certain PreviewsStates are used within URLLoaders (Offline, server
   // previews) and cannot re-evaluate PreviewsState during a redirect, so they
   // should not change. Assume this is a redirect when PreviewsUserData already
-  // exists.
+  // exists and a Lite Page Redirect preview is not being attempted, since it
+  // may also create a previews_data before this point.
   bool is_redirect = false;
   if (previews_data) {
-    is_redirect = true;
+    is_redirect = !previews_data->server_lite_page_info();
   } else {
     previews_data = ui_tab_helper->CreatePreviewsUserDataForNavigationHandle(
         navigation_handle, previews_decider_impl->GeneratePageId());

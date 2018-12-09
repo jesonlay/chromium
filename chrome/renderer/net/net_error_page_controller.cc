@@ -102,6 +102,21 @@ void NetErrorPageController::LaunchDownloadsPage() {
     delegate_->LaunchDownloadsPage();
 }
 
+void NetErrorPageController::SavePageForLater() {
+  if (delegate_)
+    delegate_->SavePageForLater();
+}
+
+void NetErrorPageController::CancelSavePage() {
+  if (delegate_)
+    delegate_->CancelSavePage();
+}
+
+void NetErrorPageController::ListVisibilityChanged(bool is_visible) {
+  if (delegate_)
+    delegate_->ListVisibilityChanged(is_visible);
+}
+
 NetErrorPageController::NetErrorPageController(base::WeakPtr<Delegate> delegate)
     : delegate_(delegate) {
 }
@@ -129,5 +144,9 @@ gin::ObjectTemplateBuilder NetErrorPageController::GetObjectTemplateBuilder(
       .SetMethod("launchOfflineItem",
                  &NetErrorPageController::LaunchOfflineItem)
       .SetMethod("launchDownloadsPage",
-                 &NetErrorPageController::LaunchDownloadsPage);
+                 &NetErrorPageController::LaunchDownloadsPage)
+      .SetMethod("savePageForLater", &NetErrorPageController::SavePageForLater)
+      .SetMethod("cancelSavePage", &NetErrorPageController::CancelSavePage)
+      .SetMethod("listVisibilityChanged",
+                 &NetErrorPageController::ListVisibilityChanged);
 }

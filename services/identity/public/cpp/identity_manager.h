@@ -13,6 +13,7 @@
 #include "components/signin/core/browser/signin_manager_base.h"
 #include "components/signin/core/browser/signin_metrics.h"
 #include "services/identity/public/cpp/access_token_fetcher.h"
+#include "services/identity/public/cpp/accounts_mutator.h"
 #include "services/identity/public/cpp/scope_set.h"
 
 #if !defined(OS_CHROMEOS)
@@ -46,6 +47,7 @@ class MultiProfileDownloadNotificationTest;
 namespace identity {
 
 class PrimaryAccountMutator;
+enum class ClearPrimaryAccountPolicy;
 
 // Gives access to information about the user's Google identities. See
 // ./README.md for detailed documentation.
@@ -65,6 +67,14 @@ class IdentityManager : public SigninManagerBase::Observer,
     // Called when an account becomes the user's primary account.
     // This method is not called during a reauth.
     virtual void OnPrimaryAccountSet(const AccountInfo& primary_account_info) {}
+
+    // Called when an account becomes the user's primary account using the
+    // legacy workflow (non-DICE). If access to the password is not required,
+    // it is preferred to instead override OnPrimaryAccountSet() which will
+    // also be called at the same time.
+    virtual void OnPrimaryAccountSetWithPassword(
+        const AccountInfo& primary_account_info,
+        const std::string& password) {}
 
     // Called when when the user moves from having a primary account to no
     // longer having a primary account.
@@ -258,6 +268,10 @@ class IdentityManager : public SigninManagerBase::Observer,
   // null.
   PrimaryAccountMutator* GetPrimaryAccountMutator();
 
+  // Returns pointer to the object used to seed accounts and mutate state of
+  // accounts' refresh tokens. Guaranteed to be non-null.
+  AccountsMutator* GetAccountsMutator();
+
   // Methods to register or remove observers.
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
@@ -265,10 +279,32 @@ class IdentityManager : public SigninManagerBase::Observer,
   void RemoveDiagnosticsObserver(DiagnosticsObserver* observer);
 
  private:
-  // These clients need to call SetPrimaryAccountSynchronouslyForTests().
-  friend AccountInfo SetPrimaryAccount(SigninManagerBase* signin_manager,
-                                       IdentityManager* identity_manager,
+  // These test helpers need to use some of the private methods below.
+  friend AccountInfo SetPrimaryAccount(IdentityManager* identity_manager,
                                        const std::string& email);
+  friend void SetRefreshTokenForPrimaryAccount(
+      IdentityManager* identity_manager);
+  friend void SetInvalidRefreshTokenForPrimaryAccount(
+      IdentityManager* identity_manager);
+  friend void RemoveRefreshTokenForPrimaryAccount(
+      IdentityManager* identity_manager);
+  friend AccountInfo MakePrimaryAccountAvailable(
+      IdentityManager* identity_manager,
+      const std::string& email);
+  friend void ClearPrimaryAccount(IdentityManager* identity_manager,
+                                  ClearPrimaryAccountPolicy policy);
+  friend AccountInfo MakeAccountAvailable(IdentityManager* identity_manager,
+                                          const std::string& email);
+  friend void SetRefreshTokenForAccount(IdentityManager* identity_manager,
+                                        const std::string& account_id);
+  friend void SetInvalidRefreshTokenForAccount(
+      IdentityManager* identity_manager,
+      const std::string& account_id);
+  friend void RemoveRefreshTokenForAccount(IdentityManager* identity_manager,
+                                           const std::string& account_id);
+  friend void UpdateAccountInfoForAccount(IdentityManager* identity_manager,
+                                          AccountInfo account_info);
+
   friend MultiProfileDownloadNotificationTest;
   friend file_manager::MultiProfileFilesAppBrowserTest;
 
@@ -277,6 +313,11 @@ class IdentityManager : public SigninManagerBase::Observer,
   friend arc::ArcTermsOfServiceDefaultNegotiatorTest;
   friend chromeos::ChromeSessionManager;
   friend chromeos::UserSessionManager;
+
+  // Private getters used for testing only (i.e. see identity_test_utils.h).
+  SigninManagerBase* GetSigninManager();
+  ProfileOAuth2TokenService* GetTokenService();
+  AccountTrackerService* GetAccountTrackerService();
 
   // Sets the primary account info synchronously with both the IdentityManager
   // and its backing SigninManager/ProfileOAuth2TokenService instances.
@@ -303,6 +344,8 @@ class IdentityManager : public SigninManagerBase::Observer,
 
   // SigninManagerBase::Observer:
   void GoogleSigninSucceeded(const AccountInfo& account_info) override;
+  void GoogleSigninSucceededWithPassword(const AccountInfo& account_info,
+                                         const std::string& password) override;
   void GoogleSignedOut(const AccountInfo& account_info) override;
   void GoogleSigninFailed(const GoogleServiceAuthError& error) override;
 
@@ -337,6 +380,10 @@ class IdentityManager : public SigninManagerBase::Observer,
   // PrimaryAccountMutator instance. May be null if mutation of the primary
   // account state is not supported on the current platform.
   std::unique_ptr<PrimaryAccountMutator> primary_account_mutator_;
+
+  // AccountsMutator instance. Guaranteed to be non-null, as this
+  // functionality is supported on all platforms.
+  AccountsMutator accounts_mutator_;
 
   // Lists of observers.
   // Makes sure lists are empty on destruction.

@@ -116,6 +116,10 @@ void WebRuntimeFeatures::EnableIsolatedCodeCache(bool enable) {
   RuntimeEnabledFeatures::SetIsolatedCodeCacheEnabled(enable);
 }
 
+void WebRuntimeFeatures::EnableWasmCodeCache(bool enable) {
+  RuntimeEnabledFeatures::SetWasmCodeCacheEnabled(enable);
+}
+
 void WebRuntimeFeatures::EnableCanvas2dImageChromium(bool enable) {
   RuntimeEnabledFeatures::SetCanvas2dImageChromiumEnabled(enable);
 }
@@ -548,6 +552,10 @@ void WebRuntimeFeatures::EnableScheduledScriptStreaming(bool enable) {
   RuntimeEnabledFeatures::SetScheduledScriptStreamingEnabled(enable);
 }
 
+void WebRuntimeFeatures::EnableScriptStreamingOnPreload(bool enable) {
+  RuntimeEnabledFeatures::SetScriptStreamingOnPreloadEnabled(enable);
+}
+
 void WebRuntimeFeatures::EnableExperimentalProductivityFeatures(bool enable) {
   RuntimeEnabledFeatures::SetExperimentalProductivityFeaturesEnabled(enable);
 }
@@ -582,6 +590,10 @@ void WebRuntimeFeatures::EnableBackgroundFetchUploads(bool enable) {
 
 void WebRuntimeFeatures::EnableMergeBlockingNonBlockingPools(bool enable) {
   RuntimeEnabledFeatures::SetMergeBlockingNonBlockingPoolsEnabled(enable);
+}
+
+void WebRuntimeFeatures::EnableGetDisplayMedia(bool enable) {
+  RuntimeEnabledFeatures::SetGetDisplayMediaEnabled(enable);
 }
 
 }  // namespace blink

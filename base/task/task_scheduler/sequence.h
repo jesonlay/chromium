@@ -50,6 +50,7 @@ class BASE_EXPORT Sequence : public RefCountedThreadSafe<Sequence> {
   // lifetime of the Transaction.
   class BASE_EXPORT Transaction {
    public:
+    Transaction(Transaction&& other);
     ~Transaction();
 
     // Adds |task| in a new slot at the end of the Sequence. Returns true if the
@@ -78,14 +79,17 @@ class BASE_EXPORT Sequence : public RefCountedThreadSafe<Sequence> {
 
     bool IsEmpty() const;
 
-    scoped_refptr<Sequence> sequence() { return sequence_; }
+    // Returns the traits of all Tasks in the Sequence.
+    TaskTraits traits() const { return sequence_->traits_; }
+
+    Sequence* sequence() const { return sequence_; }
 
    private:
     friend class Sequence;
 
     explicit Transaction(scoped_refptr<Sequence> sequence);
 
-    const scoped_refptr<Sequence> sequence_;
+    Sequence* sequence_;
 
     DISALLOW_COPY_AND_ASSIGN(Transaction);
   };
@@ -99,7 +103,7 @@ class BASE_EXPORT Sequence : public RefCountedThreadSafe<Sequence> {
 
   // Begins a Transaction. This method cannot be called on a thread which has an
   // active Sequence::Transaction.
-  std::unique_ptr<Transaction> BeginTransaction();
+  Transaction BeginTransaction();
 
   // Support for IntrusiveHeap.
   void SetHeapHandle(const HeapHandle& handle);
@@ -113,8 +117,11 @@ class BASE_EXPORT Sequence : public RefCountedThreadSafe<Sequence> {
     return &sequence_local_storage_;
   }
 
-  // Returns the TaskTraits for all Tasks in the Sequence.
-  TaskTraits traits() const { return traits_; }
+  // Returns the shutdown behavior of all Tasks in the Sequence. Can be
+  // accessed without a Transaction because it is never mutated.
+  TaskShutdownBehavior shutdown_behavior() const {
+    return traits_.shutdown_behavior();
+  }
 
  private:
   friend class RefCountedThreadSafe<Sequence>;
@@ -145,6 +152,16 @@ class BASE_EXPORT Sequence : public RefCountedThreadSafe<Sequence> {
   HeapHandle heap_handle_;
 
   DISALLOW_COPY_AND_ASSIGN(Sequence);
+};
+
+struct BASE_EXPORT SequenceAndTransaction {
+  scoped_refptr<Sequence> sequence;
+  Sequence::Transaction transaction;
+  SequenceAndTransaction(scoped_refptr<Sequence> sequence_in,
+                         Sequence::Transaction transaction_in);
+  SequenceAndTransaction(SequenceAndTransaction&& other);
+  static SequenceAndTransaction FromSequence(scoped_refptr<Sequence> sequence);
+  ~SequenceAndTransaction();
 };
 
 }  // namespace internal

@@ -110,12 +110,21 @@ class OverlayWindowFrameView : public views::NonClientFrameView {
 
     // The media controls should take and handle user interaction.
     OverlayWindowViews* window = static_cast<OverlayWindowViews*>(widget_);
-    if (window->GetCloseControlsBounds().Contains(point) ||
-        window->GetFirstCustomControlsBounds().Contains(point) ||
-        window->GetSecondCustomControlsBounds().Contains(point) ||
-        window->GetPlayPauseControlsBounds().Contains(point)) {
+    if (window->AreControlsVisible() &&
+        (window->GetCloseControlsBounds().Contains(point) ||
+         window->GetFirstCustomControlsBounds().Contains(point) ||
+         window->GetSecondCustomControlsBounds().Contains(point) ||
+         window->GetPlayPauseControlsBounds().Contains(point))) {
       return window_component;
     }
+
+#if defined(OS_CHROMEOS)
+    // If the resize handle is clicked on, we want to force the hit test to
+    // force a resize drag.
+    if (window->AreControlsVisible() &&
+        window->GetResizeHandleControlsBounds().Contains(point))
+      return window->GetResizeHTComponent();
+#endif
 
     // Allows for dragging and resizing the window.
     return (window_component == HTNOWHERE) ? HTCAPTION : window_component;
@@ -775,7 +784,7 @@ void OverlayWindowViews::OnGestureEvent(ui::GestureEvent* event) {
   // layers are expected to have the same visibility.
   // TODO(apacible): This placeholder logic should be updated with touchscreen
   // specific investigation. https://crbug/854373
-  if (!GetControlsScrimLayer()->visible()) {
+  if (!AreControlsVisible()) {
     UpdateControlsVisibility(true);
     return;
   }
@@ -810,6 +819,10 @@ gfx::Rect OverlayWindowViews::GetCloseControlsBounds() {
   return close_controls_view_->GetMirroredBounds();
 }
 
+gfx::Rect OverlayWindowViews::GetResizeHandleControlsBounds() {
+  return resize_handle_view_->GetMirroredBounds();
+}
+
 gfx::Rect OverlayWindowViews::GetPlayPauseControlsBounds() {
   return play_pause_controls_view_->GetMirroredBounds();
 }
@@ -824,6 +837,14 @@ gfx::Rect OverlayWindowViews::GetSecondCustomControlsBounds() {
   if (!second_custom_controls_view_)
     return gfx::Rect();
   return second_custom_controls_view_->GetMirroredBounds();
+}
+
+int OverlayWindowViews::GetResizeHTComponent() const {
+  return resize_handle_view_->GetHTComponent();
+}
+
+bool OverlayWindowViews::AreControlsVisible() const {
+  return controls_scrim_view_->layer()->visible();
 }
 
 ui::Layer* OverlayWindowViews::GetControlsScrimLayer() {

@@ -91,7 +91,10 @@ class CORE_EXPORT StyleEngine final
 
    public:
     IgnoringPendingStylesheet(StyleEngine& engine)
-        : scope_(&engine.ignore_pending_stylesheets_, true) {}
+        : scope_(&engine.ignore_pending_stylesheets_,
+                 !RuntimeEnabledFeatures::CSSInBodyDoesNotBlockPaintEnabled()) {
+    }
+
    private:
     base::AutoReset<bool> scope_;
   };
@@ -108,9 +111,10 @@ class CORE_EXPORT StyleEngine final
   };
 
   static StyleEngine* Create(Document& document) {
-    return new StyleEngine(document);
+    return MakeGarbageCollected<StyleEngine>(document);
   }
 
+  StyleEngine(Document&);
   ~StyleEngine() override;
 
   const HeapVector<TraceWrapperMember<StyleSheet>>&
@@ -269,8 +273,10 @@ class CORE_EXPORT StyleEngine final
     CollectUserStyleFeaturesTo(features);
     CollectScopedStyleFeaturesTo(features);
     for (CSSStyleSheet* sheet : custom_element_default_style_sheets_) {
-      if (sheet)
-        features.Add(RuleSetForSheet(*sheet)->Features());
+      if (!sheet)
+        continue;
+      if (RuleSet* rule_set = RuleSetForSheet(*sheet))
+        features.Add(rule_set->Features());
     }
   }
 
@@ -358,7 +364,6 @@ class CORE_EXPORT StyleEngine final
   void FontsNeedUpdate(FontSelector*) override;
 
  private:
-  StyleEngine(Document&);
   bool NeedsActiveStyleSheetUpdate() const {
     return all_tree_scopes_dirty_ || tree_scopes_removed_ ||
            document_scope_dirty_ || dirty_tree_scopes_.size() ||

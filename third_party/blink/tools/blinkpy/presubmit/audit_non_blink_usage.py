@@ -233,6 +233,11 @@ _CONFIG = [
             'event_handling_util::.+',
             'event_util::.+',
             'file_error::.+',
+            'inspector_\\w+_event::.+',
+            'inspector_async_task::.+',
+            'inspector_set_layer_tree_id::.+',
+            'inspector_tracing_started_in_frame::.+',
+            'layout_invalidation_reason::.+',
             'media_constraints_impl::.+',
             'media_element_parser_helpers::.+',
             'network_utils::.+',
@@ -376,6 +381,12 @@ _CONFIG = [
         'paths': ['third_party/blink/renderer/core/page'],
         'allowed': [
             'touch_adjustment::.+',
+        ],
+    },
+    {
+        'paths': ['third_party/blink/renderer/core/style/computed_style.h'],
+        'allowed': [
+            'css_longhand::.+',
         ],
     },
     {

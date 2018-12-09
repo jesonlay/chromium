@@ -46,6 +46,12 @@ const base::Feature kNotificationExpansionAnimation{
 const base::Feature kNotificationScrollBar{"NotificationScrollBar",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kPipRoundedCorners{"PipRoundedCorners",
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kSeparateNetworkIcons{"SeparateNetworkIcons",
+                                          base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kTrilinearFiltering{"TrilinearFiltering",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -88,6 +94,14 @@ bool IsNotificationExpansionAnimationEnabled() {
 
 bool IsNotificationScrollBarEnabled() {
   return base::FeatureList::IsEnabled(kNotificationScrollBar);
+}
+
+bool IsPipRoundedCornersEnabled() {
+  return base::FeatureList::IsEnabled(kPipRoundedCorners);
+}
+
+bool IsSeparateNetworkIconsEnabled() {
+  return base::FeatureList::IsEnabled(kSeparateNetworkIcons);
 }
 
 bool IsTrilinearFilteringEnabled() {

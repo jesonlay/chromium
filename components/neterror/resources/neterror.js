@@ -159,8 +159,24 @@ var primaryControlOnLeft = true;
 primaryControlOnLeft = false;
 // </if>
 
-// TODO(crbug.com/883486): UI not yet implemented.
 function setAutoFetchState(scheduled, can_schedule) {
+  document.getElementById('cancel-save-page-button')
+      .classList.toggle(HIDDEN_CLASS, !scheduled);
+  document.getElementById('save-page-for-later-button')
+      .classList.toggle(HIDDEN_CLASS, scheduled || !can_schedule);
+}
+
+function savePageLaterClick() {
+  errorPageController.savePageForLater();
+  // savePageForLater will eventually trigger a call to setAutoFetchState() when
+  // it completes.
+}
+
+function cancelSavePageClick() {
+  errorPageController.cancelSavePage();
+  // setAutoFetchState is not called in response to cancelSavePage(), so do it
+  // now.
+  setAutoFetchState(false, true);
 }
 
 function toggleErrorInformationPopup() {
@@ -255,7 +271,7 @@ function getSuggestedContentDiv(item, index) {
 // unsafe and must be securely handled to be presented on the dino page. Images
 // have already been safely re-encoded but textual content -- like title and
 // attribution -- must be properly handled here.
-function offlineContentAvailable(suggestions) {
+function offlineContentAvailable(isShown, suggestions) {
   if (!suggestions || !loadTimeData.valueExists('offlineContentList'))
     return;
 
@@ -278,7 +294,22 @@ function offlineContentAvailable(suggestions) {
   var contentListElement = document.getElementById('offline-content-list');
   if (document.dir == 'rtl')
     contentListElement.classList.add('is-rtl');
+  // The list is configured as shown by default. Hide if needed.
+  if (!isShown)
+    toggleOfflineContentListVisibility(false);
   contentListElement.hidden = false;
+}
+
+function toggleOfflineContentListVisibility(updatePref) {
+  if (!loadTimeData.valueExists('offlineContentList'))
+    return;
+
+  var contentListElement = document.getElementById('offline-content-list');
+  var isVisible = !contentListElement.classList.toggle('list-hidden');
+
+  if (updatePref && window.errorPageController) {
+    errorPageController.listVisibilityChanged(isVisible);
+  }
 }
 
 function onDocumentLoad() {
@@ -347,9 +378,12 @@ function onDocumentLoad() {
     detailsButton.classList.add('singular');
   }
 
+  var attemptAutoFetch = loadTimeData.valueExists('attemptAutoFetch') &&
+      loadTimeData.getValue('attemptAutoFetch');
+
   // Show control buttons.
   if (reloadButtonVisible || showSavedCopyButtonVisible ||
-      downloadButtonVisible) {
+      downloadButtonVisible || attemptAutoFetch) {
     controlButtonDiv.hidden = false;
 
     // Set the secondary button state in the cases of two call to actions.

@@ -228,16 +228,18 @@ class CrostiniManager::CrostiniRestarter
         base::FilePath(vm_name_),
         vm_tools::concierge::StorageLocation::STORAGE_CRYPTOHOME_ROOT,
         disk_size_available,
-        base::BindOnce(&CrostiniRestarter::CreateDiskImageFinished, this));
+        base::BindOnce(&CrostiniRestarter::CreateDiskImageFinished, this,
+                       disk_size_available));
   }
 
-  void CreateDiskImageFinished(CrostiniResult result,
+  void CreateDiskImageFinished(int64_t disk_size_available,
+                               CrostiniResult result,
                                vm_tools::concierge::DiskImageStatus status,
                                const base::FilePath& result_path) {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
     // Tell observers.
     for (auto& observer : observer_list_) {
-      observer.OnDiskImageCreated(result, status);
+      observer.OnDiskImageCreated(result, status, disk_size_available);
     }
     if (is_aborted_)
       return;
@@ -1055,8 +1057,8 @@ GURL CrostiniManager::GenerateVshInCroshUrl(
                          CryptohomeIdForProfile(profile).c_str()),
       false);
 
-  std::vector<base::StringPiece> pieces = {
-      vsh_crosh, vm_name_param, container_name_param, owner_id_param};
+  std::vector<std::string> pieces = {vsh_crosh, vm_name_param,
+                                     container_name_param, owner_id_param};
   if (!terminal_args.empty()) {
     // Separates the command args from the args we are passing into the
     // terminal to be executed.

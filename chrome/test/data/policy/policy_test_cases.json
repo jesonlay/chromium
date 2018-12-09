@@ -2380,6 +2380,16 @@
       ]
   },
 
+  "CloudManagementEnrollmentMandatory": {
+    "os": ["win", "linux", "mac"],
+    "test_policy": {"CloudManagementEnrollmentMandatory": true},
+    "pref_mappings": [
+        { "pref": "policy.cloud_management_enrollment_mandatory",
+          "local_state": true
+        }
+      ]
+  },
+
   "SSLVersionMin": {
     "os": ["win", "linux", "mac", "chromeos"],
     "test_policy": { "SSLVersionMin": "tls1.1" },
@@ -3427,6 +3437,20 @@
     "test_policy": { "DisplayRotationDefault": 1 }
   },
 
+  "DeviceDisplayResolution": {
+    "os": ["chromeos"],
+    "can_be_recommended": false,
+    "test_policy": {
+      "DeviceDisplayResolution": {
+        "external_width": 1920,
+        "external_height": 1080,
+        "external_scale_percentage": 100,
+        "internal_scale_percentage": 50,
+        "recommended": true
+      }
+    }
+  },
+
   "ChromeOsReleaseChannel": {
   },
 
@@ -4070,6 +4094,23 @@
   },
 
   "WebAppInstallForceList": {
+  },
+
+  "PluginVmAllowed": {
+    "os": ["chromeos"],
+    "test_policy": { "PluginVmAllowed": true },
+    "pref_mappings": []
+  },
+
+  "PluginVmImage": {
+    "os": ["chromeos"],
+    "test_policy": {
+      "PluginVmImage": {
+        "url": "http://localhost/",
+        "hash": "842841a4c75a55ad050d686f4ea5f77e83ae059877fe9b6946aa63d3d057ed32"
+      }
+    },
+    "pref_mappings": []
   },
 
   "----- Chrome Frame policies -------------------------------------------": {},

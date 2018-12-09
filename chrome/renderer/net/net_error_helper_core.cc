@@ -1128,3 +1128,23 @@ void NetErrorHelperCore::LaunchDownloadsPage() {
   available_content_helper_.LaunchDownloadsPage();
 #endif
 }
+
+void NetErrorHelperCore::SavePageForLater() {
+#if defined(OS_ANDROID)
+  page_auto_fetcher_helper_->TrySchedule(
+      /*user_requested=*/true, base::BindOnce(&Delegate::SetAutoFetchState,
+                                              base::Unretained(delegate_)));
+#endif
+}
+
+void NetErrorHelperCore::CancelSavePage() {
+#if defined(OS_ANDROID)
+  page_auto_fetcher_helper_->CancelSchedule();
+#endif
+}
+
+void NetErrorHelperCore::ListVisibilityChanged(bool is_visible) {
+#if defined(OS_ANDROID)
+  available_content_helper_.ListVisibilityChanged(is_visible);
+#endif
+}

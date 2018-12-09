@@ -170,6 +170,8 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['win', 'nvidia', 'd3d11'], bug=679639)
     self.Flaky('deqp/functional/gles3/textureshadow/*.html',
         ['win', 'nvidia', 'd3d11'], bug=735464)
+    self.Flaky('conformance/uniforms/uniform-default-values.html',
+        ['win', 'nvidia', 'vulkan', 'passthrough'], bug=907544)
 
     # Win / NVIDIA Quadro P400 / D3D11 flaky failures
     self.Fail('deqp/data/gles3/shaders/functions.html',
@@ -968,6 +970,10 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Flaky('deqp/functional/gles3/transformfeedback/' +
         'random_separate_triangles.html',
         ['linux', ('nvidia', 0x1cb3)], bug=780706)
+    self.Flaky('conformance2/rendering/canvas-resizing-with-pbo-bound.html',
+        ['linux', 'nvidia'], bug=906846)
+    self.Flaky('conformance2/rendering/blitframebuffer-test.html',
+        ['linux', 'nvidia'], bug=906889)
 
     # Linux NVIDIA Quadro P400, OpenGL backend
     self.Fail('conformance/limits/gl-max-texture-dimensions.html',

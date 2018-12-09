@@ -239,6 +239,8 @@ class FormStructure {
     return has_author_specified_upi_vpa_hint_;
   }
 
+  bool has_password_field() const { return has_password_field_; }
+
   void set_submission_event(
       PasswordForm::SubmissionIndicatorEvent submission_event) {
     submission_event_ = submission_event;
@@ -316,6 +318,8 @@ class FormStructure {
   int developer_engagement_metrics() { return developer_engagement_metrics_; };
 
   void set_randomized_encoder(std::unique_ptr<RandomizedEncoder> encoder);
+
+  void set_is_rich_query_enabled(bool v) { is_rich_query_enabled_ = v; }
 
  private:
   friend class AutofillMergeTest;
@@ -564,6 +568,10 @@ class FormStructure {
   // The randomized encoder to use to encode form metadata during upload.
   // If this is nullptr, no randomized metadata will be sent.
   std::unique_ptr<RandomizedEncoder> randomized_encoder_;
+
+  // True iff queries encoded from this form structure should include rich
+  // form/field metadata.
+  bool is_rich_query_enabled_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(FormStructure);
 };

@@ -11,6 +11,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/sequenced_task_runner_handle.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/power/auto_screen_brightness/fake_als_reader.h"
 #include "chrome/browser/chromeos/power/auto_screen_brightness/fake_brightness_monitor.h"
 #include "chrome/browser/chromeos/power/auto_screen_brightness/modeller.h"
@@ -34,14 +35,6 @@ namespace power {
 namespace auto_screen_brightness {
 
 namespace {
-
-using SamplesCounts = std::vector<
-    std::pair<base::HistogramBase::Sample, base::HistogramBase::Count>>;
-
-constexpr auto kNoPriorModelAdjustment =
-    static_cast<int>(Adapter::UserAdjustment::kNoPriorModelAdjustment);
-constexpr auto kWithPriorModelAdjustment =
-    static_cast<int>(Adapter::UserAdjustment::kWithPriorModelAdjustment);
 
 // Testing modeller.
 class FakeModeller : public Modeller {
@@ -154,6 +147,9 @@ class AdapterTest : public testing::Test {
     scoped_refptr<user_prefs::PrefRegistrySyncable> registry(
         new user_prefs::PrefRegistrySyncable);
 
+    chromeos::power::auto_screen_brightness::MetricsReporter::
+        RegisterLocalStatePrefs(registry.get());
+
     // Same default values as used in the actual pref store.
     registry->RegisterIntegerPref(ash::prefs::kPowerAcScreenBrightnessPercent,
                                   -1, PrefRegistry::PUBLIC);
@@ -181,12 +177,14 @@ class AdapterTest : public testing::Test {
     profile_ = profile_builder.Build();
 
     base::test::ScopedFeatureList scoped_feature_list;
-    scoped_feature_list.InitAndEnableFeatureWithParameters(
-        features::kAutoScreenBrightness, params);
+    if (!params.empty()) {
+      scoped_feature_list.InitAndEnableFeatureWithParameters(
+          features::kAutoScreenBrightness, params);
+    }
 
     adapter_ = std::make_unique<Adapter>(
         profile_.get(), &fake_als_reader_, &fake_brightness_monitor_,
-        &fake_modeller_,
+        &fake_modeller_, nullptr /* metrics_reporter */,
         chromeos::DBusThreadManager::Get()->GetPowerManagerClient());
     adapter_->SetTickClockForTesting(
         scoped_task_environment_.GetMockTickClock());
@@ -205,24 +203,9 @@ class AdapterTest : public testing::Test {
     scoped_task_environment_.RunUntilIdle();
   }
 
-  void VerifyHistogramCounts(
-      const std::map<std::string, SamplesCounts>& expected_values) {
-    for (const auto& histogram_samples : expected_values) {
-      const std::string& histogram_name = histogram_samples.first;
-      const SamplesCounts& samples_counts = histogram_samples.second;
-      for (const auto& sample_count : samples_counts) {
-        const base::HistogramBase::Sample& sample = sample_count.first;
-        const base::HistogramBase::Count& count = sample_count.second;
-        histogram_tester_.ExpectUniqueSample(histogram_name, sample, count);
-      }
-    }
-  }
-
  protected:
   base::test::ScopedTaskEnvironment scoped_task_environment_;
   content::TestBrowserThreadBundle thread_bundle_;
-
-  base::HistogramTester histogram_tester_;
 
   TestObserver test_observer_;
 
@@ -410,16 +393,11 @@ TEST_F(AdapterTest, SequenceOfBrightnessUpdatesWithDefaultParams) {
   scoped_task_environment_.RunUntilIdle();
   EXPECT_EQ(adapter_->GetStatusForTesting(), Adapter::Status::kDisabled);
 
-  VerifyHistogramCounts({{"AutoScreenBrightness.UserAdjustment",
-                          {{kWithPriorModelAdjustment, 1}}}});
-
   // Another user manual adjustment came in.
   fake_brightness_monitor_.ReportUserBrightnessChangeRequested();
   scoped_task_environment_.RunUntilIdle();
   EXPECT_EQ(adapter_->GetStatusForTesting(), Adapter::Status::kDisabled);
 
-  VerifyHistogramCounts({{"AutoScreenBrightness.UserAdjustment",
-                          {{kWithPriorModelAdjustment, 2}}}});
 }
 
 TEST_F(AdapterTest, UserBrightnessRequestBeforeAnyModelUpdate) {
@@ -437,16 +415,10 @@ TEST_F(AdapterTest, UserBrightnessRequestBeforeAnyModelUpdate) {
   scoped_task_environment_.RunUntilIdle();
   EXPECT_EQ(adapter_->GetStatusForTesting(), Adapter::Status::kDisabled);
 
-  VerifyHistogramCounts({{"AutoScreenBrightness.UserAdjustment",
-                          {{kNoPriorModelAdjustment, 1}}}});
-
   // Another user manual adjustment came in.
   fake_brightness_monitor_.ReportUserBrightnessChangeRequested();
   scoped_task_environment_.RunUntilIdle();
   EXPECT_EQ(adapter_->GetStatusForTesting(), Adapter::Status::kDisabled);
-
-  VerifyHistogramCounts({{"AutoScreenBrightness.UserAdjustment",
-                          {{kNoPriorModelAdjustment, 2}}}});
 }
 
 TEST_F(AdapterTest, BrightnessLuxThresholds) {
@@ -647,6 +619,27 @@ TEST_F(AdapterTest, BrightnessSetByPolicy) {
   EXPECT_EQ(adapter_->GetStatusForTesting(), Adapter::Status::kSuccess);
 
   scoped_task_environment_.FastForwardBy(base::TimeDelta::FromSeconds(1));
+  fake_als_reader_.ReportAmbientLightUpdate(10);
+  scoped_task_environment_.RunUntilIdle();
+  EXPECT_EQ(test_observer_.num_changes(), 0);
+}
+
+TEST_F(AdapterTest, FeatureDisabled) {
+  // An empty param map will not enable the experiment.
+  std::map<std::string, std::string> empty_params;
+
+  Init(AlsReader::AlsInitStatus::kSuccess, BrightnessMonitor::Status::kSuccess,
+       global_curve_, personal_curve_, empty_params);
+
+  EXPECT_EQ(adapter_->GetStatusForTesting(), Adapter::Status::kDisabled);
+  // Global and personal curves are received, but they won't be used to change
+  // brightness.
+  EXPECT_TRUE(adapter_->GetGlobalCurveForTesting());
+  EXPECT_TRUE(adapter_->GetPersonalCurveForTesting());
+
+  scoped_task_environment_.FastForwardBy(base::TimeDelta::FromSeconds(1));
+
+  // Brightness not changed after the 1st ALS reading comes in.
   fake_als_reader_.ReportAmbientLightUpdate(10);
   scoped_task_environment_.RunUntilIdle();
   EXPECT_EQ(test_observer_.num_changes(), 0);

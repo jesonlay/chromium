@@ -15,23 +15,7 @@
 
 namespace ash {
 
-// Cached info from device::BluetoothDevice used for display in the UI.
-// Exists because it is not safe to cache pointers to device::BluetoothDevice
-// instances.
-struct ASH_EXPORT BluetoothDeviceInfo {
-  BluetoothDeviceInfo();
-  BluetoothDeviceInfo(const BluetoothDeviceInfo& other);
-  ~BluetoothDeviceInfo();
-
-  std::string address;
-  base::string16 display_name;
-  bool connected = false;
-  bool connecting = false;
-  bool paired = false;
-  device::BluetoothDeviceType device_type;
-};
-
-using BluetoothDeviceList = std::vector<BluetoothDeviceInfo>;
+using BluetoothDeviceList = std::vector<device::mojom::BluetoothDeviceInfoPtr>;
 
 // Maps UI concepts from the Bluetooth system tray (e.g. "Bluetooth is on") into
 // device concepts ("Bluetooth adapter enabled"). Note that most Bluetooth
@@ -42,8 +26,23 @@ using BluetoothDeviceList = std::vector<BluetoothDeviceInfo>;
 // de-virtualize this class and remove its legacy implementation.
 class TrayBluetoothHelper {
  public:
+  class Observer : public base::CheckedObserver {
+   public:
+    // Called when the state of Bluetooth in the system changes.
+    virtual void OnBluetoothSystemStateChanged() {}
+
+    // Called when a Bluetooth scan has started or stopped.
+    virtual void OnBluetoothScanStateChanged() {}
+
+    // Called when a device was added, removed, or changed.
+    virtual void OnBluetoothDeviceListChanged() {}
+  };
+
   TrayBluetoothHelper();
   virtual ~TrayBluetoothHelper();
+
+  void AddObserver(Observer* observer);
+  void RemoveObserver(Observer* observer);
 
   // Initializes and gets the adapter asynchronously.
   virtual void Initialize() = 0;
@@ -74,6 +73,13 @@ class TrayBluetoothHelper {
 
   // Returns whether the delegate has initiated a bluetooth discovery session.
   virtual bool HasBluetoothDiscoverySession() = 0;
+
+ protected:
+  void NotifyBluetoothSystemStateChanged();
+  void NotifyBluetoothScanStateChanged();
+  void NotifyBluetoothDeviceListChanged();
+
+  base::ObserverList<Observer> observers_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(TrayBluetoothHelper);

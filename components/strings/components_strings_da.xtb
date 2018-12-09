@@ -584,7 +584,6 @@
 <translation id="4895877746940133817"><ph name="TYPE_1" />, <ph name="TYPE_2" />, <ph name="TYPE_3" /></translation>
 <translation id="4914479371620770914">{URL_count,plural, =1{og 1 anden webside}one{og # anden webside}other{og # andre websider}}</translation>
 <translation id="4916962322362512664"><ph name="DEVICE_NAME" /></translation>
-<translation id="4919958102839282947">Angiv kontrolkoden for <ph name="CREDIT_CARD" />. Når du bekræfter, deles kortoplysningerne på din konto i Google Payments med dette website.</translation>
 <translation id="4923417429809017348">Denne side er oversat fra et ukendt sprog til <ph name="LANGUAGE_LANGUAGE" /></translation>
 <translation id="4923459931733593730">Betaling</translation>
 <translation id="4926049483395192435">Skal angives.</translation>
@@ -616,7 +615,6 @@
 <translation id="5095208057601539847">Provins</translation>
 <translation id="5098332213681597508">Dette navn er fra din Google-konto.</translation>
 <translation id="5115563688576182185">(64-bit)</translation>
-<translation id="5121084798328133320">Når du bekræfter, deles kortoplysningerne på din konto i Google Payments med dette website.</translation>
 <translation id="5128122789703661928">Sessionen med dette navn kan ikke slettes.</translation>
 <translation id="5135404736266831032">Administrer adresser...</translation>
 <translation id="5141240743006678641">Krypter synkroniserede adgangskoder med dine Google-loginoplysninger</translation>
@@ -638,6 +636,7 @@
 <translation id="5287240709317226393">Vis cookies</translation>
 <translation id="5288108484102287882">Validering af politikværdier har genereret advarsler</translation>
 <translation id="5299298092464848405">Der opstod en fejl ved parsing af politik</translation>
+<translation id="5300589172476337783">Vis</translation>
 <translation id="5308380583665731573">Få forbindelse</translation>
 <translation id="5308689395849655368">Rapportering af nedbrud er deaktiveret.</translation>
 <translation id="5317780077021120954">Gem</translation>
@@ -873,6 +872,7 @@
 <translation id="7079718277001814089">Dette website indeholder malware</translation>
 <translation id="7087282848513945231">Amt/region</translation>
 <translation id="7090678807593890770">Søg efter <ph name="LINK" /> på Google</translation>
+<translation id="7108338896283013870">Skjul</translation>
 <translation id="7108819624672055576">Tilladt med en udvidelse</translation>
 <translation id="7111012039238467737">(gyldigt)</translation>
 <translation id="7119414471315195487">Luk andre faner eller programmer</translation>
@@ -1148,7 +1148,6 @@ Yderligere oplysninger:
 <translation id="8932102934695377596">Dit ur er bagud</translation>
 <translation id="893332455753468063">Tilføj navn</translation>
 <translation id="8938939909778640821">Accepterede betalingskort</translation>
-<translation id="8952525071319348207">Opdater dine kortoplysninger ved at indtaste udløbsdatoen og kontrolkoden for <ph name="CREDIT_CARD" />. Når du bekræfter, deles kortoplysningerne på din konto i Google Payments med dette website.</translation>
 <translation id="8957210676456822347">Godkendelse af captive portal</translation>
 <translation id="8971063699422889582">Serverens certifikat er udløbet.</translation>
 <translation id="8975012916872825179">Omfatter oplysninger såsom telefonnumre, mailadresser og leveringsadresser</translation>

@@ -22,6 +22,7 @@
 #include "base/run_loop.h"
 #include "base/values.h"
 #include "base/version.h"
+#include "build/build_config.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_mode_test_helper.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
@@ -440,7 +441,7 @@ TEST_F(DemoExtensionsExternalLoaderTest,
   EXPECT_TRUE(external_provider_visitor_.loaded_crx_files().empty());
 }
 
-TEST_F(DemoExtensionsExternalLoaderTest, LoadApp) {
+TEST_F(DemoExtensionsExternalLoaderTest, DISABLED_LoadApp) {
   demo_mode_test_helper_->InitializeSession();
 
   // Create a temporary cache directory.

@@ -437,6 +437,7 @@ bool NotificationInputContainerMD::HandleKeyEvent(views::Textfield* sender,
       event.key_code() == ui::VKEY_RETURN) {
     delegate_->OnNotificationInputSubmit(
         textfield_->GetProperty(kTextfieldIndexKey), textfield_->text());
+    textfield_->SetText(base::string16());
     return true;
   }
   return event.type() == ui::ET_KEY_RELEASED;
@@ -477,6 +478,8 @@ class InlineSettingsRadioButton : public views::RadioButton {
 // ////////////////////////////////////////////////////////////
 
 void NotificationViewMD::CreateOrUpdateViews(const Notification& notification) {
+  left_content_count_ = 0;
+
   CreateOrUpdateContextTitleView(notification);
   CreateOrUpdateTitleView(notification);
   CreateOrUpdateMessageView(notification);
@@ -746,8 +749,6 @@ void NotificationViewMD::ButtonPressed(views::Button* sender,
   }
 
   if (sender == settings_done_button_) {
-    if (block_all_button_->checked())
-      MessageCenter::Get()->DisableNotification(id);
     ToggleInlineSettings(event);
     return;
   }
@@ -801,10 +802,12 @@ void NotificationViewMD::CreateOrUpdateTitleView(
     title_view_->SetFontList(font_list);
     title_view_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     title_view_->SetEnabledColor(kRegularTextColorMD);
-    left_content_->AddChildView(title_view_);
+    left_content_->AddChildViewAt(title_view_, left_content_count_);
   } else {
     title_view_->SetText(title);
   }
+
+  left_content_count_++;
 }
 
 void NotificationViewMD::CreateOrUpdateMessageView(
@@ -827,12 +830,13 @@ void NotificationViewMD::CreateOrUpdateMessageView(
     message_view_->SetLineLimit(kMaxLinesForMessageView);
     message_view_->SetColor(kDimTextColorMD);
 
-    left_content_->AddChildView(message_view_);
+    left_content_->AddChildViewAt(message_view_, left_content_count_);
   } else {
     message_view_->SetText(text);
   }
 
   message_view_->SetVisible(notification.items().empty());
+  left_content_count_++;
 }
 
 void NotificationViewMD::CreateOrUpdateCompactTitleMessageView(
@@ -846,12 +850,14 @@ void NotificationViewMD::CreateOrUpdateCompactTitleMessageView(
   }
   if (!compact_title_message_view_) {
     compact_title_message_view_ = new CompactTitleMessageView();
-    left_content_->AddChildView(compact_title_message_view_);
+    left_content_->AddChildViewAt(compact_title_message_view_,
+                                  left_content_count_);
   }
 
   compact_title_message_view_->set_title(notification.title());
   compact_title_message_view_->set_message(notification.message());
   left_content_->InvalidateLayout();
+  left_content_count_++;
 }
 
 void NotificationViewMD::CreateOrUpdateProgressBarView(
@@ -871,7 +877,7 @@ void NotificationViewMD::CreateOrUpdateProgressBarView(
                                                 /* allow_round_corner */ false);
     progress_bar_view_->SetBorder(
         views::CreateEmptyBorder(kProgressBarTopPadding, 0, 0, 0));
-    left_content_->AddChildView(progress_bar_view_);
+    left_content_->AddChildViewAt(progress_bar_view_, left_content_count_);
   }
 
   progress_bar_view_->SetValue(notification.progress() / 100.0);
@@ -881,6 +887,8 @@ void NotificationViewMD::CreateOrUpdateProgressBarView(
     header_row_->SetProgress(notification.progress());
   else
     header_row_->ClearProgress();
+
+  left_content_count_++;
 }
 
 void NotificationViewMD::CreateOrUpdateProgressStatusView(
@@ -902,10 +910,11 @@ void NotificationViewMD::CreateOrUpdateProgressStatusView(
     status_view_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     status_view_->SetEnabledColor(kDimTextColorMD);
     status_view_->SetBorder(views::CreateEmptyBorder(kStatusTextPadding));
-    left_content_->AddChildView(status_view_);
+    left_content_->AddChildViewAt(status_view_, left_content_count_);
   }
 
   status_view_->SetText(notification.progress_status());
+  left_content_count_++;
 }
 
 void NotificationViewMD::CreateOrUpdateListItemViews(
@@ -920,7 +929,7 @@ void NotificationViewMD::CreateOrUpdateListItemViews(
        ++i) {
     std::unique_ptr<views::View> item_view = CreateItemView(items[i]);
     item_views_.push_back(item_view.get());
-    left_content_->AddChildView(item_view.release());
+    left_content_->AddChildViewAt(item_view.release(), left_content_count_++);
   }
 
   list_items_count_ = items.size();
@@ -1203,6 +1212,9 @@ void NotificationViewMD::ToggleInlineSettings(const ui::Event& event) {
     return;
 
   bool inline_settings_visible = !settings_row_->visible();
+
+  if (!inline_settings_visible && block_all_button_->checked())
+    MessageCenter::Get()->DisableNotification(notification_id());
 
   settings_row_->SetVisible(inline_settings_visible);
   content_row_->SetVisible(!inline_settings_visible);

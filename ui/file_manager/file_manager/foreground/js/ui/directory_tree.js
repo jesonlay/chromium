@@ -2,6 +2,28 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// Namespace
+const directorytree = {};
+
+/**
+ * Returns a string to be used as an attribute value to customize the entry
+ * icon.
+ *
+ * @param {VolumeManagerCommon.RootType} rootType The root type to entry.
+ * @param {Entry|FilesAppEntry} entry
+ * @return {string} a string
+ */
+directorytree.getIconOverrides = function(rootType, entry) {
+  // Overrides per RootType and defined by fullPath.
+  const overrides = {
+    [VolumeManagerCommon.RootType.DOWNLOADS]: {
+      '/Downloads': VolumeManagerCommon.VolumeType.DOWNLOADS,
+    },
+  };
+  const root = overrides[rootType];
+  return root ? root[entry.fullPath] : null;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 // DirectoryTreeBase
 
@@ -86,6 +108,7 @@ DirectoryItemTreeBaseMethods.searchAndSelectByEntry = function(entry) {
   }
   return false;
 };
+
 /**
  * Records UMA for the selected entry at {@code location}. Records slightly
  * differently if the expand icon is selected and {@code expandIconSelected} is
@@ -635,7 +658,13 @@ function SubDirectoryItem(label, dirEntry, parentDirItem, tree) {
           'volume-type-for-testing', location.volumeInfo.volumeType);
     }
   } else {
-    icon.setAttribute('file-type-icon', 'folder');
+    const rootType = location.rootType || null;
+    const iconOverride = directorytree.getIconOverrides(rootType, dirEntry);
+    // Add Downloads icon as volume so current test code passes with
+    // MyFilesVolume flag enabled and disabled.
+    if (iconOverride)
+      icon.setAttribute('volume-type-icon', iconOverride);
+    icon.setAttribute('file-type-icon', iconOverride || 'folder');
     item.updateSharedStatusIcon();
   }
 
@@ -701,6 +730,10 @@ function EntryListItem(rootType, modelItem, tree) {
   item.dirEntry_ = modelItem.entry;
   item.parentTree_ = tree;
 
+  if (window.IN_TEST && item.entry && item.entry.volumeInfo) {
+    item.setAttribute(
+        'volume-type-for-testing', item.entry.volumeInfo.volumeType);
+  }
   const icon = queryRequiredElement('.icon', item);
   icon.classList.add('item-icon');
   icon.setAttribute('root-type-icon', rootType);
@@ -734,6 +767,24 @@ EntryListItem.prototype = {
   get modelItem() {
     return this.modelItem_;
   }
+};
+
+/**
+ * Default sorting for DirectoryItem sub-dirrectories.
+ * @param {!Array<!Entry>} entries Entries to be sorted.
+ * @returns {!Array<!Entry>}
+ */
+EntryListItem.prototype.sortEntries = function(entries) {
+  if (!util.isMyFilesVolumeEnabled())
+    return DirectoryItem.prototype.sortEntries.apply(this, [entries]);
+
+  // If the root entry hasn't been resolved yet.
+  if (!this.entry)
+    return DirectoryItem.prototype.sortEntries.apply(this, [entries]);
+
+  const filter = this.fileFilter_.filter.bind(this.fileFilter_);
+  return entries.filter(filter).sort(
+      util.compareNameAndGroupBottomEntries(this.entry.getUIChildren()));
 };
 
 /**
@@ -947,7 +998,13 @@ VolumeItem.prototype.setupEjectButton_ = function(rowElement) {
   ejectButton.addEventListener('mouseup', (event) => {
     event.stopPropagation();
   });
+  ejectButton.addEventListener('up', (event) => {
+    event.stopPropagation();
+  });
   ejectButton.addEventListener('mousedown', (event) => {
+    event.stopPropagation();
+  });
+  ejectButton.addEventListener('down', (event) => {
     event.stopPropagation();
   });
   ejectButton.className = 'root-eject';
@@ -1030,13 +1087,7 @@ DriveVolumeItem.prototype = {
 DriveVolumeItem.prototype.handleClick = function(e) {
   VolumeItem.prototype.handleClick.call(this, e);
 
-  if (!e.target.classList.contains('expand-icon')) {
-    // If the Drive volume is clicked, select one of the children instead of
-    // this item itself.
-    this.volumeInfo_.resolveDisplayRoot((displayRoot) => {
-      this.searchAndSelectByEntry(displayRoot);
-    });
-  }
+  this.selectDisplayRoot_(e.target);
 
   DirectoryItemTreeBaseMethods.recordUMASelectedEntry.call(
       this, e, VolumeManagerCommon.RootType.DRIVE_FAKE_ROOT, true);
@@ -1176,6 +1227,28 @@ DriveVolumeItem.prototype.createComputersGrandRoot_ = function() {
       }
     });
   });
+};
+
+/**
+ * Change current entry to the entry corresponding to My Drive.
+ */
+DriveVolumeItem.prototype.activate = function() {
+  VolumeItem.prototype.activate.call(this);
+  this.selectDisplayRoot_(this);
+};
+
+/**
+ * Select Drive's display root.
+ * @param {EventTarget} target The event target.
+ */
+DriveVolumeItem.prototype.selectDisplayRoot_ = function(target) {
+  if (!target.classList.contains('expand-icon')) {
+    // If the Drive volume is clicked, select one of the children instead of
+    // this item itself.
+    this.volumeInfo_.resolveDisplayRoot((displayRoot) => {
+      this.searchAndSelectByEntry(displayRoot);
+    });
+  }
 };
 
 /**

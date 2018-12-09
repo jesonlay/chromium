@@ -18,7 +18,6 @@
 #include "components/sync/driver/sync_driver_switches.h"
 #include "components/sync/test/fake_server/bookmark_entity_builder.h"
 #include "components/sync/test/fake_server/entity_builder_factory.h"
-#include "components/unified_consent/feature.h"
 
 using base::FeatureList;
 using syncer::ModelType;
@@ -45,9 +44,8 @@ ModelTypeSet MultiGroupTypes(const ModelTypeSet& registered_types) {
   // TODO(vitaliii): Do not use such short variable names here (and possibly
   // elsewhere in the file).
   for (ModelType st : selectable_types) {
-    const ModelTypeSet grouped_types = SyncPrefs::ResolvePrefGroups(
-        registered_types, ModelTypeSet(st),
-        unified_consent::IsUnifiedConsentFeatureEnabled());
+    const ModelTypeSet grouped_types =
+        SyncPrefs::ResolvePrefGroups(registered_types, ModelTypeSet(st));
     for (ModelType gt : grouped_types) {
       if (seen.Has(gt)) {
         multi.Put(gt);
@@ -127,10 +125,9 @@ class EnableDisableSingleClientTest : public SyncTest {
   }
 
   ModelTypeSet ResolveGroup(ModelType type) {
-    return Difference(SyncPrefs::ResolvePrefGroups(
-                          registered_types_, ModelTypeSet(type),
-                          unified_consent::IsUnifiedConsentFeatureEnabled()),
-                      ProxyTypes());
+    return Difference(
+        SyncPrefs::ResolvePrefGroups(registered_types_, ModelTypeSet(type)),
+        ProxyTypes());
   }
 
   ModelTypeSet WithoutMultiTypes(const ModelTypeSet& input) {
@@ -277,6 +274,24 @@ IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, EnableDisable) {
 
   for (ModelType st : selectable_types_) {
     EXPECT_FALSE(ModelTypeExists(st)) << " for " << ModelTypeToString(st);
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, PRE_EnableAndRestart) {
+  SetupTest(/*all_types_enabled=*/true);
+}
+
+IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, EnableAndRestart) {
+  ASSERT_TRUE(SetupClients());
+
+  EXPECT_TRUE(GetClient(0)->AwaitEngineInitialization());
+
+  // Proxy types don't really run.
+  const ModelTypeSet non_proxy_types =
+      Difference(selectable_types_, ProxyTypes());
+
+  for (ModelType type : non_proxy_types) {
+    EXPECT_TRUE(ModelTypeExists(type)) << " for " << ModelTypeToString(type);
   }
 }
 

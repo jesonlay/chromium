@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/stl_util.h"
 #include "content/renderer/media/stream/media_stream_constraints_util.h"
 #include "content/renderer/media/stream/media_stream_constraints_util_sets.h"
 #include "content/renderer/media/stream/media_stream_video_source.h"
@@ -24,6 +25,8 @@ namespace {
 
 using ResolutionSet = media_constraints::ResolutionSet;
 using DoubleRangeSet = media_constraints::NumericRangeSet<double>;
+using IntRangeSet = media_constraints::NumericRangeSet<int32_t>;
+using BoolSet = media_constraints::DiscreteSet<bool>;
 using DeviceInfo = mojo::StructPtr<blink::mojom::VideoInputDeviceCapabilities>;
 using DistanceVector = std::vector<double>;
 
@@ -51,18 +54,11 @@ blink::WebString ToWebString(media::VideoFacingMode facing_mode) {
 // closest value to it in the range [min, max].
 // Based on https://w3c.github.io/mediacapture-main/#dfn-fitness-distance.
 template <typename NumericConstraint>
-double NumericRangeFitness(const NumericConstraint& constraint,
-                           decltype(constraint.Min()) min,
-                           decltype(constraint.Min()) max) {
-  if (!constraint.HasIdeal())
-    return 0.0;
-
-  if (constraint.Ideal() > max)
-    return NumericConstraintFitnessDistance(max, constraint.Ideal());
-  if (constraint.Ideal() < min)
-    return NumericConstraintFitnessDistance(min, constraint.Ideal());
-
-  return 0.0;
+double NumericValueFitness(const NumericConstraint& constraint,
+                           decltype(constraint.Min()) value) {
+  return constraint.HasIdeal()
+             ? NumericConstraintFitnessDistance(value, constraint.Ideal())
+             : 0.0;
 }
 
 // Returns a custom distance between |native_value| and the ideal value and
@@ -137,6 +133,10 @@ class CandidateFormat {
   // Convenience accessors for format() fields.
   int NativeHeight() const { return format_.frame_size.height(); }
   int NativeWidth() const { return format_.frame_size.width(); }
+  double NativeAspectRatio() const {
+    DCHECK(NativeWidth() > 0 || NativeHeight() > 0);
+    return static_cast<double>(NativeWidth()) / NativeHeight();
+  }
   double NativeFrameRate() const { return format_.frame_rate; }
 
   // Convenience accessors for accessors for resolution_set() fields. They
@@ -187,8 +187,22 @@ class CandidateFormat {
   bool ApplyConstraintSet(
       const blink::WebMediaTrackConstraintSet& constraint_set,
       const char** failed_constraint_name = nullptr) {
+    auto rescale_intersection =
+        rescale_set_.Intersection(media_constraints::RescaleSetFromConstraint(
+            constraint_set.resize_mode));
+    if (rescale_intersection.IsEmpty()) {
+      UpdateFailedConstraintName(constraint_set.resize_mode,
+                                 failed_constraint_name);
+      return false;
+    }
+
     auto resolution_intersection = resolution_set_.Intersection(
         ResolutionSet::FromConstraintSet(constraint_set));
+    if (!rescale_intersection.Contains(true)) {
+      // If rescaling is not allowed, only the native resolution is allowed.
+      resolution_intersection = resolution_intersection.Intersection(
+          ResolutionSet::FromExactResolution(NativeWidth(), NativeHeight()));
+    }
     if (resolution_intersection.IsWidthEmpty()) {
       UpdateFailedConstraintName(constraint_set.width, failed_constraint_name);
       return false;
@@ -216,29 +230,107 @@ class CandidateFormat {
     }
 
     resolution_set_ = resolution_intersection;
+    rescale_set_ = rescale_intersection;
     constrained_frame_rate_ = constrained_frame_rate_.Intersection(
         DoubleRangeSet::FromConstraint(constraint_set.frame_rate, 0.0,
                                        media::limits::kMaxFramesPerSecond));
+    constrained_width_ =
+        constrained_width_.Intersection(IntRangeSet::FromConstraint(
+            constraint_set.width, 1L, ResolutionSet::kMaxDimension));
+    constrained_height_ =
+        constrained_height_.Intersection(IntRangeSet::FromConstraint(
+            constraint_set.height, 1L, ResolutionSet::kMaxDimension));
+    constrained_aspect_ratio_ =
+        constrained_aspect_ratio_.Intersection(DoubleRangeSet::FromConstraint(
+            constraint_set.aspect_ratio, 0.0, HUGE_VAL));
 
     return true;
   }
 
-  // Returns the fitness distance for this candidate format.
-  // Since a format can support multiple track settings, this function returns
-  // the best fitness that can be achieved with this format.
-  // The fitness function is based on
+  // Returns the best fitness distance that can be achieved with this candidate
+  // format based on distance from the ideal values in |basic_constraint_set|.
+  // The track settings that correspond to this fitness are returned on the
+  // |track_settings| output parameter. The fitness function is based on
   // https://w3c.github.io/mediacapture-main/#dfn-fitness-distance.
-  double Fitness(
-      const blink::WebMediaTrackConstraintSet& constraint_set) const {
-    return NumericRangeFitness(constraint_set.aspect_ratio, MinAspectRatio(),
-                               MaxAspectRatio()) +
-           NumericRangeFitness(constraint_set.height, MinHeight(),
-                               MaxHeight()) +
-           NumericRangeFitness(constraint_set.width, MinWidth(), MaxWidth()) +
-           NumericRangeFitness(constraint_set.frame_rate, MinFrameRate(),
-                               MaxFrameRate()) +
-           StringConstraintFitnessDistance(VideoKind(),
-                                           constraint_set.video_kind);
+  double Fitness(const blink::WebMediaTrackConstraintSet& basic_constraint_set,
+                 VideoTrackAdapterSettings* track_settings) const {
+    DCHECK(!rescale_set_.IsEmpty());
+    double track_fitness_with_rescale = HUGE_VAL;
+    VideoTrackAdapterSettings track_settings_with_rescale;
+    if (rescale_set_.Contains(true)) {
+      track_settings_with_rescale = SelectVideoTrackAdapterSettings(
+          basic_constraint_set, resolution_set(), constrained_frame_rate(),
+          format(), true /* enable_rescale */);
+      DCHECK(track_settings_with_rescale.target_size().has_value());
+      double target_aspect_ratio =
+          static_cast<double>(track_settings_with_rescale.target_width()) /
+          track_settings_with_rescale.target_height();
+      DCHECK(!std::isnan(target_aspect_ratio));
+      double target_frame_rate = track_settings_with_rescale.max_frame_rate();
+      if (target_frame_rate == 0.0)
+        target_frame_rate = NativeFrameRate();
+
+      track_fitness_with_rescale =
+          NumericValueFitness(basic_constraint_set.aspect_ratio,
+                              target_aspect_ratio) +
+          NumericValueFitness(basic_constraint_set.height,
+                              track_settings_with_rescale.target_height()) +
+          NumericValueFitness(basic_constraint_set.width,
+                              track_settings_with_rescale.target_width()) +
+          NumericValueFitness(basic_constraint_set.frame_rate,
+                              target_frame_rate);
+    }
+
+    double track_fitness_without_rescale = HUGE_VAL;
+    VideoTrackAdapterSettings track_settings_without_rescale;
+    if (rescale_set_.Contains(false)) {
+      bool can_use_native_resolution =
+          constrained_width_.Contains(NativeWidth()) &&
+          constrained_height_.Contains(NativeHeight()) &&
+          constrained_aspect_ratio_.Contains(NativeAspectRatio());
+      if (can_use_native_resolution) {
+        track_settings_without_rescale = SelectVideoTrackAdapterSettings(
+            basic_constraint_set, resolution_set(), constrained_frame_rate(),
+            format(), false /* enable_rescale */);
+        DCHECK(!track_settings_without_rescale.target_size().has_value());
+        double target_frame_rate =
+            track_settings_without_rescale.max_frame_rate();
+        if (target_frame_rate == 0.0)
+          target_frame_rate = NativeFrameRate();
+        track_fitness_without_rescale =
+            NumericValueFitness(basic_constraint_set.aspect_ratio,
+                                NativeAspectRatio()) +
+            NumericValueFitness(basic_constraint_set.height, NativeHeight()) +
+            NumericValueFitness(basic_constraint_set.width, NativeWidth()) +
+            NumericValueFitness(basic_constraint_set.frame_rate,
+                                target_frame_rate);
+      }
+    }
+
+    if (basic_constraint_set.resize_mode.HasIdeal()) {
+      if (!base::ContainsValue(basic_constraint_set.resize_mode.Ideal(),
+                               blink::WebMediaStreamTrack::kResizeModeNone)) {
+        track_fitness_without_rescale += 1.0;
+      }
+      if (!base::ContainsValue(
+              basic_constraint_set.resize_mode.Ideal(),
+              blink::WebMediaStreamTrack::kResizeModeRescale)) {
+        track_fitness_with_rescale += 1.0;
+      }
+    }
+    double fitness = StringConstraintFitnessDistance(
+        VideoKind(), basic_constraint_set.video_kind);
+    // If rescaling and not rescaling have the same fitness, prefer not
+    // rescaling.
+    if (track_fitness_without_rescale <= track_fitness_with_rescale) {
+      fitness += track_fitness_without_rescale;
+      *track_settings = track_settings_without_rescale;
+    } else {
+      fitness += track_fitness_with_rescale;
+      *track_settings = track_settings_with_rescale;
+    }
+
+    return fitness;
   }
 
   // Returns a custom "native" fitness distance that expresses how close the
@@ -290,6 +382,12 @@ class CandidateFormat {
   // range [kMinDeviceCaptureFrameRate, NativeframeRate()] is the set of
   // frame rates supported by this candidate.
   DoubleRangeSet constrained_frame_rate_;
+  IntRangeSet constrained_width_;
+  IntRangeSet constrained_height_;
+  DoubleRangeSet constrained_aspect_ratio_;
+
+  // Contains the set of allowed rescale modes subject to applied constraints.
+  BoolSet rescale_set_;
 };
 
 // Returns true if the facing mode |value| satisfies |constraints|, false
@@ -367,13 +465,15 @@ double DeviceFitness(const DeviceInfo& device,
 // Returns the fitness distance between |constraint_set| and |candidate| given
 // that the configuration is already constrained by |candidate_format|.
 // Based on https://w3c.github.io/mediacapture-main/#dfn-fitness-distance.
-double CandidateFitness(
-    const DeviceInfo& device,
-    const CandidateFormat& candidate_format,
-    const base::Optional<bool>& noise_reduction,
-    const blink::WebMediaTrackConstraintSet& constraint_set) {
+// The track settings for |candidate| that correspond to the returned fitness
+// are returned in |track_settings|.
+double CandidateFitness(const DeviceInfo& device,
+                        const CandidateFormat& candidate_format,
+                        const base::Optional<bool>& noise_reduction,
+                        const blink::WebMediaTrackConstraintSet& constraint_set,
+                        VideoTrackAdapterSettings* track_settings) {
   return DeviceFitness(device, constraint_set) +
-         candidate_format.Fitness(constraint_set) +
+         candidate_format.Fitness(constraint_set, track_settings) +
          OptionalBoolFitness(noise_reduction,
                              constraint_set.goog_noise_reduction);
 }
@@ -417,24 +517,6 @@ void AppendDistancesFromDefault(
   double frame_rate_distance = NumericConstraintFitnessDistance(
       candidate_format.NativeFrameRate(), default_frame_rate);
   distance_vector->push_back(frame_rate_distance);
-}
-
-VideoCaptureSettings ComputeVideoDeviceCaptureSettings(
-    const DeviceInfo& device,
-    const base::Optional<bool>& noise_reduction,
-    const CandidateFormat& candidate_format,
-    const blink::WebMediaTrackConstraintSet& basic_constraint_set) {
-  media::VideoCaptureParams capture_params;
-  capture_params.requested_format = candidate_format.format();
-  auto track_adapter_settings = SelectVideoTrackAdapterSettings(
-      basic_constraint_set, candidate_format.resolution_set(),
-      candidate_format.constrained_frame_rate(),
-      capture_params.requested_format, true /* enable_rescale */);
-
-  return VideoCaptureSettings(device->device_id, capture_params,
-                              noise_reduction, track_adapter_settings,
-                              candidate_format.constrained_frame_rate().Min(),
-                              candidate_format.constrained_frame_rate().Max());
 }
 
 }  // namespace
@@ -565,9 +647,11 @@ VideoCaptureSettings SelectSettingsVideoDeviceCapture(
               satisfies_advanced_set ? 0 : HUGE_VAL);
         }
 
+        VideoTrackAdapterSettings track_settings;
         // Second criterion is fitness distance.
-        candidate_distance_vector.push_back(CandidateFitness(
-            device, candidate_format, noise_reduction, constraints.Basic()));
+        candidate_distance_vector.push_back(
+            CandidateFitness(device, candidate_format, noise_reduction,
+                             constraints.Basic(), &track_settings));
 
         // Third criterion is native fitness distance.
         candidate_distance_vector.push_back(
@@ -582,8 +666,13 @@ VideoCaptureSettings SelectSettingsVideoDeviceCapture(
         DCHECK_EQ(best_distance.size(), candidate_distance_vector.size());
         if (candidate_distance_vector < best_distance) {
           best_distance = candidate_distance_vector;
-          result = ComputeVideoDeviceCaptureSettings(
-              device, noise_reduction, candidate_format, constraints.Basic());
+
+          media::VideoCaptureParams capture_params;
+          capture_params.requested_format = candidate_format.format();
+          result = VideoCaptureSettings(
+              device->device_id, capture_params, noise_reduction,
+              track_settings, candidate_format.constrained_frame_rate().Min(),
+              candidate_format.constrained_frame_rate().Max());
         }
       }
     }

@@ -84,6 +84,7 @@
 #include "services/network/throttling/network_conditions.h"
 #include "services/network/throttling/throttling_controller.h"
 #include "services/network/throttling/throttling_network_transaction_factory.h"
+#include "services/network/url_loader.h"
 #include "services/network/url_request_context_builder_mojo.h"
 
 #if BUILDFLAG(IS_CT_SUPPORTED)
@@ -104,6 +105,7 @@
 #include "net/cert/multi_threaded_cert_verifier.h"
 #include "services/network/cert_verifier_with_trust_anchors.h"
 #include "services/network/cert_verify_proc_chromeos.h"
+#include "services/network/nss_temp_certs_cache_chromeos.h"
 #endif
 
 #if !defined(OS_IOS)
@@ -355,6 +357,10 @@ class NetworkContext::ContextNetworkDelegate
       request->SetReferrer(std::string());
     if (network_context_->network_service())
       network_context_->network_service()->OnBeforeURLRequest();
+
+    auto* loader = URLLoader::ForRequest(*request);
+    if (loader && loader->new_redirect_url())
+      *new_url = loader->new_redirect_url().value();
   }
 
   void OnBeforeRedirectInternal(net::URLRequest* request,
@@ -439,9 +445,8 @@ class NetworkContext::ContextNetworkDelegate
                                       request.site_for_cookies());
   }
 
-  bool OnCanEnablePrivacyModeInternal(
-      const GURL& url,
-      const GURL& site_for_cookies) const override {
+  bool OnForcePrivacyModeInternal(const GURL& url,
+                                  const GURL& site_for_cookies) const override {
     return !network_context_->cookie_manager()
                 ->cookie_settings()
                 .IsCookieAccessAllowed(url, site_for_cookies);
@@ -593,6 +598,14 @@ NetworkContext::~NetworkContext() {
 
   if (domain_reliability_monitor_)
     domain_reliability_monitor_->Shutdown();
+  // Because of the order of declaration in the class,
+  // domain_reliability_monitor_ will be destroyed before
+  // |url_loader_factories_| which could own URLLoader's whose destructor call
+  // back into this class and might use domain_reliability_monitor_. So we reset
+  // |domain_reliability_monitor_| here expliclity, instead of changing the
+  // order, because any work calling into |domain_reliability_monitor_| at
+  // shutdown would be unnecessary as the reports would be thrown out.
+  domain_reliability_monitor_.reset();
 
   if (url_request_context_ &&
       url_request_context_->transport_security_state()) {
@@ -993,9 +1006,17 @@ void NetworkContext::SetEnableReferrers(bool enable_referrers) {
 }
 
 #if defined(OS_CHROMEOS)
-void NetworkContext::UpdateTrustAnchors(
-    const net::CertificateList& trust_anchors) {
-  cert_verifier_with_trust_anchors_->SetTrustAnchors(trust_anchors);
+void NetworkContext::UpdateAdditionalCertificates(
+    mojom::AdditionalCertificatesPtr additional_certificates) {
+  if (!additional_certificates) {
+    nss_temp_certs_cache_.reset();
+    cert_verifier_with_trust_anchors_->SetTrustAnchors(net::CertificateList());
+    return;
+  }
+  nss_temp_certs_cache_ = std::make_unique<network::NSSTempCertsCacheChromeOS>(
+      additional_certificates->all_certificates);
+  cert_verifier_with_trust_anchors_->SetTrustAnchors(
+      additional_certificates->trust_anchors);
 }
 #endif
 
@@ -1980,8 +2001,8 @@ URLRequestContextOwner NetworkContext::MakeURLRequestContext() {
 
       cert_verifier_with_trust_anchors_ = new CertVerifierWithTrustAnchors(
           base::Bind(&NetworkContext::TrustAnchorUsed, base::Unretained(this)));
-      cert_verifier_with_trust_anchors_->SetTrustAnchors(
-          params_->initial_trust_anchors);
+      UpdateAdditionalCertificates(
+          std::move(params_->initial_additional_certificates));
       cert_verifier_with_trust_anchors_->InitializeOnIOThread(verify_proc);
       cert_verifier = base::WrapUnique(cert_verifier_with_trust_anchors_);
     }

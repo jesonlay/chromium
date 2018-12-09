@@ -13,11 +13,13 @@
 #include "components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "components/arc/arc_util.h"
 #include "components/arc/ime/arc_ime_bridge_impl.h"
+#include "components/exo/shell_surface.h"
 #include "components/exo/wm_helper.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/ime/input_method.h"
+#include "ui/base/ime/text_input_flags.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event.h"
@@ -30,6 +32,9 @@
 namespace arc {
 
 namespace {
+
+// TODO(yhanada): Remove this once IsArcAppWindow is fixed for ARC++ Kiosk app.
+constexpr char kArcAppIdPrefix[] = "org.chromium.arc";
 
 base::Optional<double> g_override_default_device_scale_factor;
 
@@ -49,9 +54,26 @@ class ArcWindowDelegateImpl : public ArcImeService::ArcWindowDelegate {
   ~ArcWindowDelegateImpl() override = default;
 
   bool IsInArcAppWindow(const aura::Window* window) const override {
+    if (!exo::WMHelper::GetInstance())
+      return false;
+    aura::Window* active = exo::WMHelper::GetInstance()->GetActiveWindow();
     for (; window; window = window->parent()) {
       if (IsArcAppWindow(window))
         return true;
+
+      // IsArcAppWindow returns false for a window of ARC++ Kiosk app, so we
+      // have to check application id of the active window to cover that case.
+      // TODO(yhanada): Make IsArcAppWindow support a window of ARC++ Kiosk.
+      // Specifically, a window of ARC++ Kiosk should have ash::AppType::ARC_APP
+      // property. Please see implementation of IsArcAppWindow().
+      if (window == active) {
+        const std::string* app_id = exo::ShellSurface::GetApplicationId(window);
+        if (IsArcKioskMode() && app_id &&
+            base::StartsWith(*app_id, kArcAppIdPrefix,
+                             base::CompareCase::SENSITIVE)) {
+          return true;
+        }
+      }
     }
     return false;
   }
@@ -119,6 +141,7 @@ ArcImeService::ArcImeService(content::BrowserContext* context,
     : ime_bridge_(new ArcImeBridgeImpl(this, bridge_service)),
       arc_window_delegate_(new ArcWindowDelegateImpl(this)),
       ime_type_(ui::TEXT_INPUT_TYPE_NONE),
+      ime_flags_(ui::TEXT_INPUT_FLAG_NONE),
       is_personalized_learning_allowed_(false),
       has_composition_text_(false) {
   if (aura::Env::HasInstance())
@@ -239,13 +262,16 @@ void ArcImeService::OnWindowFocused(aura::Window* gained_focus,
 
 void ArcImeService::OnTextInputTypeChanged(
     ui::TextInputType type,
-    bool is_personalized_learning_allowed) {
+    bool is_personalized_learning_allowed,
+    int flags) {
   if (ime_type_ == type &&
-      is_personalized_learning_allowed_ == is_personalized_learning_allowed) {
+      is_personalized_learning_allowed_ == is_personalized_learning_allowed &&
+      ime_flags_ == flags) {
     return;
   }
   ime_type_ = type;
   is_personalized_learning_allowed_ = is_personalized_learning_allowed;
+  ime_flags_ = flags;
 
   ui::InputMethod* const input_method = GetInputMethod();
   if (input_method)
@@ -297,8 +323,7 @@ void ArcImeService::OnCursorRectChangedWithSurroundingText(
 
 void ArcImeService::RequestHideIme() {
   // Ignore the request when the ARC app is not focused.
-  ui::InputMethod* const input_method = GetInputMethod();
-  if (!input_method || input_method->GetTextInputClient() != nullptr)
+  if (!focused_arc_window_)
     return;
 
   // TODO(mash): Support virtual keyboard under MASH. There is no
@@ -450,7 +475,7 @@ void ArcImeService::ExtendSelectionAndDelete(size_t before, size_t after) {
 }
 
 int ArcImeService::GetTextInputFlags() const {
-  return ui::TEXT_INPUT_FLAG_NONE;
+  return ime_flags_;
 }
 
 bool ArcImeService::CanComposeInline() const {

@@ -43,13 +43,10 @@
 
 namespace blink {
 
-namespace file_error {
-enum class ErrorCode;
-}
-
 class Blob;
 class ExceptionState;
 class ExecutionContext;
+enum class FileErrorCode;
 class StringOrArrayBuffer;
 
 class CORE_EXPORT FileReader final : public EventTargetWithInlineData,
@@ -62,6 +59,7 @@ class CORE_EXPORT FileReader final : public EventTargetWithInlineData,
  public:
   static FileReader* Create(ExecutionContext*);
 
+  explicit FileReader(ExecutionContext*);
   ~FileReader() override;
 
   enum ReadyState { kEmpty = 0, kLoading = 1, kDone = 2 };
@@ -93,7 +91,7 @@ class CORE_EXPORT FileReader final : public EventTargetWithInlineData,
   void DidStartLoading() override;
   void DidReceiveData() override;
   void DidFinishLoading() override;
-  void DidFail(file_error::ErrorCode) override;
+  void DidFail(FileErrorCode) override;
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(loadstart, kLoadstart);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(progress, kProgress);
@@ -106,8 +104,6 @@ class CORE_EXPORT FileReader final : public EventTargetWithInlineData,
 
  private:
   class ThrottlingController;
-
-  explicit FileReader(ExecutionContext*);
 
   void Terminate();
   void ReadInternal(Blob*, FileReaderLoader::ReadType, ExceptionState&);

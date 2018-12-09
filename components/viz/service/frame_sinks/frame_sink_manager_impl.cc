@@ -112,9 +112,6 @@ void FrameSinkManagerImpl::InvalidateFrameSinkId(
     const FrameSinkId& frame_sink_id) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  for (auto& observer : observer_list_)
-    observer.OnInvalidatedFrameSinkId(frame_sink_id);
-
   surface_manager_.InvalidateFrameSinkId(frame_sink_id);
   if (video_detector_)
     video_detector_->OnFrameSinkIdInvalidated(frame_sink_id);
@@ -124,6 +121,9 @@ void FrameSinkManagerImpl::InvalidateFrameSinkId(
   root_sink_map_.erase(frame_sink_id);
 
   frame_sink_data_.erase(frame_sink_id);
+
+  for (auto& observer : observer_list_)
+    observer.OnInvalidatedFrameSinkId(frame_sink_id);
 }
 
 void FrameSinkManagerImpl::EnableSynchronizationReporting(
@@ -280,6 +280,15 @@ void FrameSinkManagerImpl::RequestCopyOfOutput(
   }
   it->second->RequestCopyOfOutput(surface_id.local_surface_id(),
                                   std::move(request));
+}
+
+void FrameSinkManagerImpl::SetHitTestAsyncQueriedDebugRegions(
+    const FrameSinkId& root_frame_sink_id,
+    const std::vector<FrameSinkId>& hit_test_async_queried_debug_queue) {
+  hit_test_manager_.SetHitTestAsyncQueriedDebugRegions(
+      root_frame_sink_id, hit_test_async_queried_debug_queue);
+  DCHECK(base::ContainsKey(root_sink_map_, root_frame_sink_id));
+  root_sink_map_[root_frame_sink_id]->ForceImmediateDrawAndSwapIfPossible();
 }
 
 void FrameSinkManagerImpl::OnFirstSurfaceActivation(
@@ -544,13 +553,6 @@ void FrameSinkManagerImpl::AddObserver(FrameSinkObserver* obs) {
 
 void FrameSinkManagerImpl::RemoveObserver(FrameSinkObserver* obs) {
   observer_list_.RemoveObserver(obs);
-}
-
-std::vector<FrameSinkId> FrameSinkManagerImpl::GetCreatedFrameSinkIds() const {
-  std::vector<FrameSinkId> frame_sink_ids;
-  for (auto& map_entry : support_map_)
-    frame_sink_ids.push_back(map_entry.first);
-  return frame_sink_ids;
 }
 
 std::vector<FrameSinkId> FrameSinkManagerImpl::GetRegisteredFrameSinkIds()

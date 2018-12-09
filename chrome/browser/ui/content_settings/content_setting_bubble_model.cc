@@ -77,6 +77,37 @@ using content_settings::SETTING_SOURCE_NONE;
 
 namespace {
 
+// Returns a boolean indicating whether the setting should be managed by the
+// user (i.e. it is not controlled by policy). Also takes a (nullable) out-param
+// which is populated by the actual setting for the given URL.
+bool GetSettingManagedByUser(const GURL& url,
+                             ContentSettingsType type,
+                             Profile* profile,
+                             ContentSetting* out_setting) {
+  HostContentSettingsMap* map =
+      HostContentSettingsMapFactory::GetForProfile(profile);
+  SettingSource source;
+  ContentSetting setting;
+  if (type == CONTENT_SETTINGS_TYPE_COOKIES) {
+    CookieSettingsFactory::GetForProfile(profile)->GetCookieSetting(
+        url, url, &source, &setting);
+  } else {
+    SettingInfo info;
+    std::unique_ptr<base::Value> value =
+        map->GetWebsiteSetting(url, url, type, std::string(), &info);
+    setting = content_settings::ValueToContentSetting(value.get());
+    source = info.source;
+  }
+
+  if (out_setting)
+    *out_setting = setting;
+
+  // Prevent creation of content settings for illegal urls like about:blank by
+  // disallowing user management.
+  return source == SETTING_SOURCE_USER &&
+         map->CanSetNarrowestContentSetting(url, url, type);
+}
+
 ContentSettingBubbleModel::ListItem CreateUrlListItem(int32_t id,
                                                       const GURL& url) {
   // Empty URLs should get a placeholder.
@@ -665,26 +696,25 @@ ContentSettingPluginBubbleModel::ContentSettingPluginBubbleModel(
                                       web_contents,
                                       profile,
                                       CONTENT_SETTINGS_TYPE_PLUGINS) {
-  SettingInfo info;
+  const GURL& url = web_contents->GetURL();
+  bool managed_by_user =
+      GetSettingManagedByUser(url, content_type(), profile, nullptr);
   HostContentSettingsMap* map =
       HostContentSettingsMapFactory::GetForProfile(profile);
-  GURL url = web_contents->GetURL();
-  std::unique_ptr<base::Value> value =
-      map->GetWebsiteSetting(url, url, content_type(), std::string(), &info);
   ContentSetting setting = PluginUtils::GetFlashPluginContentSetting(
       map, url::Origin::Create(url), url, nullptr);
 
   // If the setting is not managed by the user, hide the "Manage" button.
-  if (info.source != SETTING_SOURCE_USER)
+  if (!managed_by_user)
     set_manage_text_style(ContentSettingBubbleModel::ManageTextStyle::kNone);
 
   // The user cannot manually run Flash on the BLOCK setting when either holds:
   //  - The setting is from Policy. User cannot override admin intent.
   //  - HTML By Default is on - Flash has been hidden from the plugin list, so
   //    it's impossible to dynamically run the nonexistent plugin.
-  bool run_blocked = setting == CONTENT_SETTING_BLOCK &&
-                     (info.source != SETTING_SOURCE_USER ||
-                      PluginUtils::ShouldPreferHtmlOverPlugins(map));
+  bool run_blocked =
+      setting == CONTENT_SETTING_BLOCK &&
+      (!managed_by_user || PluginUtils::ShouldPreferHtmlOverPlugins(map));
 
   if (!run_blocked) {
     set_custom_link(l10n_util::GetStringUTF16(IDS_BLOCKED_PLUGINS_LOAD_ALL));
@@ -844,23 +874,10 @@ void ContentSettingSingleRadioGroup::SetRadioGroup() {
 
   radio_group.radio_items.push_back(radio_allow_label);
   radio_group.radio_items.push_back(radio_block_label);
+
   ContentSetting setting;
-  SettingSource setting_source = SETTING_SOURCE_NONE;
-
-  if (content_type() == CONTENT_SETTINGS_TYPE_COOKIES) {
-    content_settings::CookieSettings* cookie_settings =
-        CookieSettingsFactory::GetForProfile(profile()).get();
-    cookie_settings->GetCookieSetting(url, url, &setting_source, &setting);
-  } else {
-    SettingInfo info;
-    HostContentSettingsMap* map =
-        HostContentSettingsMapFactory::GetForProfile(profile());
-    std::unique_ptr<base::Value> value =
-        map->GetWebsiteSetting(url, url, content_type(), std::string(), &info);
-    setting = content_settings::ValueToContentSetting(value.get());
-    setting_source = info.source;
-  }
-
+  bool managed_by_user =
+      GetSettingManagedByUser(url, content_type(), profile(), &setting);
   if (setting == CONTENT_SETTING_ALLOW) {
     radio_group.default_item = kAllowButtonIndex;
     // |block_setting_| is already set to |CONTENT_SETTING_BLOCK|.
@@ -868,13 +885,7 @@ void ContentSettingSingleRadioGroup::SetRadioGroup() {
     radio_group.default_item = 1;
     block_setting_ = setting;
   }
-
-  const auto* map = HostContentSettingsMapFactory::GetForProfile(profile());
-  // Prevent creation of content settings for illegal urls like about:blank
-  bool is_valid = map->CanSetNarrowestContentSetting(url, url, content_type());
-
-  set_radio_group_enabled(is_valid && setting_source == SETTING_SOURCE_USER);
-
+  set_radio_group_enabled(managed_by_user);
   set_radio_group(radio_group);
 }
 
@@ -944,7 +955,7 @@ void ContentSettingCookiesBubbleModel::OnCustomLinkClicked() {
 // ContentSettingPopupBubbleModel ----------------------------------------------
 
 class ContentSettingPopupBubbleModel : public ContentSettingSingleRadioGroup,
-                                       public PopupBlockerTabHelper::Observer {
+                                       public UrlListManager::Observer {
  public:
   ContentSettingPopupBubbleModel(Delegate* delegate,
                                  WebContents* web_contents,
@@ -955,7 +966,7 @@ class ContentSettingPopupBubbleModel : public ContentSettingSingleRadioGroup,
   void CommitChanges() override;
 
   // PopupBlockerTabHelper::Observer:
-  void BlockedPopupAdded(int32_t id, const GURL& url) override;
+  void BlockedUrlAdded(int32_t id, const GURL& url) override;
 
   // content::NotificationObserver:
   void Observe(int type,
@@ -969,8 +980,7 @@ class ContentSettingPopupBubbleModel : public ContentSettingSingleRadioGroup,
     return bubble_content().list_items[index].item_id;
   }
 
-  ScopedObserver<PopupBlockerTabHelper, PopupBlockerTabHelper::Observer>
-      popup_blocker_observer_;
+  ScopedObserver<UrlListManager, UrlListManager::Observer> url_list_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(ContentSettingPopupBubbleModel);
 };
@@ -983,7 +993,7 @@ ContentSettingPopupBubbleModel::ContentSettingPopupBubbleModel(
                                      web_contents,
                                      profile,
                                      CONTENT_SETTINGS_TYPE_POPUPS),
-      popup_blocker_observer_(this) {
+      url_list_observer_(this) {
   if (!web_contents)
     return;
 
@@ -995,13 +1005,13 @@ ContentSettingPopupBubbleModel::ContentSettingPopupBubbleModel(
   for (const auto& blocked_popup : blocked_popups)
     AddListItem(CreateUrlListItem(blocked_popup.first, blocked_popup.second));
 
-  popup_blocker_observer_.Add(helper);
+  url_list_observer_.Add(helper->manager());
   content_settings::RecordPopupsAction(
       content_settings::POPUPS_ACTION_DISPLAYED_BUBBLE);
 }
 
-void ContentSettingPopupBubbleModel::BlockedPopupAdded(int32_t id,
-                                                       const GURL& url) {
+void ContentSettingPopupBubbleModel::BlockedUrlAdded(int32_t id,
+                                                     const GURL& url) {
   AddListItem(CreateUrlListItem(id, url));
 }
 
@@ -1011,7 +1021,7 @@ void ContentSettingPopupBubbleModel::Observe(
     const content::NotificationDetails& details) {
   ContentSettingSingleRadioGroup::Observe(type, source, details);
   if (type == content::NOTIFICATION_WEB_CONTENTS_DESTROYED)
-    popup_blocker_observer_.RemoveAll();
+    url_list_observer_.RemoveAll();
 }
 
 void ContentSettingPopupBubbleModel::OnListItemClicked(int index,
@@ -1036,12 +1046,7 @@ void ContentSettingPopupBubbleModel::CommitChanges() {
   ContentSettingSingleRadioGroup::CommitChanges();
 }
 
-ContentSettingPopupBubbleModel::~ContentSettingPopupBubbleModel() {
-  if (web_contents()) {
-    auto* helper = PopupBlockerTabHelper::FromWebContents(web_contents());
-    helper->RemoveObserver(this);
-  }
-}
+ContentSettingPopupBubbleModel::~ContentSettingPopupBubbleModel() = default;
 
 // ContentSettingMediaStreamBubbleModel ----------------------------------------
 
@@ -1511,18 +1516,8 @@ void ContentSettingDownloadsBubbleModel::SetRadioGroup() {
       return;
   }
   set_radio_group(radio_group);
-
-  SettingInfo info;
-  HostContentSettingsMap* map =
-      HostContentSettingsMapFactory::GetForProfile(profile());
-  map->GetWebsiteSetting(url, url, CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS,
-                         std::string(), &info);
-
-  // Prevent creation of content settings for illegal urls like about:blank
-  bool is_valid = map->CanSetNarrowestContentSetting(
-      url, url, CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS);
-
-  set_radio_group_enabled(is_valid && info.source == SETTING_SOURCE_USER);
+  set_radio_group_enabled(GetSettingManagedByUser(
+      url, CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS, profile(), nullptr));
 }
 
 void ContentSettingDownloadsBubbleModel::SetTitle() {
@@ -1564,7 +1559,8 @@ ContentSettingFramebustBlockBubbleModel::
     : ContentSettingSingleRadioGroup(delegate,
                                      web_contents,
                                      profile,
-                                     CONTENT_SETTINGS_TYPE_POPUPS) {
+                                     CONTENT_SETTINGS_TYPE_POPUPS),
+      url_list_observer_(this) {
   if (!web_contents)
     return;
 
@@ -1575,27 +1571,18 @@ ContentSettingFramebustBlockBubbleModel::
   for (const auto& blocked_url : helper->blocked_urls())
     AddListItem(CreateUrlListItem(0 /* id */, blocked_url));
 
-  helper->AddObserver(this);
+  url_list_observer_.Add(helper->manager());
 }
 
 ContentSettingFramebustBlockBubbleModel::
-    ~ContentSettingFramebustBlockBubbleModel() {
-  if (web_contents()) {
-    FramebustBlockTabHelper::FromWebContents(web_contents())
-        ->RemoveObserver(this);
-  }
-}
+    ~ContentSettingFramebustBlockBubbleModel() = default;
 
 void ContentSettingFramebustBlockBubbleModel::Observe(
     int type,
     const content::NotificationSource& source,
     const content::NotificationDetails& details) {
-  // The order is important because ContentSettingBubbleModel::Observer() clears
-  // the value of |web_contents()|.
-  if (type == content::NOTIFICATION_WEB_CONTENTS_DESTROYED) {
-    FramebustBlockTabHelper::FromWebContents(web_contents())
-        ->RemoveObserver(this);
-  }
+  if (type == content::NOTIFICATION_WEB_CONTENTS_DESTROYED)
+    url_list_observer_.RemoveAll();
   ContentSettingSingleRadioGroup::Observe(type, source, details);
 }
 
@@ -1614,7 +1601,8 @@ ContentSettingFramebustBlockBubbleModel::AsFramebustBlockBubbleModel() {
   return this;
 }
 
-void ContentSettingFramebustBlockBubbleModel::OnBlockedUrlAdded(
+void ContentSettingFramebustBlockBubbleModel::BlockedUrlAdded(
+    int32_t id,
     const GURL& blocked_url) {
   AddListItem(CreateUrlListItem(0 /* id */, blocked_url));
 }

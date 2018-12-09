@@ -213,8 +213,7 @@ void HTMLFrameSetElement::ParseAttribute(
 bool HTMLFrameSetElement::LayoutObjectIsNeeded(
     const ComputedStyle& style) const {
   // For compatibility, frames layoutObject even when display: none is set.
-  // However, we delay creating a layoutObject until stylesheets have loaded.
-  return style.IsStyleAvailable();
+  return true;
 }
 
 LayoutObject* HTMLFrameSetElement::CreateLayoutObject(
@@ -268,7 +267,7 @@ Node::InsertionNotificationRequest HTMLFrameSetElement::InsertedInto(
 void HTMLFrameSetElement::WillRecalcStyle(StyleRecalcChange) {
   if (NeedsStyleRecalc() && GetLayoutObject()) {
     GetLayoutObject()->SetNeedsLayoutAndFullPaintInvalidation(
-        LayoutInvalidationReason::kStyleChange);
+        layout_invalidation_reason::kStyleChange);
     ClearNeedsStyleRecalc();
   }
 }

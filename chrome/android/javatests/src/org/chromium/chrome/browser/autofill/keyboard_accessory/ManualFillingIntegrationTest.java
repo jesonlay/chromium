@@ -63,6 +63,7 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @EnableFeatures({ChromeFeatureList.PASSWORDS_KEYBOARD_ACCESSORY,
+        ChromeFeatureList.AUTOFILL_KEYBOARD_ACCESSORY,
         // TODO(crbug.com/894428): Remove and use the embedded test server instead of data urls.
         ChromeFeatureList.AUTOFILL_ALLOW_NON_HTTP_ACTIVATION})
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
@@ -463,5 +464,40 @@ public class ManualFillingIntegrationTest {
         mHelper.clickEmailField(false);
         mHelper.waitToBeHidden(withId(R.id.keyboard_accessory));
         onView(withText(kSnackbarText)).check(matches(isCompletelyDisplayed()));
+    }
+
+    @Test
+    @SmallTest
+    public void testInfobarReopensOnPressingBack()
+            throws InterruptedException, TimeoutException, ExecutionException {
+        mHelper.loadTestPage(false);
+
+        InfoBarTestAnimationListener listener = new InfoBarTestAnimationListener();
+        mActivityTestRule.getInfoBarContainer().addAnimationListener(listener);
+        final String kInfoBarText = "SomeInfoBar";
+        ThreadUtils.runOnUiThread(() -> {
+            SimpleConfirmInfoBarBuilder.create(mActivityTestRule.getActivity().getActivityTab(),
+                    InfoBarIdentifier.DUPLICATE_DOWNLOAD_INFOBAR_DELEGATE_ANDROID, kInfoBarText,
+                    false);
+        });
+        listener.addInfoBarAnimationFinished("InfoBar not added.");
+
+        mHelper.createTestTab();
+        assertThat(mActivityTestRule.getInfoBarContainer().getVisibility(), is(View.VISIBLE));
+
+        // Focus the field to bring up the accessory.
+        mHelper.clickPasswordField();
+        whenDisplayed(withId(R.id.tabs)).perform(selectTabAtPosition(0));
+        mHelper.waitForKeyboardToDisappear();
+        whenDisplayed(withChild(withId(R.id.keyboard_accessory_sheet)));
+        assertThat(mActivityTestRule.getInfoBarContainer().getVisibility(), is(not(View.VISIBLE)));
+
+        // Close the accessory using the back button. The Infobar should reappear.
+        Espresso.pressBack();
+
+        mHelper.waitToBeHidden(withChild(withId(R.id.keyboard_accessory_sheet)));
+        mHelper.waitToBeHidden(withId(R.id.keyboard_accessory));
+
+        whenDisplayed(withText(kInfoBarText));
     }
 }

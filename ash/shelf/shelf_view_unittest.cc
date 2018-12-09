@@ -276,7 +276,7 @@ class ShelfViewTest : public AshTestBase {
       flag_warning->SetVisible(false);
     }
 
-    // The bounds should be big enough for 4 buttons + overflow chevron.
+    // The bounds should be big enough for 4 buttons + overflow button.
     ASSERT_GE(shelf_view_->width(), 500);
 
     test_api_.reset(new ShelfViewTestAPI(shelf_view_));
@@ -1759,6 +1759,53 @@ TEST_F(ShelfViewTest, CheckDragAndDropFromShelfToOtherShelf) {
                                           true /* cancel */);
 }
 
+// Checks drag-reorder items within the overflow shelf.
+TEST_F(ShelfViewTest, TestDragWithinOverflow) {
+  // Prepare the overflow and open it.
+  AddButtonsUntilOverflow();
+  // Add a couple more to make sure we have things to drag.
+  AddAppShortcut();
+  AddAppShortcut();
+  test_api_->ShowOverflowBubble();
+  ShelfView* overflow_shelf_view =
+      shelf_view_->overflow_bubble()->bubble_view()->shelf_view();
+  ASSERT_TRUE(test_api_->IsShowingOverflowBubble());
+
+  ShelfViewTestAPI overflow_api(overflow_shelf_view);
+
+  // We are going to drag the first item in the overflow (A) onto the last
+  // one (B).
+  int item_a_initial_index = overflow_api.GetFirstVisibleIndex();
+  int item_b_initial_index = overflow_api.GetLastVisibleIndex();
+  ShelfID item_a = GetItemId(item_a_initial_index);
+  ShelfID item_b = GetItemId(item_b_initial_index);
+  ShelfButton* item_a_button = overflow_api.GetButton(item_a_initial_index);
+  ShelfButton* item_b_button = overflow_api.GetButton(item_b_initial_index);
+  gfx::Point drag_point = GetButtonCenter(item_a_button);
+  gfx::Point drop_point = GetButtonCenter(item_b_button);
+
+  ui::test::EventGenerator* generator = GetEventGenerator();
+  generator->set_current_location(drag_point);
+  EXPECT_EQ(nullptr, overflow_shelf_view->drag_view());
+
+  // TODO(manucornet): Test the same thing with only touches.
+  generator->PressLeftButton();
+
+  generator->MoveMouseTo(drop_point);
+  EXPECT_NE(nullptr, overflow_shelf_view->drag_view());
+  generator->ReleaseLeftButton();
+  overflow_api.RunMessageLoopUntilAnimationsDone();
+
+  // Now, item A should be the last item, and item B should be just before it.
+  ShelfID new_first_visible_item =
+      GetItemId(overflow_api.GetFirstVisibleIndex());
+  EXPECT_NE(item_a, new_first_visible_item);
+  EXPECT_EQ(item_a, GetItemId(overflow_api.GetLastVisibleIndex()));
+  EXPECT_EQ(item_b, GetItemId(overflow_api.GetLastVisibleIndex() - 1));
+
+  test_api_->HideOverflowBubble();
+}
+
 // Checks creating app shortcut for an opened platform app in overflow bubble
 // should be invisible to the shelf. See crbug.com/605793.
 TEST_F(ShelfViewTest, CheckOverflowStatusPinOpenedAppToShelf) {
@@ -2083,6 +2130,64 @@ TEST_F(ShelfViewTest, ShelfDragViewAndContextMenu) {
   EXPECT_EQ(shelf_view_->drag_view(), button);
   generator->ReleaseLeftButton();
   EXPECT_FALSE(shelf_view_->drag_view());
+}
+
+// Tests that shelf items in always shown shelf can be dragged through gesture
+// events after context menu is shown.
+TEST_F(ShelfViewTest, DragAppAfterContextMenuIsShownInAlwaysShownShelf) {
+  ASSERT_EQ(SHELF_VISIBLE, GetPrimaryShelf()->GetVisibilityState());
+  ui::test::EventGenerator* generator = GetEventGenerator();
+  const ShelfID first_app_id = AddAppShortcut();
+  const ShelfID second_app_id = AddAppShortcut();
+  const int last_index = model_->items().size() - 1;
+  ASSERT_TRUE(last_index >= 0);
+
+  const gfx::Point start = GetButtonCenter(first_app_id);
+  // Drag the app long enough to ensure the drag can be triggered.
+  const gfx::Point end(start.x() + 100, start.y());
+  generator->set_current_location(start);
+
+  // Add |STATE_DRAGGING| state to emulate the gesture drag after context menu
+  // is shown.
+  GetButtonByID(first_app_id)->AddState(ShelfButton::STATE_DRAGGING);
+  generator->GestureScrollSequence(start, end,
+                                   base::TimeDelta::FromMilliseconds(100), 3);
+
+  // |first_add_id| has been moved to the end of the items in the shelf.
+  EXPECT_EQ(first_app_id, model_->items()[last_index].id);
+}
+
+// Tests that shelf items in AUTO_HIDE_SHOWN shelf can be dragged through
+// gesture events after context menu is shown.
+TEST_F(ShelfViewTest, DragAppAfterContextMenuIsShownInAutoHideShelf) {
+  ui::test::EventGenerator* generator = GetEventGenerator();
+  const ShelfID first_app_id = AddAppShortcut();
+  const ShelfID second_app_id = AddAppShortcut();
+  const int last_index = model_->items().size() - 1;
+
+  Shelf* shelf = GetPrimaryShelf();
+  std::unique_ptr<views::Widget> widget = CreateTestWidget();
+  widget->Show();
+  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
+  EXPECT_EQ(SHELF_AUTO_HIDE, shelf->GetVisibilityState());
+  EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
+
+  shelf->shelf_widget()->GetFocusCycler()->RotateFocus(FocusCycler::FORWARD);
+  EXPECT_EQ(SHELF_AUTO_HIDE_SHOWN, shelf->GetAutoHideState());
+
+  const gfx::Point start = GetButtonCenter(first_app_id);
+  // Drag the app long enough to ensure the drag can be triggered.
+  const gfx::Point end = gfx::Point(start.x() + 100, start.y());
+  generator->set_current_location(start);
+
+  // Add |STATE_DRAGGING| state to emulate the gesture drag after context menu
+  // is shown.
+  GetButtonByID(first_app_id)->AddState(ShelfButton::STATE_DRAGGING);
+  generator->GestureScrollSequence(start, end,
+                                   base::TimeDelta::FromMilliseconds(100), 3);
+
+  // |first_add_id| has been moved to the end of the items in the shelf.
+  EXPECT_EQ(first_app_id, model_->items()[last_index].id);
 }
 
 struct TouchableAppContextMenuTestParams {

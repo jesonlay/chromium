@@ -1681,31 +1681,25 @@ void Document::DispatchDidReceiveTitle() {
 
 void Document::setTitle(const String& title) {
   // Title set by JavaScript -- overrides any title elements.
-  if (!title_element_) {
-    if (IsHTMLDocument() || IsXHTMLDocument()) {
+  Element* element = documentElement();
+  if (IsSVGSVGElement(element)) {
+    if (!title_element_) {
+      title_element_ = SVGTitleElement::Create(*this);
+      element->InsertBefore(title_element_.Get(), element->firstChild());
+    }
+    if (auto* svg_title = ToSVGTitleElementOrNull(title_element_))
+      svg_title->SetText(title);
+  } else if (element && element->IsHTMLElement()) {
+    if (!title_element_) {
       HTMLElement* head_element = head();
       if (!head_element)
         return;
       title_element_ = HTMLTitleElement::Create(*this);
       head_element->AppendChild(title_element_.Get());
-    } else if (IsSVGDocument()) {
-      Element* element = documentElement();
-      if (!IsSVGSVGElement(element))
-        return;
-      title_element_ = SVGTitleElement::Create(*this);
-      element->InsertBefore(title_element_.Get(), element->firstChild());
     }
-  } else {
-    if (!IsHTMLDocument() && !IsXHTMLDocument() && !IsSVGDocument())
-      title_element_ = nullptr;
+    if (auto* html_title = ToHTMLTitleElementOrNull(title_element_))
+      html_title->setText(title);
   }
-
-  if (auto* html_title = ToHTMLTitleElementOrNull(title_element_))
-    html_title->setText(title);
-  else if (auto* svg_title = ToSVGTitleElementOrNull(title_element_))
-    svg_title->SetText(title);
-  else
-    UpdateTitle(title);
 }
 
 void Document::SetTitleElement(Element* title_element) {
@@ -1957,7 +1951,7 @@ void Document::ScheduleLayoutTreeUpdate() {
   TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"),
                        "ScheduleStyleRecalculation", TRACE_EVENT_SCOPE_THREAD,
                        "data",
-                       InspectorRecalculateStylesEvent::Data(GetFrame()));
+                       inspector_recalculate_styles_event::Data(GetFrame()));
   ++style_version_;
 }
 
@@ -2151,24 +2145,33 @@ void Document::PropagateStyleToViewport() {
 
 #if DCHECK_IS_ON()
 static void AssertLayoutTreeUpdated(Node& root) {
-  for (Node& node : NodeTraversal::InclusiveDescendantsOf(root)) {
-    DCHECK(!node.NeedsStyleRecalc());
-    DCHECK(!node.ChildNeedsStyleRecalc());
-    DCHECK(!node.NeedsReattachLayoutTree());
-    DCHECK(!node.ChildNeedsReattachLayoutTree());
-    DCHECK(!node.ChildNeedsDistributionRecalc());
-    DCHECK(!node.NeedsStyleInvalidation());
-    DCHECK(!node.ChildNeedsStyleInvalidation());
-    DCHECK(!node.GetForceReattachLayoutTree());
+  Node* node = &root;
+  while (node) {
+    if (RuntimeEnabledFeatures::DisplayLockingEnabled() &&
+        node->IsElementNode() &&
+        ToElement(node)->StyleRecalcBlockedByDisplayLock()) {
+      node = NodeTraversal::NextSkippingChildren(*node);
+      continue;
+    }
+
+    DCHECK(!node->NeedsStyleRecalc());
+    DCHECK(!node->ChildNeedsStyleRecalc());
+    DCHECK(!node->NeedsReattachLayoutTree());
+    DCHECK(!node->ChildNeedsReattachLayoutTree());
+    DCHECK(!node->ChildNeedsDistributionRecalc());
+    DCHECK(!node->NeedsStyleInvalidation());
+    DCHECK(!node->ChildNeedsStyleInvalidation());
+    DCHECK(!node->GetForceReattachLayoutTree());
     // Make sure there is no node which has a LayoutObject, but doesn't have a
     // parent in a flat tree. If there is such a node, we forgot to detach the
     // node. DocumentNode is only an exception.
-    DCHECK((node.IsDocumentNode() || !node.GetLayoutObject() ||
-            FlatTreeTraversal::Parent(node)))
-        << node;
+    DCHECK((node->IsDocumentNode() || !node->GetLayoutObject() ||
+            FlatTreeTraversal::Parent(*node)))
+        << *node;
 
-    if (ShadowRoot* shadow_root = node.GetShadowRoot())
+    if (ShadowRoot* shadow_root = node->GetShadowRoot())
       AssertLayoutTreeUpdated(*shadow_root);
+    node = NodeTraversal::Next(*node);
   }
 }
 #endif
@@ -2222,7 +2225,7 @@ void Document::UpdateStyleAndLayoutTree() {
   CHECK(Lifecycle().StateAllowsTreeMutations());
 
   TRACE_EVENT_BEGIN1("blink,devtools.timeline", "UpdateLayoutTree", "beginData",
-                     InspectorRecalculateStylesEvent::Data(GetFrame()));
+                     inspector_recalculate_styles_event::Data(GetFrame()));
 
   unsigned start_element_count = GetStyleEngine().StyleForElementCount();
 
@@ -2410,7 +2413,8 @@ void Document::NotifyLayoutTreeOfSubtreeChanges() {
   lifecycle_.AdvanceTo(DocumentLifecycle::kLayoutSubtreeChangeClean);
 }
 
-bool Document::NeedsLayoutTreeUpdateForNode(const Node& node) const {
+bool Document::NeedsLayoutTreeUpdateForNode(const Node& node,
+                                            bool ignore_adjacent_style) const {
   if (!node.CanParticipateInFlatTree())
     return false;
   if (!NeedsLayoutTreeUpdate())
@@ -2430,7 +2434,7 @@ bool Document::NeedsLayoutTreeUpdateForNode(const Node& node) const {
       }
     }
     if (ancestor->NeedsStyleRecalc() || ancestor->NeedsStyleInvalidation() ||
-        ancestor->NeedsAdjacentStyleRecalc()) {
+        (ancestor->NeedsAdjacentStyleRecalc() && !ignore_adjacent_style)) {
       return true;
     }
   }
@@ -2539,6 +2543,10 @@ void Document::ClearFocusedElementTimerFired(TimerBase*) {
 // lets us get reasonable answers. The long term solution to this problem is
 // to instead suspend JavaScript execution.
 void Document::UpdateStyleAndLayoutTreeIgnorePendingStylesheets() {
+  if (RuntimeEnabledFeatures::CSSInBodyDoesNotBlockPaintEnabled()) {
+    UpdateStyleAndLayoutTree();
+    return;
+  }
   if (Lifecycle().LifecyclePostponed())
     return;
   // See comment for equivalent CHECK in Document::UpdateStyleAndLayoutTree.
@@ -2580,7 +2588,8 @@ void Document::UpdateStyleAndLayoutIgnorePendingStylesheets(
   LocalFrameView* local_view = View();
   if (local_view)
     local_view->WillStartForcedLayout();
-  UpdateStyleAndLayoutTreeIgnorePendingStylesheets();
+  if (!RuntimeEnabledFeatures::CSSInBodyDoesNotBlockPaintEnabled())
+    UpdateStyleAndLayoutTreeIgnorePendingStylesheets();
   UpdateStyleAndLayout();
 
   if (local_view) {
@@ -6099,7 +6108,7 @@ void Document::FinishedParsing() {
 
     TRACE_EVENT_INSTANT1("devtools.timeline", "MarkDOMContent",
                          TRACE_EVENT_SCOPE_THREAD, "data",
-                         InspectorMarkLoadEvent::Data(frame));
+                         inspector_mark_load_event::Data(frame));
     probe::domContentLoadedEventFired(frame);
     frame->GetIdlenessDetector()->DomContentLoadedEventFired();
   }
@@ -7673,7 +7682,7 @@ bool Document::IsLazyLoadPolicyEnforced() const {
 
 LazyLoadImageObserver& Document::EnsureLazyLoadImageObserver() {
   if (!lazy_load_image_observer_)
-    lazy_load_image_observer_ = new LazyLoadImageObserver();
+    lazy_load_image_observer_ = MakeGarbageCollected<LazyLoadImageObserver>();
   return *lazy_load_image_observer_;
 }
 
@@ -7687,12 +7696,14 @@ void Document::ReportFeaturePolicyViolation(
   if (!frame)
     return;
   const String& feature_name = GetNameForFeature(feature);
-  FeaturePolicyViolationReportBody* body = new FeaturePolicyViolationReportBody(
-      feature_name, "Feature policy violation",
-      (disposition == mojom::FeaturePolicyDisposition::kReport ? "report"
-                                                               : "enforce"),
-      SourceLocation::Capture());
-  Report* report = new Report("feature-policy", Url().GetString(), body);
+  FeaturePolicyViolationReportBody* body =
+      MakeGarbageCollected<FeaturePolicyViolationReportBody>(
+          feature_name, "Feature policy violation",
+          (disposition == mojom::FeaturePolicyDisposition::kReport ? "report"
+                                                                   : "enforce"),
+          SourceLocation::Capture());
+  Report* report =
+      new Report("feature-policy-violation", Url().GetString(), body);
   ReportingContext::From(this)->QueueReport(report);
 
   bool is_null;

@@ -15,7 +15,6 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
-#include "chrome/browser/web_applications/extensions/bookmark_app_shortcut_installation_task.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_prefs.h"
@@ -103,6 +102,8 @@ void PendingBookmarkAppManager::UninstallApps(
     base::Optional<bool> opt =
         IsExtensionPresentAndInstalled(extension_id.value());
     if (!opt.has_value() || !opt.value()) {
+      LOG(WARNING) << "Couldn't uninstall app with url " << app_to_uninstall
+                   << "; App doesn't exist";
       callback.Run(app_to_uninstall, false);
       continue;
     }
@@ -232,6 +233,9 @@ void PendingBookmarkAppManager::OnInstalled(
 
 void PendingBookmarkAppManager::OnWebContentsLoadTimedOut() {
   web_contents_->Stop();
+  LOG(ERROR) << "Error installing "
+             << current_task_and_callback_->task->app_info().url.spec();
+  LOG(ERROR) << "  page took too long to load.";
   Observe(nullptr);
   CurrentInstallationFinished(base::nullopt);
 }
@@ -269,6 +273,9 @@ void PendingBookmarkAppManager::DidFinishLoad(
   }
 
   if (validated_url != current_task_and_callback_->task->app_info().url) {
+    LOG(ERROR) << "Error installing "
+               << current_task_and_callback_->task->app_info().url.spec();
+    LOG(ERROR) << "  page redirected to " << validated_url.spec();
     CurrentInstallationFinished(base::nullopt);
     return;
   }
@@ -293,6 +300,9 @@ void PendingBookmarkAppManager::DidFailLoad(
     return;
   }
 
+  LOG(ERROR) << "Error installing "
+             << current_task_and_callback_->task->app_info().url.spec();
+  LOG(ERROR) << "  page failed to load.";
   Observe(nullptr);
   CurrentInstallationFinished(base::nullopt);
 }

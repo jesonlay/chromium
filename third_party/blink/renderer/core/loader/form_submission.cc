@@ -196,9 +196,11 @@ FormSubmission* FormSubmission::Create(HTMLFormElement* form,
   }
 
   if (copied_attributes.Method() == kDialogMethod) {
-    if (submit_button)
-      return new FormSubmission(submit_button->ResultForDialogSubmit());
-    return new FormSubmission("");
+    if (submit_button) {
+      return MakeGarbageCollected<FormSubmission>(
+          submit_button->ResultForDialogSubmit());
+    }
+    return MakeGarbageCollected<FormSubmission>("");
   }
 
   Document& document = form->GetDocument();
@@ -234,7 +236,9 @@ FormSubmission* FormSubmission::Create(HTMLFormElement* form,
                 copied_attributes.AcceptCharset(), document.Encoding());
   FormData* dom_form_data =
       FormData::Create(data_encoding.EncodingForFormSubmission());
-  form->ConstructFormDataSet(submit_button, *dom_form_data);
+  bool entry_list_result =
+      form->ConstructEntryList(submit_button, *dom_form_data);
+  DCHECK(entry_list_result);
 
   scoped_refptr<EncodedFormData> form_data;
   String boundary;
@@ -259,9 +263,9 @@ FormSubmission* FormSubmission::Create(HTMLFormElement* form,
   AtomicString target_or_base_target = copied_attributes.Target().IsEmpty()
                                            ? document.BaseTarget()
                                            : copied_attributes.Target();
-  return new FormSubmission(copied_attributes.Method(), action_url,
-                            target_or_base_target, encoding_type, form,
-                            std::move(form_data), boundary, event);
+  return MakeGarbageCollected<FormSubmission>(
+      copied_attributes.Method(), action_url, target_or_base_target,
+      encoding_type, form, std::move(form_data), boundary, event);
 }
 
 void FormSubmission::Trace(blink::Visitor* visitor) {

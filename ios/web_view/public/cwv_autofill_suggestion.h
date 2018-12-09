@@ -13,9 +13,9 @@
 NS_ASSUME_NONNULL_BEGIN
 
 CWV_EXPORT
-// Represents a suggestion for a form based off of a single field.
-// In the case that this suggestion is created from a credit card or address
-// profile, filling using a suggestion may fill more than one field at once.
+// Represents a suggestion for an address, creditcard, or password form based
+// off of a single field. Filling using a suggestion may fill more than one
+// field at once.
 // Example:
 //   If an address profile is:
 //   John Doe
@@ -61,6 +61,9 @@ CWV_EXPORT
 @property(nonatomic, readonly, nullable) UIImage* icon;
 
 - (instancetype)init NS_UNAVAILABLE;
+
+// YES if this is a password autofill suggestion.
+- (BOOL)isPasswordSuggestion;
 
 @end
 

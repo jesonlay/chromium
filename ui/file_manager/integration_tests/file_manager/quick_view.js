@@ -907,3 +907,105 @@ testcase.openQuickViewVideo = function() {
     },
   ]);
 };
+
+/**
+ * Tests close/open metadata info via Enter key.
+ */
+testcase.pressEnterOnInfoBoxToOpenClose = function() {
+  const infoButton = ['#quick-view', '#metadata-button'];
+  const key = [infoButton, 'Enter', false, false, false];
+  const infoShown = ['#quick-view', '#contentPanel[metadata-box-active]'];
+  const infoHidden =
+      ['#quick-view', '#contentPanel:not([metadata-box-active])'];
+
+  let appId;
+
+  StepsRunner.run([
+    // Open Files app on Downloads containing ENTRIES.hello.
+    function() {
+      setupAndWaitUntilReady(
+          null, RootPath.DOWNLOADS, this.next, [ENTRIES.hello], []);
+    },
+    // Open the file in Quick View.
+    function(results) {
+      appId = results.windowId;
+      const openSteps = openQuickViewSteps(appId, ENTRIES.hello.nameText);
+      StepsRunner.run(openSteps).then(this.next);
+    },
+    // Press Enter on info button to close metadata box.
+    function() {
+      remoteCall.callRemoteTestUtil('fakeKeyDown', appId, key, this.next);
+    },
+    // Info should be hidden.
+    function() {
+      remoteCall.waitForElement(appId, infoHidden).then(this.next);
+    },
+    // Press Enter on info button to open metadata box.
+    function() {
+      remoteCall.callRemoteTestUtil('fakeKeyDown', appId, key, this.next);
+    },
+    // Info should be shown.
+    function() {
+      remoteCall.waitForElement(appId, infoShown).then(this.next);
+    },
+    // Close Quick View.
+    function() {
+      StepsRunner.run(closeQuickViewSteps(appId)).then(this.next);
+    },
+    function() {
+      checkIfNoErrorsOccured(this.next);
+    },
+  ]);
+};
+
+/**
+ * Tests that Quick View doesn't open with multiple files selected.
+ */
+testcase.cantOpenQuickViewWithMultipleFiles = function() {
+  let appId;
+
+  StepsRunner.run([
+    // Open Files app on Downloads containing ENTRIES.hello and ENTRIES.world.
+    function() {
+      setupAndWaitUntilReady(
+          null, RootPath.DOWNLOADS, this.next, [ENTRIES.hello, ENTRIES.world],
+          []);
+    },
+    // Select all 2 files.
+    function(results) {
+      appId = results.windowId;
+
+      const ctrlA = ['#file-list', 'a', true, false, false];
+      remoteCall.callRemoteTestUtil('fakeKeyDown', appId, ctrlA, this.next);
+    },
+    // Wait for the files to be selected.
+    function() {
+      remoteCall
+          .waitForElement(
+              appId,
+              '#cancel-selection-button-wrapper:not([hidden]):not([disabled])')
+          .then(this.next);
+    },
+    // Attempt to open Quick View via its keyboard shortcut.
+    function() {
+      const space = ['#file-list', ' ', false, false, false];
+      remoteCall.callRemoteTestUtil('fakeKeyDown', appId, space, this.next);
+    },
+    // Wait for it to possibly open.
+    function() {
+      window.setTimeout(this.next, 500);
+    },
+    // Check Quick View hasn't opened.
+    function() {
+      return remoteCall
+          .callRemoteTestUtil(
+              'deepQueryAllElements', appId, [['#quick-view', '#dialog[open]']])
+          .then(this.next);
+    },
+    function(result) {
+      chrome.test.assertEq([], result);
+
+      checkIfNoErrorsOccured(this.next);
+    },
+  ]);
+};
